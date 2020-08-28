@@ -330,9 +330,7 @@ class GrafanaK8s(CharmBase):
         spec = {
             'containers': [{
                 'name': self.model.app.name,
-                'imageDetails': {
-                    'imagePath': 'grafana/grafana:latest'
-                },
+                'imageDetails': image_details,
                 'ports': [{
                     'containerPort': self.model.config['advertised_port'],
                     'protocol': 'TCP'
