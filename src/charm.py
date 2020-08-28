@@ -131,7 +131,8 @@ class GrafanaK8s(CharmBase):
         # if this unit is the leader, set the required data
         # of the grafana-source in this charm's datastore
         if not self.unit.is_leader():
-            log.debug(f"{self.unit.name} is not leader. Cannot set app data.")
+            log.debug("{} is not leader. Cannot set app data.".format(
+                self.unit.name))
             return
 
         # if there is no available unit, remove data-source info if it exists
