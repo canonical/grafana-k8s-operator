@@ -1,10 +1,37 @@
-# Copyright 2020 Justin
-# See LICENSE file for licensing details.
-name: charm-k8s-grafana
+name: grafana
+summary: Data vizualization for the charmed LMA stack
+maintainers:
+    - Justin Clark <justin.clark@canonical.com>
 description: |
-  TODO: fill out the charm's description
-summary: |
-  TODO: fill out the charm's summary
-series: [kubernetes]
-
-
+    Grafana provides dashboards for monitoring data and this
+    charm is written to allow for HA on Kubernetes and can take
+    multiple data sources (for example, Prometheus).
+tags:
+    - lma
+    - grafana
+    - prometheus
+    - monitoring
+series:
+    - kubernetes
+resources:
+    grafana-image:
+        type: oci-image
+        description: "Image used for the Grafana pod."
+provides:
+    # for example, a grafana-source could be prometheus
+    # there are a few required fields that incoming
+    # relations must share.
+    # - ingress-address
+    # - port (of the grafana source)
+    # - (not required) human readable 'source-name' of the grafana
+    #   source (e.g. Prometheus App X) if a 'source-name' is not given,
+    #   the default will be unit name (e.g. prometheus/0)
+    grafana-source:
+        interface: grafana-dashsource
+requires:
+    database:
+        interface: db
+        limit: 1
+peers:
+    grafana:
+        interface: grafana
