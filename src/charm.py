@@ -15,7 +15,7 @@ import logging
 import textwrap
 
 # import setuppath  # noqa:F401
-# from oci_image import OCIImageResource, OCIImageResourceError
+from oci_image import OCIImageResource, OCIImageResourceError
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -71,7 +71,7 @@ class GrafanaK8s(CharmBase):
         super().__init__(*args)
 
         # get container image
-        # self.grafana_image = OCIImageResource(self, 'grafana-image')
+        self.grafana_image = OCIImageResource(self, 'grafana-image')
 
         # -- standard hooks
         self.framework.observe(self.on.config_changed, self.on_config_changed)
@@ -319,13 +319,11 @@ class GrafanaK8s(CharmBase):
     def _build_pod_spec(self):
         """Builds the pod spec based on available info in datastore`."""
 
-        """
         try:
             image_details = self.grafana_image.fetch()
         except OCIImageResourceError as e:
             self.unit.status = e.status
             return
-        """
 
         # this will set the baseline spec of the pod without
         # worrying about `grafana-source` or `database` relations
