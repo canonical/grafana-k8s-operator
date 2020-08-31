@@ -1,15 +1,7 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# TODO: set pod spec
 # TODO: create actions that will help users. e.g. "upload-dashboard"
-# TODO: does the database need to be an "Interface Object" or can this
-#       charm be completely free of interfaces?
-#       ** My current implementation does not have any interfaces
-# TODO: refactor "defer" logic to follow jameinel's suggestion:
-#       https://github.com/canonical/operator/issues/392#issuecomment-682096246
-# TODO: get OCI image resource working with ops.lib since this import fails
-#       on initial charm install hook
 
 import logging
 import textwrap
@@ -53,6 +45,17 @@ REQUIRED_DATABASE_FIELDS = {
 # TODO: fill up with optional fields - leaving blank for now
 OPTIONAL_DATABASE_FIELDS = set()
 
+# There are three app states surrounding HA
+# 1) Blocked status if we have peers and no DB
+# 2) HA available status if we have peers and DB
+# 3) Running in non-HA mode
+HA_NOT_READY_STATUS = \
+    BlockedStatus('Need database relation for HA.')
+HA_READY_STATUS = \
+    MaintenanceStatus('Grafana ready for HA.')
+SINGLE_NODE_STATUS = \
+    MaintenanceStatus('Grafana ready on single node.')
+
 
 class GrafanaK8s(CharmBase):
     """Charm to run Grafana on Kubernetes.
@@ -83,12 +86,12 @@ class GrafanaK8s(CharmBase):
                                self.on_grafana_source_departed)
 
         # -- grafana (peer) relation observations
-        self.framework.observe(self.on['grafana'].relation_joined,
-                               self.on_peer_joined)
+        self.framework.observe(self.on['grafana'].relation_changed,
+                               self.on_peer_changed)
+        self.framework.observe(self.on['grafana'].relation_departed,
+                               self.on_peer_departed)
 
         # -- database relation observations
-        self.framework.observe(self.on['database'].relation_joined,
-                               self.on_database_joined)
         self.framework.observe(self.on['database'].relation_changed,
                                self.on_database_changed)
         self.framework.observe(self.on['database'].relation_departed,
@@ -97,6 +100,7 @@ class GrafanaK8s(CharmBase):
         # -- initialize states --
         self.datastore.set_default(sources=dict())  # available data sources
         self.datastore.set_default(database=dict())  # db configuration
+        self.datastore.set_default(has_peer=False)
 
     @property
     def has_peer(self) -> bool:
@@ -104,7 +108,8 @@ class GrafanaK8s(CharmBase):
 
     @property
     def has_db(self) -> bool:
-        return len(self.model.relations['database']) > 0
+        """Only consider a DB connection if we have config info."""
+        return len(self.datastore.database) > 0
 
     def on_config_changed(self, event):
         """Sets the pod spec if any configuration has changed."""
@@ -179,64 +184,32 @@ class GrafanaK8s(CharmBase):
 
         # TODO: test this unit's status
         self.unit.status = \
-            MaintenanceStatus('Grafana ready for configuration')
+            MaintenanceStatus('Grafana source added.')
 
-        # TODO: real configuration -- set_pod_spec
+        self._set_pod_spec()
 
     def on_grafana_source_departed(self, event):
         """When a grafana-source is removed, delete from the datastore."""
         if self.unit.is_leader():
             self._remove_source_from_datastore(event.relation.id)
+        self._set_pod_spec()
 
-    def on_peer_joined(self, event):
-        """Checks if HA is possible and sets model status to reflect this.
-
-        This event handler's primary goal is to ensure Grafana HA
-        is possible since it needs a proper database connection.
-        (e.g. MySQL or Postgresql)
-        """
+    def on_peer_changed(self, event):
+        # TODO: https://grafana.com/docs/grafana/latest/tutorials/ha_setup/
+        #       According to these docs ^, as long as we have a DB, HA should
+        #       work out of the box if we are OK with "Sticky Sessions"
+        #       but having "Stateless Sessions" will require more configuration
         if not self.unit.is_leader():
             log.debug('{} is not leader. '.format(self.unit.name) +
                       'Skipping on_peer_joined() handler')
             return
 
-        # checking self.has_peer in case this is a deferred
-        # event and the original peer has been departed
-        if not self.has_peer:
-            self.unit.status = \
-                MaintenanceStatus('Grafana ready for configuration')
-            return
+        # if the config changed, set a new pod spec
+        self._set_pod_spec()
 
-        # if there is a new peer relation but no database
-        # relation, we need to enter a blocked state.
-        if not self.has_db:
-            log.warning('No database relation provided to Grafana cluster. '
-                        'Please add database (e.g. MySQL) before proceeding.')
-            self.unit.status = \
-                BlockedStatus('Need database relation for HA Grafana.')
-
-            # Keep deferring this event until a database relation has joined
-            # To unit test this, we may need to manually emit from the harness
-            event.defer()
-            return
-
-        # let Juju operators know that HA is now possible
-        self.unit.status = MaintenanceStatus('HA ready for configuration')
-
-    def on_peer_config_changed(self, event):
-        """Configure update configuration if necessary."""
-        # TODO: https://grafana.com/docs/grafana/latest/tutorials/ha_setup/
-        #       According to these docs ^, as long as we have a DB, HA should
-        #       work out of the box if we are OK with "Sticky Sessions"
-        #       but having "Stateless Sessions" will require more work
-
-    def on_peer_config_departed(self, event):
+    def on_peer_departed(self, event):
         """A database relation is no longer required."""
-        # TODO
-
-    def on_database_joined(self, event):
-        # TODO: do we need to make sure DB schema matches what Grafana needs?
-        pass
+        self._set_pod_spec()
 
     def on_database_changed(self, event):
         """Sets configuration information for database connection."""
@@ -269,10 +242,17 @@ class GrafanaK8s(CharmBase):
             if value is not None
         })
 
-        # TODO: set pod spec
+        # set pod spec with new database config data
+        self._set_pod_spec()
 
     def on_database_departed(self, event):
-        """Removes database connection info from datastore."""
+        """Removes database connection info from datastore.
+
+        Since we are guaranteed to only have one DB connection, clearing
+        the datastore works. If we have multiple DB connections,
+        we will datastore.database structure to look more like
+        datastore.sources.
+        """
         print('IN DATABASE DEPARTED')
         if not self.unit.is_leader():
             log.debug('{} is not leader. '.format(self.unit.name) +
@@ -281,6 +261,9 @@ class GrafanaK8s(CharmBase):
 
         # remove the existing database info from datastore
         self.datastore.database = dict()
+
+        # set pod spec because datastore config has changed
+        self._set_pod_spec()
 
     def _remove_source_from_datastore(self, rel_id):
         # TODO: based on provisioning docs, we may want to add
@@ -291,6 +274,15 @@ class GrafanaK8s(CharmBase):
                      data_source['host'] if data_source else '',
                      data_source['port'] if data_source else '',
                  ))
+
+    def _check_high_availability(self):
+        if self.has_peer:
+            if self.has_db:
+                self.app.status = HA_READY_STATUS
+            else:
+                self.app.status = HA_NOT_READY_STATUS
+        else:
+            self.app.status = SINGLE_NODE_STATUS
 
     def _make_data_source_config_text(self):
         """Build docs based on "Data Sources section of provisioning docs."""
@@ -341,7 +333,7 @@ class GrafanaK8s(CharmBase):
                         'path': '/api/health',
                         'port': self.model.config['advertised_port']
                     },
-                    # TODO: should these be in the config
+                    # TODO: should these be in the config?
                     'initialDelaySeconds': 10,
                     'timeoutSeconds': 30
                 }
@@ -352,6 +344,14 @@ class GrafanaK8s(CharmBase):
 
     def _set_pod_spec(self):
         """Set Juju / Kubernetes pod spec built from `_build_pod_spec()`."""
+
+        # check for valid high availability (or single node) configuration
+        self._check_high_availability()
+        if isinstance(self.app.status, BlockedStatus):
+            log.error('Application is in a blocked state.'
+                      'Please resolve before pod spec can be set.')
+            return
+
         self.unit.status = MaintenanceStatus('Setting pod spec.')
         self.model.pod.set_spec(self._build_pod_spec())
         self.unit.status = ActiveStatus('Pod ready.')

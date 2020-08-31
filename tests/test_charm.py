@@ -9,11 +9,17 @@ import yaml
 
 from ops.testing import Harness
 from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus, TooManyRelatedAppsError
-from charm import GrafanaK8s
-
+from charm import (
+    GrafanaK8s,
+    HA_NOT_READY_STATUS,
+    HA_READY_STATUS,
+    SINGLE_NODE_STATUS,
+)
 
 # TODO: should these tests be written in a way that doesn't require
 #       the harness to be built each time?
+
+
 class GrafanaCharmTest(unittest.TestCase):
 
     def test__grafana_source_data(self):
@@ -21,6 +27,8 @@ class GrafanaCharmTest(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
+        harness.populate_oci_resources()
+        harness.update_config(key_values={'advertised_port': 3000})
         self.assertEqual(harness.charm.datastore.sources, {})
 
         rel_id = harness.add_relation('grafana-source', 'prometheus')
@@ -67,39 +75,49 @@ class GrafanaCharmTest(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
+        harness.populate_oci_resources()
+        harness.update_config(key_values={'advertised_port': 3000})
+        self.assertEqual(harness.charm.app.status, SINGLE_NODE_STATUS)
+
         peer_rel_id = harness.add_relation('grafana', 'grafana')
         peer_rel = harness.charm.model.get_relation('grafana')
         harness.add_relation_unit(peer_rel_id, 'grafana/1')
+
+        # update peer relation data so the config_changed hook fires
+        harness.update_relation_data(peer_rel_id,
+                                     'grafana/1',
+                                     {'private-address': '10.1.2.3'})
         self.assertTrue(harness.charm.has_peer)
         self.assertFalse(harness.charm.has_db)
-        blocked_status = \
-            BlockedStatus('Need database relation for HA Grafana.')
-        self.assertEqual(harness.model.unit.status, blocked_status)
+        self.assertEqual(harness.charm.app.status, HA_NOT_READY_STATUS)
 
         # now add the database connection and the model should
         # not have a blocked status
         db_rel_id = harness.add_relation('database', 'mysql')
         harness.add_relation_unit(db_rel_id, 'mysql/0')
-
-        # TODO: this is sort of a manual defer (and works) but I don't like it
-        #       related issue: https://github.com/canonical/operator/issues/392
-        harness.charm.on.grafana_relation_joined.emit(peer_rel)
+        harness.update_relation_data(db_rel_id,
+                                     'mysql/0',
+                                     {
+                                         'type': 'mysql',
+                                         'host': '10.10.10.10:3306',
+                                         'name': 'test_mysql_db',
+                                         'user': 'test-admin',
+                                         'password': 'super!secret!password',
+                                     })
         self.assertTrue(harness.charm.has_db)
-        maintenance_status = MaintenanceStatus('HA ready for configuration')
-        # TODO: defer doesn't seem to work as expected here
-        self.assertEqual(harness.model.unit.status, maintenance_status)
+        self.assertEqual(harness.charm.app.status, HA_READY_STATUS)
 
     def test__add_then_remove_peer_status_check(self):
         """Ensure that adding and removing peer results in correct status."""
-        # TODO: this might require the test harness to properly defer
-        #       events, but could be tested with manual event.emit()s
-        #       as seen in the above test case
+        # TODO:
 
     def test__database_relation_data(self):
         harness = Harness(GrafanaK8s)
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
+        harness.populate_oci_resources()
+        harness.update_config(key_values={'advertised_port': 3000})
         self.assertEqual(harness.charm.datastore.database, {})
 
         # add relation and update relation data
@@ -130,6 +148,8 @@ class GrafanaCharmTest(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
+        harness.populate_oci_resources()
+        harness.update_config(key_values={'advertised_port': 3000})
         self.assertEqual(harness.charm.datastore.database, {})
 
         # add first database relation
@@ -145,6 +165,8 @@ class GrafanaCharmTest(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
+        harness.populate_oci_resources()
+        harness.update_config(key_values={'advertised_port': 3000})
         self.assertEqual(harness.charm.datastore.sources, {})
 
         # add first relation
