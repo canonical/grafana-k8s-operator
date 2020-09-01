@@ -8,7 +8,12 @@ import unittest
 import yaml
 
 from ops.testing import Harness
-from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus, TooManyRelatedAppsError
+from ops.model import (
+    ActiveStatus,
+    MaintenanceStatus,
+    BlockedStatus,
+    TooManyRelatedAppsError
+)
 from charm import (
     GrafanaK8s,
     APPLICATION_ACTIVE_STATUS,
@@ -71,6 +76,8 @@ class GrafanaCharmTest(unittest.TestCase):
         """If there is a peer connection and no database (needed for HA),
         the charm should put the application in a blocked state."""
 
+        # TODO: this is becoming quite a long test -- possibly break it up
+
         # start charm with one peer and no database relation
         harness = Harness(GrafanaK8s)
         self.addCleanup(harness.cleanup)
@@ -80,6 +87,10 @@ class GrafanaCharmTest(unittest.TestCase):
         harness.update_config(key_values={'advertised_port': 3000})
         self.assertEqual(harness.charm.unit.status,
                          APPLICATION_ACTIVE_STATUS)
+
+        # ensure _check_high_availability() ends up with the correct status
+        status = harness.charm._check_high_availability()
+        self.assertEqual(status, SINGLE_NODE_STATUS)
 
         # make sure that triggering 'update-status' hook does not
         # overwrite the current active status
@@ -128,6 +139,10 @@ class GrafanaCharmTest(unittest.TestCase):
         self.assertTrue(harness.charm.has_db)
         self.assertEqual(harness.charm.app.status, APPLICATION_ACTIVE_STATUS)
         self.assertEqual(harness.charm.unit.status, APPLICATION_ACTIVE_STATUS)
+
+        # ensure _check_high_availability() ends up with the correct status
+        status = harness.charm._check_high_availability()
+        self.assertEqual(status, HA_READY_STATUS)
 
     def test__add_then_remove_peer_status_check(self):
         """Ensure that adding and removing peer results in correct status."""
@@ -218,6 +233,7 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # add another grafana-source and check the resulting config text
         rel_id1 = harness.add_relation('grafana-source', 'prometheus')
+        rel1 = harness.model.get_relation('grafana-source', rel_id1)
         harness.add_relation_unit(rel_id1, 'prometheus/1')
         harness.update_relation_data(rel_id1, 'prometheus/1', test_source_data)
 
@@ -230,3 +246,9 @@ class GrafanaCharmTest(unittest.TestCase):
               editable: false""")
         generated_text = harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text1, generated_text)
+
+        # test removal of second source results in config_text
+        # that is the same as the original
+        harness.charm.on.grafana_source_relation_departed.emit(rel1)
+        generated_text = harness.charm._make_data_source_config_text()
+        self.assertEqual(correct_config_text0, generated_text)

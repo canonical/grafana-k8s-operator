@@ -1,6 +1,8 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# TODO: refactor _set_pod_spec to call smaller "pod update" functions for
+#       various things -- e.g. configure database or datasource
 # TODO: add config.ini to set_pod_spec and ensure the persistent storage
 #       matches what is defined in metadata.yaml
 # TODO: CONFIRM: 'update-status' hook only sets a maintenance mode and
@@ -122,19 +124,13 @@ class GrafanaK8s(CharmBase):
         """Only consider a DB connection if we have config info."""
         return len(self.datastore.database) > 0
 
+    def on_config_changed(self, event):
+        self.configure_pod()
+
     def on_update_status(self, event):
         """Various health checks of the charm."""
         self._check_high_availability()
         # TODO: add more health checks in the future
-
-    def on_config_changed(self, event):
-        """Sets the pod spec if any configuration has changed."""
-        log.debug('on_config_changed() -- setting pod spec')
-        if not self.unit.is_leader():
-            log.debug("{} is not leader. Cannot set pod spec.".format(
-                self.unit.name))
-            return
-        self._set_pod_spec()
 
     def on_start(self, event):
         # TODO:
@@ -197,30 +193,26 @@ class GrafanaK8s(CharmBase):
             if value is not None
         }})
 
-        # TODO: test this unit's status
-        self.unit.status = \
-            MaintenanceStatus('Grafana source added.')
-
-        self._set_pod_spec()
+        self.configure_pod()
 
     def on_grafana_source_departed(self, event):
         """When a grafana-source is removed, delete from the datastore."""
         if self.unit.is_leader():
             self._remove_source_from_datastore(event.relation.id)
-        self._set_pod_spec()
+        self.configure_pod()
 
     def on_peer_changed(self, event):
         # TODO: https://grafana.com/docs/grafana/latest/tutorials/ha_setup/
         #       According to these docs ^, as long as we have a DB, HA should
         #       work out of the box if we are OK with "Sticky Sessions"
-        #       but having "Stateless Sessions" will require more configuration
+        #       but having "Stateless Sessions" will require more config
         if not self.unit.is_leader():
             log.debug('{} is not leader. '.format(self.unit.name) +
                       'Skipping on_peer_joined() handler')
             return
 
         # if the config changed, set a new pod spec
-        self._set_pod_spec()
+        self.configure_pod()
 
     def on_peer_departed(self, event):
         """Sets pod spec with new info."""
@@ -231,7 +223,7 @@ class GrafanaK8s(CharmBase):
             log.debug('{} is not leader. '.format(self.unit.name) +
                       'Skipping on_peer_departed() handler')
             return
-        self._set_pod_spec()
+        self.configure_pod()
 
     def on_database_changed(self, event):
         """Sets configuration information for database connection."""
@@ -271,7 +263,7 @@ class GrafanaK8s(CharmBase):
         })
 
         # set pod spec with new database config data
-        self._set_pod_spec()
+        self.configure_pod()
 
     def on_database_departed(self, event):
         """Removes database connection info from datastore.
@@ -291,7 +283,7 @@ class GrafanaK8s(CharmBase):
         self.datastore.database = dict()
 
         # set pod spec because datastore config has changed
-        self._set_pod_spec()
+        self.configure_pod()
 
     def _remove_source_from_datastore(self, rel_id):
         # TODO: based on provisioning docs, we may want to add
@@ -361,19 +353,24 @@ class GrafanaK8s(CharmBase):
 
         return spec
 
-    def _set_pod_spec(self):
+    def configure_pod(self):
         """Set Juju / Kubernetes pod spec built from `_build_pod_spec()`."""
 
         # check for valid high availability (or single node) configuration
         self._check_high_availability()
 
         # decide whether we can set the pod spec or not
+        # TODO: is this even necessary?
         if isinstance(self.app.status, BlockedStatus):
             log.error('Application is in a blocked state. '
                       'Please resolve before pod spec can be set.')
             return
 
-        self.unit.status = MaintenanceStatus('Setting pod spec.')
+        if not self.unit.is_leader():
+            self.unit.status = ActiveStatus()
+            return
+
+        self.unit.status = MaintenanceStatus('Building pod spec.')
         self.model.pod.set_spec(self._build_pod_spec())
         self.app.status = APPLICATION_ACTIVE_STATUS
         self.unit.status = APPLICATION_ACTIVE_STATUS
@@ -394,6 +391,8 @@ class GrafanaK8s(CharmBase):
 
         # make sure we don't have a maintenance status overwrite
         # a currently active status
+        # *note* HA_READY_STATUS and SINGLE_NODE_STATUS are
+        # maintenance statuses
         if isinstance(status, MaintenanceStatus) \
                 and isinstance(self.unit.status, ActiveStatus):
             return status
