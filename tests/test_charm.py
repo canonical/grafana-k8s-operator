@@ -67,7 +67,7 @@ class GrafanaCharmTest(unittest.TestCase):
                                      })
         self.assertEqual(None, harness.charm.datastore.sources.get(rel_id))
 
-    def test__ha_database_check(self):
+    def test__ha_database_and_status_check(self):
         """If there is a peer connection and no database (needed for HA),
         the charm should put the application in a blocked state."""
 
@@ -80,14 +80,21 @@ class GrafanaCharmTest(unittest.TestCase):
         harness.update_config(key_values={'advertised_port': 3000})
         self.assertEqual(harness.charm.unit.status,
                          APPLICATION_ACTIVE_STATUS)
+
+        # make sure that triggering 'update-status' hook does not
+        # overwrite the current active status
+        harness.charm.on.update_status.emit()
+        self.assertEqual(harness.charm.unit.status,
+                         APPLICATION_ACTIVE_STATUS)
+
         peer_rel_id = harness.add_relation('grafana', 'grafana')
 
         # add main unit and its data
         # harness.add_relation_unit(peer_rel_id, 'grafana/0')
+        # will trigger the grafana-changed hook
         harness.update_relation_data(peer_rel_id,
                                      'grafana/0',
                                      {'private-address': '10.1.2.3'})
-        self.assertEqual(harness.charm.app.status, SINGLE_NODE_STATUS)
 
         # add peer unit and its data
         harness.add_relation_unit(peer_rel_id, 'grafana/1')
@@ -97,7 +104,13 @@ class GrafanaCharmTest(unittest.TestCase):
 
         self.assertTrue(harness.charm.has_peer)
         self.assertFalse(harness.charm.has_db)
+        self.assertEqual(harness.charm.unit.status, HA_NOT_READY_STATUS)
         self.assertEqual(harness.charm.app.status, HA_NOT_READY_STATUS)
+
+        # ensure update-status hook doesn't overwrite this
+        harness.charm.on.update_status.emit()
+        self.assertEqual(harness.charm.unit.status,
+                         HA_NOT_READY_STATUS)
 
         # now add the database connection and the model should
         # not have a blocked status
@@ -113,11 +126,13 @@ class GrafanaCharmTest(unittest.TestCase):
                                          'password': 'super!secret!password',
                                      })
         self.assertTrue(harness.charm.has_db)
-        self.assertEqual(harness.charm.app.status, HA_READY_STATUS)
+        self.assertEqual(harness.charm.app.status, APPLICATION_ACTIVE_STATUS)
+        self.assertEqual(harness.charm.unit.status, APPLICATION_ACTIVE_STATUS)
 
     def test__add_then_remove_peer_status_check(self):
         """Ensure that adding and removing peer results in correct status."""
-        # TODO:
+        # TODO: I'm not sure the testing harness will be able to test this
+        #       currently, but testing directly in juju works (for now)
 
     def test__database_relation_data(self):
         harness = Harness(GrafanaK8s)
@@ -148,7 +163,6 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # now depart this relation and ensure the datastore is emptied
         harness.charm.on.database_relation_departed.emit(rel)
-        print(harness._get_backend_calls())
         self.assertEqual({}, dict(harness.charm.datastore.database))
 
     def test__multiple_database_relation_handling(self):

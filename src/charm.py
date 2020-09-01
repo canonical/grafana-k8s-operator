@@ -3,8 +3,9 @@
 
 # TODO: add config.ini to set_pod_spec and ensure the persistent storage
 #       matches what is defined in metadata.yaml
-# TODO: ensure the 'update-status' hook is a good workaround for checking
-#       whether HA is possible or not
+# TODO: CONFIRM: 'update-status' hook only sets a maintenance mode and
+#       _set_pod_spec() is the only thing that will set the application
+#       or unit into an active state
 # TODO: create actions that will help users. e.g. "upload-dashboard"
 
 import logging
@@ -374,24 +375,35 @@ class GrafanaK8s(CharmBase):
 
         self.unit.status = MaintenanceStatus('Setting pod spec.')
         self.model.pod.set_spec(self._build_pod_spec())
+        self.app.status = APPLICATION_ACTIVE_STATUS
         self.unit.status = APPLICATION_ACTIVE_STATUS
 
     def _check_high_availability(self):
         """Checks whether the configuration allows for HA."""
-
         if self.has_peer:
             if self.has_db:
+                log.info('high availability possible.')
                 status = HA_READY_STATUS
             else:
-                log.error('high availability not ready.')
+                log.warning('high availability not possible '
+                            'with current configuration.')
                 status = HA_NOT_READY_STATUS
         else:
+            log.info('running Grafana on single node.')
             status = SINGLE_NODE_STATUS
+
+        # make sure we don't have a maintenance status overwrite
+        # a currently active status
+        if isinstance(status, MaintenanceStatus) \
+                and isinstance(self.unit.status, ActiveStatus):
+            return status
 
         # set status for *at least* the unit and possibly the app
         self.unit.status = status
         if self.unit.is_leader():
             self.app.status = status
+
+        return status
 
 
 if __name__ == '__main__':
