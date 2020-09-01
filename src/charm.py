@@ -1,6 +1,10 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# TODO: add config.ini to set_pod_spec and ensure the persistent storage
+#       matches what is defined in metadata.yaml
+# TODO: ensure the 'update-status' hook is a good workaround for checking
+#       whether HA is possible or not
 # TODO: create actions that will help users. e.g. "upload-dashboard"
 
 import logging
@@ -45,7 +49,12 @@ REQUIRED_DATABASE_FIELDS = {
 # TODO: fill up with optional fields - leaving blank for now
 OPTIONAL_DATABASE_FIELDS = set()
 
-# There are three app states surrounding HA
+VALID_DATABASE_TYPES = {'mysql', 'postgres', 'sqlite3'}
+
+# statuses
+APPLICATION_ACTIVE_STATUS = ActiveStatus('Grafana pod ready.')
+
+# There are three app states w.r.t. HA
 # 1) Blocked status if we have peers and no DB
 # 2) HA available status if we have peers and DB
 # 3) Running in non-HA mode
@@ -78,6 +87,7 @@ class GrafanaK8s(CharmBase):
 
         # -- standard hooks
         self.framework.observe(self.on.config_changed, self.on_config_changed)
+        self.framework.observe(self.on.update_status, self.on_update_status)
 
         # -- grafana-source relation observations
         self.framework.observe(self.on['grafana-source'].relation_changed,
@@ -88,8 +98,8 @@ class GrafanaK8s(CharmBase):
         # -- grafana (peer) relation observations
         self.framework.observe(self.on['grafana'].relation_changed,
                                self.on_peer_changed)
-        self.framework.observe(self.on['grafana'].relation_departed,
-                               self.on_peer_departed)
+        # self.framework.observe(self.on['grafana'].relation_departed,
+        #                        self.on_peer_departed)
 
         # -- database relation observations
         self.framework.observe(self.on['database'].relation_changed,
@@ -100,24 +110,28 @@ class GrafanaK8s(CharmBase):
         # -- initialize states --
         self.datastore.set_default(sources=dict())  # available data sources
         self.datastore.set_default(database=dict())  # db configuration
-        self.datastore.set_default(has_peer=False)
 
     @property
     def has_peer(self) -> bool:
-        return len(self.model.relations['grafana']) > 0
+        rel = self.model.get_relation('grafana')
+        return len(rel.units) > 0 if rel is not None else False
 
     @property
     def has_db(self) -> bool:
         """Only consider a DB connection if we have config info."""
         return len(self.datastore.database) > 0
 
+    def on_update_status(self, event):
+        """Various health checks of the charm."""
+        self._check_high_availability()
+        # TODO: add more health checks in the future
+
     def on_config_changed(self, event):
         """Sets the pod spec if any configuration has changed."""
         log.debug('on_config_changed() -- setting pod spec')
         if not self.unit.is_leader():
             log.debug("{} is not leader. Cannot set pod spec.".format(
-                self.unit.name
-            ))
+                self.unit.name))
             return
         self._set_pod_spec()
 
@@ -208,7 +222,14 @@ class GrafanaK8s(CharmBase):
         self._set_pod_spec()
 
     def on_peer_departed(self, event):
-        """A database relation is no longer required."""
+        """Sets pod spec with new info."""
+        # TODO: setting pod spec shouldn't do much now,
+        #       but if we ever need to change config based peer units,
+        #       we will want to make sure _set_pod_spec() is called
+        if not self.unit.is_leader():
+            log.debug('{} is not leader. '.format(self.unit.name) +
+                      'Skipping on_peer_departed() handler')
+            return
         self._set_pod_spec()
 
     def on_database_changed(self, event):
@@ -234,6 +255,12 @@ class GrafanaK8s(CharmBase):
         if len(missing_fields) > 0:
             log.error("Missing required data fields for related database "
                       "relation: {}".format(missing_fields))
+            return
+
+        # check that the passed database type is not in VALID_DATABASE_TYPES
+        if database_fields['type'] not in VALID_DATABASE_TYPES:
+            log.error('Grafana can only accept databases of the following '
+                      'types: {}'.format(VALID_DATABASE_TYPES))
             return
 
         # add the new database relation data to the datastore
@@ -274,15 +301,6 @@ class GrafanaK8s(CharmBase):
                      data_source['host'] if data_source else '',
                      data_source['port'] if data_source else '',
                  ))
-
-    def _check_high_availability(self):
-        if self.has_peer:
-            if self.has_db:
-                self.app.status = HA_READY_STATUS
-            else:
-                self.app.status = HA_NOT_READY_STATUS
-        else:
-            self.app.status = SINGLE_NODE_STATUS
 
     def _make_data_source_config_text(self):
         """Build docs based on "Data Sources section of provisioning docs."""
@@ -347,14 +365,33 @@ class GrafanaK8s(CharmBase):
 
         # check for valid high availability (or single node) configuration
         self._check_high_availability()
+
+        # decide whether we can set the pod spec or not
         if isinstance(self.app.status, BlockedStatus):
-            log.error('Application is in a blocked state.'
+            log.error('Application is in a blocked state. '
                       'Please resolve before pod spec can be set.')
             return
 
         self.unit.status = MaintenanceStatus('Setting pod spec.')
         self.model.pod.set_spec(self._build_pod_spec())
-        self.unit.status = ActiveStatus('Pod ready.')
+        self.unit.status = APPLICATION_ACTIVE_STATUS
+
+    def _check_high_availability(self):
+        """Checks whether the configuration allows for HA."""
+
+        if self.has_peer:
+            if self.has_db:
+                status = HA_READY_STATUS
+            else:
+                log.error('high availability not ready.')
+                status = HA_NOT_READY_STATUS
+        else:
+            status = SINGLE_NODE_STATUS
+
+        # set status for *at least* the unit and possibly the app
+        self.unit.status = status
+        if self.unit.is_leader():
+            self.app.status = status
 
 
 if __name__ == '__main__':

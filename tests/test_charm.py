@@ -11,6 +11,7 @@ from ops.testing import Harness
 from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus, TooManyRelatedAppsError
 from charm import (
     GrafanaK8s,
+    APPLICATION_ACTIVE_STATUS,
     HA_NOT_READY_STATUS,
     HA_READY_STATUS,
     SINGLE_NODE_STATUS,
@@ -77,16 +78,23 @@ class GrafanaCharmTest(unittest.TestCase):
         harness.set_leader(True)
         harness.populate_oci_resources()
         harness.update_config(key_values={'advertised_port': 3000})
+        self.assertEqual(harness.charm.unit.status,
+                         APPLICATION_ACTIVE_STATUS)
+        peer_rel_id = harness.add_relation('grafana', 'grafana')
+
+        # add main unit and its data
+        # harness.add_relation_unit(peer_rel_id, 'grafana/0')
+        harness.update_relation_data(peer_rel_id,
+                                     'grafana/0',
+                                     {'private-address': '10.1.2.3'})
         self.assertEqual(harness.charm.app.status, SINGLE_NODE_STATUS)
 
-        peer_rel_id = harness.add_relation('grafana', 'grafana')
-        peer_rel = harness.charm.model.get_relation('grafana')
+        # add peer unit and its data
         harness.add_relation_unit(peer_rel_id, 'grafana/1')
-
-        # update peer relation data so the config_changed hook fires
         harness.update_relation_data(peer_rel_id,
                                      'grafana/1',
-                                     {'private-address': '10.1.2.3'})
+                                     {'private-address': '10.0.0.1'})
+
         self.assertTrue(harness.charm.has_peer)
         self.assertFalse(harness.charm.has_db)
         self.assertEqual(harness.charm.app.status, HA_NOT_READY_STATUS)

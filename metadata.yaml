@@ -35,3 +35,7 @@ requires:
 peers:
     grafana:
         interface: grafana
+storage:
+    sqlitedb:
+        type: filesystem
+        location: /var/lib/grafana
