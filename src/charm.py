@@ -75,7 +75,8 @@ def get_container(pod_spec, container_name):
     for container in pod_spec['containers']:
         if container['name'] == container_name:
             return container
-    raise ValueError("Unable to find container named '{}' in pod spec".format(container_name))
+    raise ValueError("Unable to find container named '{}' in pod spec".format(
+        container_name))
 
 
 class GrafanaK8s(CharmBase):
@@ -396,13 +397,16 @@ class GrafanaK8s(CharmBase):
         file_text = self._make_data_source_config_text()
         data_source_file_contents = {
             'name': 'grafana-data-sources',
-            'mountPath': self.model.config['provisioning_file_mount_path'],
+            'mountPath': self.model.config['datasource_mount_path'],
             'files': {
                 'datasources.yaml': file_text
             }
         }
         container = get_container(pod_spec, self.app.name)
         container['files'].append(data_source_file_contents)
+
+    def _update_pod_database_config(self, pod_spec):
+        pass
 
     def _build_pod_spec(self):
         """Builds the pod spec based on available info in datastore`."""

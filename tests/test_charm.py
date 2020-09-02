@@ -19,6 +19,7 @@ from charm import (
     HA_NOT_READY_STATUS,
     HA_READY_STATUS,
     SINGLE_NODE_STATUS,
+    get_container,
 )
 
 # TODO: should these tests be written in a way that doesn't require
@@ -29,7 +30,7 @@ BASE_CONFIG = {
     'grafana_image_path': 'grafana/grafana:latest',
     'grafana_image_username': '',
     'grafana_image_password': '',
-    'provisioning_file_mount_path': '/etc/grafana/provisioning/datasources',
+    'datasource_mount_path': '/etc/grafana/provisioning/datasources',
 }
 
 MISSING_IMAGE_PASSWORD_CONFIG = {
@@ -382,5 +383,48 @@ class GrafanaCharmTest(unittest.TestCase):
         expected = ['grafana_image_password']
         self.assertEqual(missing, expected)
 
-    def test__container_pod(self):
-        pass
+    def test__container_datasources_files(self):
+        harness = Harness(GrafanaK8s)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        harness.set_leader(True)
+        harness.update_config(BASE_CONFIG)
+        self.assertEqual(harness.charm.datastore.sources, {})
+
+        # add first relation
+        rel_id = harness.add_relation('grafana-source', 'prometheus')
+        harness.add_relation_unit(rel_id, 'prometheus/0')
+
+        # add test data to grafana-source relation
+        # and test that _make_data_source_config_text() works as expected
+        prom_source_data = {
+            'host': '192.0.2.1',
+            'port': 4321,
+            'source-type': 'prometheus'
+        }
+        harness.update_relation_data(rel_id, 'prometheus/0', prom_source_data)
+        file_text = textwrap.dedent("""
+            apiVersion: 1
+
+            datasources:
+            - name: prometheus/0
+              type: prometheus
+              access: proxy
+              url: http://192.0.2.1:4321
+              isDefault: true
+              editable: false""")
+
+        expected_container_files_spec = [
+            {
+                'name': 'grafana-data-sources',
+                'mountPath': harness.model.config['datasource_mount_path'],
+                'files': {
+                    'datasources.yaml': file_text,
+                },
+            },
+        ]
+        pod_spec = harness.get_pod_spec()[0]
+        container = get_container(pod_spec, 'grafana')
+        actual_container_files_spec = container['files']
+        self.assertEqual(expected_container_files_spec,
+                         actual_container_files_spec)
