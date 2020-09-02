@@ -13,10 +13,6 @@ tags:
     - monitoring
 series:
     - kubernetes
-resources:
-    grafana-image:
-        type: oci-image
-        description: "Image used for the Grafana pod."
 provides:
     # for example, a grafana-source could be prometheus
     # there are a few required fields that incoming

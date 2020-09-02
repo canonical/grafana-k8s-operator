@@ -13,8 +13,7 @@
 import logging
 import textwrap
 
-# import setuppath  # noqa:F401
-from oci_image import OCIImageResource, OCIImageResourceError
+# from oci_image import OCIImageResource, OCIImageResourceError
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -84,9 +83,6 @@ class GrafanaK8s(CharmBase):
     def __init__(self, *args):
         log.debug('Initializing charm.')
         super().__init__(*args)
-
-        # get container image
-        self.grafana_image = OCIImageResource(self, 'grafana-image')
 
         # -- standard hooks
         self.framework.observe(self.on.config_changed, self.on_config_changed)
@@ -206,10 +202,6 @@ class GrafanaK8s(CharmBase):
         #       According to these docs ^, as long as we have a DB, HA should
         #       work out of the box if we are OK with "Sticky Sessions"
         #       but having "Stateless Sessions" will require more config
-        if not self.unit.is_leader():
-            log.debug('{} is not leader. '.format(self.unit.name) +
-                      'Skipping on_peer_joined() handler')
-            return
 
         # if the config changed, set a new pod spec
         self.configure_pod()
@@ -218,11 +210,7 @@ class GrafanaK8s(CharmBase):
         """Sets pod spec with new info."""
         # TODO: setting pod spec shouldn't do much now,
         #       but if we ever need to change config based peer units,
-        #       we will want to make sure _set_pod_spec() is called
-        if not self.unit.is_leader():
-            log.debug('{} is not leader. '.format(self.unit.name) +
-                      'Skipping on_peer_departed() handler')
-            return
+        #       we will want to make sure configure_pod() is called
         self.configure_pod()
 
     def on_database_changed(self, event):
@@ -320,29 +308,49 @@ class GrafanaK8s(CharmBase):
             )
         return config_text
 
+    def _check_config(self):
+        """Get list of missing charm settings."""
+        config = self.model.config
+        missing = []
+
+        if config['grafana_image_username'] \
+                and not config['grafana_image_password']:
+            missing.append('grafana_image_password')
+
+        # TODO: does it make sense to set state directly in this function?
+        if missing:
+            self.unit.status = \
+                BlockedStatus('Missing configuration: {}'.format(missing))
+
+        return missing
+
     def _build_pod_spec(self):
         """Builds the pod spec based on available info in datastore`."""
 
-        try:
-            image_details = self.grafana_image.fetch()
-        except OCIImageResourceError as e:
-            self.unit.status = e.status
-            return
-
         # this will set the baseline spec of the pod without
         # worrying about `grafana-source` or `database` relations
+        config = self.model.config
+
+        # get image details
+        image_details = {
+            'imagePath': config['grafana_image_path']
+        }
+        if config['grafana_image_username']:
+            image_details['username'] = config['grafana_image_username']
+            image_details['password'] = config['grafana_image_password']
+
         spec = {
             'containers': [{
                 'name': self.model.app.name,
                 'imageDetails': image_details,
                 'ports': [{
-                    'containerPort': self.model.config['advertised_port'],
+                    'containerPort': config['advertised_port'],
                     'protocol': 'TCP'
                 }],
                 'readinessProbe': {
                     'httpGet': {
                         'path': '/api/health',
-                        'port': self.model.config['advertised_port']
+                        'port': config['advertised_port']
                     },
                     # TODO: should these be in the config?
                     'initialDelaySeconds': 10,
@@ -358,10 +366,11 @@ class GrafanaK8s(CharmBase):
 
         # check for valid high availability (or single node) configuration
         self._check_high_availability()
+        self._check_config()
 
         # decide whether we can set the pod spec or not
-        # TODO: is this even necessary?
-        if isinstance(self.app.status, BlockedStatus):
+        # TODO: is this necessary?
+        if isinstance(self.unit.status, BlockedStatus):
             log.error('Application is in a blocked state. '
                       'Please resolve before pod spec can be set.')
             return

@@ -25,6 +25,20 @@ from charm import (
 # TODO: should these tests be written in a way that doesn't require
 #       the harness to be built each time?
 
+BASE_CONFIG = {
+    'advertised_port': 3000,
+    'grafana_image_path': 'grafana/grafana:latest',
+    'grafana_image_username': '',
+    'grafana_image_password': '',
+}
+
+MISSING_IMAGE_PASSWORD_CONFIG = {
+    'advertised_port': 3000,
+    'grafana_image_path': 'grafana/grafana:latest',
+    'grafana_image_username': 'test-user',
+    'grafana_image_password': '',
+}
+
 
 class GrafanaCharmTest(unittest.TestCase):
 
@@ -33,8 +47,7 @@ class GrafanaCharmTest(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
-        harness.populate_oci_resources()
-        harness.update_config(key_values={'advertised_port': 3000})
+        harness.update_config(BASE_CONFIG)
         self.assertEqual(harness.charm.datastore.sources, {})
 
         rel_id = harness.add_relation('grafana-source', 'prometheus')
@@ -83,8 +96,7 @@ class GrafanaCharmTest(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
-        harness.populate_oci_resources()
-        harness.update_config(key_values={'advertised_port': 3000})
+        harness.update_config(BASE_CONFIG)
         self.assertEqual(harness.charm.unit.status,
                          APPLICATION_ACTIVE_STATUS)
 
@@ -154,8 +166,7 @@ class GrafanaCharmTest(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
-        harness.populate_oci_resources()
-        harness.update_config(key_values={'advertised_port': 3000})
+        harness.update_config(BASE_CONFIG)
         self.assertEqual(harness.charm.datastore.database, {})
 
         # add relation and update relation data
@@ -185,8 +196,7 @@ class GrafanaCharmTest(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
-        harness.populate_oci_resources()
-        harness.update_config(key_values={'advertised_port': 3000})
+        harness.update_config(BASE_CONFIG)
         self.assertEqual(harness.charm.datastore.database, {})
 
         # add first database relation
@@ -202,8 +212,7 @@ class GrafanaCharmTest(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.set_leader(True)
-        harness.populate_oci_resources()
-        harness.update_config(key_values={'advertised_port': 3000})
+        harness.update_config(BASE_CONFIG)
         self.assertEqual(harness.charm.datastore.sources, {})
 
         # add first relation
@@ -252,3 +261,14 @@ class GrafanaCharmTest(unittest.TestCase):
         harness.charm.on.grafana_source_relation_departed.emit(rel1)
         generated_text = harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text0, generated_text)
+
+    def test__check_config(self):
+        harness = Harness(GrafanaK8s)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        harness.update_config(MISSING_IMAGE_PASSWORD_CONFIG)
+
+        # test the return value of _check_config
+        missing = harness.charm._check_config()
+        expected = ['grafana_image_password']
+        self.assertEqual(missing, expected)
