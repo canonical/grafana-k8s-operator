@@ -356,6 +356,9 @@ class GrafanaK8s(CharmBase):
         config = self.model.config
         missing = []
 
+        if not config['grafana_image_path']:
+            missing.append('grafana_image_path')
+
         if config['grafana_image_username'] \
                 and not config['grafana_image_password']:
             missing.append('grafana_image_password')

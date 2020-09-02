@@ -40,6 +40,13 @@ MISSING_IMAGE_PASSWORD_CONFIG = {
     'grafana_image_password': '',
 }
 
+MISSING_IMAGE_CONFIG = {
+    'advertised_port': 3000,
+    'grafana_image_path': '',
+    'grafana_image_username': '',
+    'grafana_image_password': '',
+}
+
 
 class GrafanaCharmTest(unittest.TestCase):
 
@@ -195,11 +202,6 @@ class GrafanaCharmTest(unittest.TestCase):
         # ensure _check_high_availability() ends up with the correct status
         status = harness.charm._check_high_availability()
         self.assertEqual(status, HA_READY_STATUS)
-
-    def test__add_then_remove_peer_status_check(self):
-        """Ensure that adding and removing peer results in correct status."""
-        # TODO: I'm not sure the testing harness will be able to test this
-        #       currently, but testing directly in juju works (for now)
 
     def test__database_relation_data(self):
         harness = Harness(GrafanaK8s)
@@ -372,7 +374,7 @@ class GrafanaCharmTest(unittest.TestCase):
         generated_text = harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text0, generated_text)
 
-    def test__check_config(self):
+    def test__check_config_missing_image_path(self):
         harness = Harness(GrafanaK8s)
         self.addCleanup(harness.cleanup)
         harness.begin()
@@ -381,6 +383,17 @@ class GrafanaCharmTest(unittest.TestCase):
         # test the return value of _check_config
         missing = harness.charm._check_config()
         expected = ['grafana_image_password']
+        self.assertEqual(missing, expected)
+
+    def test__check_config_missing_password(self):
+        harness = Harness(GrafanaK8s)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        harness.update_config(MISSING_IMAGE_CONFIG)
+
+        # test the return value of _check_config
+        missing = harness.charm._check_config()
+        expected = ['grafana_image_path']
         self.assertEqual(missing, expected)
 
     def test__container_datasources_files(self):
