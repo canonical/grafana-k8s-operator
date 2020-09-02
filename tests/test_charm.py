@@ -5,7 +5,6 @@ import sys
 import tempfile
 import textwrap
 import unittest
-import yaml
 
 from ops.testing import Harness
 from ops.model import (
@@ -30,6 +29,7 @@ BASE_CONFIG = {
     'grafana_image_path': 'grafana/grafana:latest',
     'grafana_image_username': '',
     'grafana_image_password': '',
+    'provisioning_file_mount_path': '/etc/grafana/provisioning/datasources',
 }
 
 MISSING_IMAGE_PASSWORD_CONFIG = {
@@ -62,18 +62,57 @@ class GrafanaCharmTest(unittest.TestCase):
                                      {
                                          'host': '192.0.2.1',
                                          'port': 1234,
-                                         'source-type': 'prometheus'
+                                         'source-type': 'prometheus',
+                                         'source-name': 'prometheus-app',
                                      })
-        self.assertEqual(
-            {
+
+        expected_first_source_data = {
                 'host': '192.0.2.1',
                 'port': 1234,
-                'source-name': 'prometheus/0',
+                'source-name': 'prometheus-app',
                 'source-type': 'prometheus',
                 'isDefault': 'true',
-            },
-            dict(harness.charm.datastore.sources[rel_id])
-        )
+                'unit_name': 'prometheus/0'
+        }
+        self.assertEqual(expected_first_source_data,
+                         dict(harness.charm.datastore.sources[rel_id][0]))
+
+        # add another unit and test the datastore data structure
+        harness.add_relation_unit(rel_id, 'prometheus/1')
+        harness.update_relation_data(rel_id,
+                                     'prometheus/1',
+                                     {
+                                         'host': '1.12.23.34',
+                                         'port': 2345,
+                                         'source-type': 'prometheus',
+                                     })
+        expected_second_source_data = {
+            'host': '1.12.23.34',
+            'port': 2345,
+            'source-name': 'prometheus/1',
+            'source-type': 'prometheus',
+            'isDefault': 'false',
+            'unit_name': 'prometheus/1'
+        }
+
+        # make sure first source is unchanged
+        self.assertEqual(expected_first_source_data,
+                         dict(harness.charm.datastore.sources[rel_id][0]))
+
+        # make sure second source also matches
+        self.assertEqual(expected_second_source_data,
+                         dict(harness.charm.datastore.sources[rel_id][1]))
+
+        # delete this data source and make sure
+        # first data source is still unchanged
+        harness.update_relation_data(rel_id,
+                                     'prometheus/1',
+                                     {
+                                         'host': None,
+                                         'port': None,
+                                     })
+        self.assertEqual(expected_first_source_data,
+                         dict(harness.charm.datastore.sources[rel_id][0]))
 
         # test that clearing the relation data leads to
         # the datastore for this data source being cleared
@@ -207,7 +246,12 @@ class GrafanaCharmTest(unittest.TestCase):
             harness.add_relation('database', 'mysql')
             harness.charm.model.get_relation('database')
 
-    def test__make_data_source_config_text(self):
+    def test__multiple_units_same_source_relation(self):
+        """This test is to check _make_data_source_config_text.
+
+        Specifically, it will test when multiple units of the same
+        relation are added."""
+
         harness = Harness(GrafanaK8s)
         self.addCleanup(harness.cleanup)
         harness.begin()
@@ -216,8 +260,8 @@ class GrafanaCharmTest(unittest.TestCase):
         self.assertEqual(harness.charm.datastore.sources, {})
 
         # add first relation
-        rel_id0 = harness.add_relation('grafana-source', 'prometheus')
-        harness.add_relation_unit(rel_id0, 'prometheus/0')
+        rel_id = harness.add_relation('grafana-source', 'prometheus')
+        harness.add_relation_unit(rel_id, 'prometheus/0')
 
         # add test data to grafana-source relation
         # and test that _make_data_source_config_text() works as expected
@@ -226,11 +270,12 @@ class GrafanaCharmTest(unittest.TestCase):
              'port': 1234,
              'source-type': 'prometheus'
         }
-        harness.update_relation_data(rel_id0, 'prometheus/0', test_source_data)
-        correct_config_text0 = textwrap.dedent("""
-            apiVersion: 1
-            
-            datasources:
+        harness.update_relation_data(rel_id, 'prometheus/0', test_source_data)
+        header_text = textwrap.dedent("""
+        apiVersion: 1
+        
+        datasources:""")
+        correct_config_text0 = header_text + textwrap.dedent("""
             - name: prometheus/0
               type: prometheus
               access: proxy
@@ -241,10 +286,9 @@ class GrafanaCharmTest(unittest.TestCase):
         self.assertEqual(correct_config_text0, generated_text)
 
         # add another grafana-source and check the resulting config text
-        rel_id1 = harness.add_relation('grafana-source', 'prometheus')
-        rel1 = harness.model.get_relation('grafana-source', rel_id1)
-        harness.add_relation_unit(rel_id1, 'prometheus/1')
-        harness.update_relation_data(rel_id1, 'prometheus/1', test_source_data)
+        rel = harness.model.get_relation('grafana-source', rel_id)
+        harness.add_relation_unit(rel_id, 'prometheus/1')
+        harness.update_relation_data(rel_id, 'prometheus/1', test_source_data)
 
         correct_config_text1 = correct_config_text0 + textwrap.dedent("""
             - name: prometheus/1
@@ -258,7 +302,72 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # test removal of second source results in config_text
         # that is the same as the original
-        harness.charm.on.grafana_source_relation_departed.emit(rel1)
+        harness.charm.on.grafana_source_relation_departed.emit(rel)
+        generated_text = harness.charm._make_data_source_config_text()
+        self.assertEqual(header_text, generated_text)
+
+    def test__multiple_source_relations(self):
+        """This will test data-source config text with multiple sources.
+
+        Specifically, it will test multiple grafana-source relations."""
+        harness = Harness(GrafanaK8s)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        harness.set_leader(True)
+        harness.update_config(BASE_CONFIG)
+        self.assertEqual(harness.charm.datastore.sources, {})
+
+        # add first relation
+        rel_id0 = harness.add_relation('grafana-source', 'prometheus')
+        harness.add_relation_unit(rel_id0, 'prometheus/0')
+
+        # add test data to grafana-source relation
+        # and test that _make_data_source_config_text() works as expected
+        prom_source_data = {
+            'host': '192.0.2.1',
+            'port': 4321,
+            'source-type': 'prometheus'
+        }
+        harness.update_relation_data(rel_id0, 'prometheus/0', prom_source_data)
+        header_text = textwrap.dedent("""
+                apiVersion: 1
+
+                datasources:""")
+        correct_config_text0 = header_text + textwrap.dedent("""
+            - name: prometheus/0
+              type: prometheus
+              access: proxy
+              url: http://192.0.2.1:4321
+              isDefault: true
+              editable: false""")
+        generated_text = harness.charm._make_data_source_config_text()
+        self.assertEqual(correct_config_text0, generated_text)
+
+        # add another source relation and check the resulting config text
+        jaeger_source_data = {
+            'host': '255.255.255.0',
+            'port': 7890,
+            'source-type': 'jaeger',
+            'source-name': 'jaeger-application'
+        }
+        rel_id1 = harness.add_relation('grafana-source', 'jaeger')
+        rel = harness.model.get_relation('grafana-source', rel_id1)
+        harness.add_relation_unit(rel_id1, 'jaeger/0')
+        harness.update_relation_data(rel_id1, 'jaeger/0', jaeger_source_data)
+
+        correct_config_text1 = correct_config_text0 + textwrap.dedent("""
+            - name: jaeger-application
+              type: jaeger
+              access: proxy
+              url: http://255.255.255.0:7890
+              isDefault: false
+              editable: false""")
+        generated_text = harness.charm._make_data_source_config_text()
+        self.assertEqual(correct_config_text1, generated_text)
+
+        # test removal of second source results in config_text
+        # that is the same as the original
+        harness.charm.on.grafana_source_relation_departed.emit(rel)
         generated_text = harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text0, generated_text)
 
@@ -272,3 +381,6 @@ class GrafanaCharmTest(unittest.TestCase):
         missing = harness.charm._check_config()
         expected = ['grafana_image_password']
         self.assertEqual(missing, expected)
+
+    def test__container_pod(self):
+        pass

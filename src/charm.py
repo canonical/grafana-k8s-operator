@@ -12,6 +12,7 @@
 
 import logging
 import textwrap
+import pprint
 
 # from oci_image import OCIImageResource, OCIImageResourceError
 from ops.charm import CharmBase
@@ -66,6 +67,15 @@ HA_READY_STATUS = \
     MaintenanceStatus('Grafana ready for HA.')
 SINGLE_NODE_STATUS = \
     MaintenanceStatus('Grafana ready on single node.')
+
+
+def get_container(pod_spec, container_name):
+    """Find and return the first container in pod_spec whose name is
+    container_name, otherwise return None."""
+    for container in pod_spec['containers']:
+        if container['name'] == container_name:
+            return container
+    raise ValueError("Unable to find container named '{}' in pod spec".format(container_name))
 
 
 class GrafanaK8s(CharmBase):
@@ -149,7 +159,7 @@ class GrafanaK8s(CharmBase):
 
         # if there is no available unit, remove data-source info if it exists
         if event.unit is None:
-            self._remove_source_from_datastore(event.relation.id)
+            self._remove_source_from_datastore(event.relation.id, event.unit.name)
             log.warning("event unit can't be None when setting data sources.")
             return
 
@@ -166,7 +176,7 @@ class GrafanaK8s(CharmBase):
         if len(missing_fields) > 0:
             log.error("Missing required data fields for grafana-source "
                       "relation: {}".format(missing_fields))
-            self._remove_source_from_datastore(event.relation.id)
+            self._remove_source_from_datastore(event.relation.id, event.unit.name)
             return
 
         # specifically handle optional fields if necessary
@@ -183,11 +193,21 @@ class GrafanaK8s(CharmBase):
         else:
             datasource_fields['isDefault'] = 'false'
 
+        # add unit name so the source can be removed might be a
+        # duplicate of 'source-name', but this will guarantee lookup
+        datasource_fields['unit_name'] = event.unit.name
+
         # add the new datasource relation data to the current state
-        self.datastore.sources.update({event.relation.id: {
+        # make sure that we can handle multiple units of the same relation
+        # as well as different relations altogether
+        new_source_data = {
             field: value for field, value in datasource_fields.items()
             if value is not None
-        }})
+        }
+        if event.relation.id in self.datastore.sources:
+            self.datastore.sources[event.relation.id].append(new_source_data)
+        else:
+            self.datastore.sources[event.relation.id] = [new_source_data]
 
         self.configure_pod()
 
@@ -273,116 +293,33 @@ class GrafanaK8s(CharmBase):
         # set pod spec because datastore config has changed
         self.configure_pod()
 
-    def _remove_source_from_datastore(self, rel_id):
+    def _remove_source_from_datastore(self, rel_id, unit_name=None):
         # TODO: based on provisioning docs, we may want to add
         #       'deleteDatasource' to Grafana configuration file
-        data_source = self.datastore.sources.pop(rel_id, None)
-        log.info('removing data source information from state. '
-                 'host: {0}, port: {1}.'.format(
-                     data_source['host'] if data_source else '',
-                     data_source['port'] if data_source else '',
-                 ))
 
-    def _make_data_source_config_text(self):
-        """Build docs based on "Data Sources section of provisioning docs."""
-        # common starting config text
-        config_text = textwrap.dedent("""
-            apiVersion: 1
-            
-            datasources:""")
-        for rel_id, source_info in self.datastore.sources.items():
-            # TODO: handle more optional fields and verify that current
-            #       defaults are what we want (e.g. "access")
-            config_text += textwrap.dedent("""
-                - name: {0}
-                  type: {1}
-                  access: proxy
-                  url: http://{2}:{3}
-                  isDefault: {4}
-                  editable: false""").format(
-                source_info['source-name'],
-                source_info['source-type'],
-                source_info['host'],
-                source_info['port'],
-                source_info['isDefault']
-            )
-        return config_text
-
-    def _check_config(self):
-        """Get list of missing charm settings."""
-        config = self.model.config
-        missing = []
-
-        if config['grafana_image_username'] \
-                and not config['grafana_image_password']:
-            missing.append('grafana_image_password')
-
-        # TODO: does it make sense to set state directly in this function?
-        if missing:
-            self.unit.status = \
-                BlockedStatus('Missing configuration: {}'.format(missing))
-
-        return missing
-
-    def _build_pod_spec(self):
-        """Builds the pod spec based on available info in datastore`."""
-
-        # this will set the baseline spec of the pod without
-        # worrying about `grafana-source` or `database` relations
-        config = self.model.config
-
-        # get image details
-        image_details = {
-            'imagePath': config['grafana_image_path']
-        }
-        if config['grafana_image_username']:
-            image_details['username'] = config['grafana_image_username']
-            image_details['password'] = config['grafana_image_password']
-
-        spec = {
-            'containers': [{
-                'name': self.model.app.name,
-                'imageDetails': image_details,
-                'ports': [{
-                    'containerPort': config['advertised_port'],
-                    'protocol': 'TCP'
-                }],
-                'readinessProbe': {
-                    'httpGet': {
-                        'path': '/api/health',
-                        'port': config['advertised_port']
-                    },
-                    # TODO: should these be in the config?
-                    'initialDelaySeconds': 10,
-                    'timeoutSeconds': 30
-                }
-            }]
-        }
-
-        return spec
-
-    def configure_pod(self):
-        """Set Juju / Kubernetes pod spec built from `_build_pod_spec()`."""
-
-        # check for valid high availability (or single node) configuration
-        self._check_high_availability()
-        self._check_config()
-
-        # decide whether we can set the pod spec or not
-        # TODO: is this necessary?
-        if isinstance(self.unit.status, BlockedStatus):
-            log.error('Application is in a blocked state. '
-                      'Please resolve before pod spec can be set.')
+        # if there is no unit supplied,
+        # remove data for all units of the relation
+        if unit_name is None:
+            log.warning('Removing all data for relation: {}'.format(rel_id))
+            self.datastore.sources.pop(rel_id)
             return
 
-        if not self.unit.is_leader():
-            self.unit.status = ActiveStatus()
-            return
+        # search for the unit that needs to be deleted
+        remove_index = None
+        for i, source_info in enumerate(self.datastore.sources[rel_id]):
+            if source_info['unit_name'] == unit_name:
+                remove_index = i
+                break
+        if remove_index is None:
+            log.error('Could not find unit to remove: {}'.format(unit_name))
+            self.unit.status = BlockedStatus()
+        else:
+            log.info('Removing data source unit: {}'.format(unit_name))
+            del self.datastore.sources[rel_id][remove_index]
 
-        self.unit.status = MaintenanceStatus('Building pod spec.')
-        self.model.pod.set_spec(self._build_pod_spec())
-        self.app.status = APPLICATION_ACTIVE_STATUS
-        self.unit.status = APPLICATION_ACTIVE_STATUS
+            # if this deleted all data in the relation, remove the rel_id
+            if not self.datastore.sources[rel_id]:
+                self.datastore.sources.pop(rel_id)
 
     def _check_high_availability(self):
         """Checks whether the configuration allows for HA."""
@@ -412,6 +349,127 @@ class GrafanaK8s(CharmBase):
             self.app.status = status
 
         return status
+
+    def _check_config(self):
+        """Get list of missing charm settings."""
+        config = self.model.config
+        missing = []
+
+        if config['grafana_image_username'] \
+                and not config['grafana_image_password']:
+            missing.append('grafana_image_password')
+
+        # TODO: does it make sense to set state directly in this function?
+        if missing:
+            self.unit.status = \
+                BlockedStatus('Missing configuration: {}'.format(missing))
+
+        return missing
+
+    def _make_data_source_config_text(self):
+        """Build docs based on "Data Sources section of provisioning docs."""
+        # common starting config text
+        config_text = textwrap.dedent("""
+            apiVersion: 1
+
+            datasources:""")
+        for rel_id, sources_list in self.datastore.sources.items():
+            for source_info in sources_list:
+                # TODO: handle more optional fields and verify that current
+                #       defaults are what we want (e.g. "access")
+                config_text += textwrap.dedent("""
+                    - name: {0}
+                      type: {1}
+                      access: proxy
+                      url: http://{2}:{3}
+                      isDefault: {4}
+                      editable: false""").format(
+                    source_info['source-name'],
+                    source_info['source-type'],
+                    source_info['host'],
+                    source_info['port'],
+                    source_info['isDefault']
+                )
+        return config_text
+
+    def _update_pod_data_source_file(self, pod_spec):
+        file_text = self._make_data_source_config_text()
+        data_source_file_contents = {
+            'name': 'grafana-data-sources',
+            'mountPath': self.model.config['provisioning_file_mount_path'],
+            'files': {
+                'datasources.yaml': file_text
+            }
+        }
+        container = get_container(pod_spec, self.app.name)
+        container['files'].append(data_source_file_contents)
+
+    def _build_pod_spec(self):
+        """Builds the pod spec based on available info in datastore`."""
+
+        # this will set the baseline spec of the pod without
+        # worrying about `grafana-source` or `database` relations
+        config = self.model.config
+
+        # get image details
+        image_details = {
+            'imagePath': config['grafana_image_path']
+        }
+        if config['grafana_image_username']:
+            image_details['username'] = config['grafana_image_username']
+            image_details['password'] = config['grafana_image_password']
+
+        spec = {
+            'version': 3,
+            'containers': [{
+                'name': self.app.name,
+                'imageDetails': image_details,
+                'ports': [{
+                    'containerPort': config['advertised_port'],
+                    'protocol': 'TCP'
+                }],
+                'readinessProbe': {
+                    'httpGet': {
+                        'path': '/api/health',
+                        'port': config['advertised_port']
+                    },
+                    # TODO: should these be in the config?
+                    'initialDelaySeconds': 10,
+                    'timeoutSeconds': 30
+                },
+                'files': [],
+            }]
+        }
+
+        return spec
+
+    def configure_pod(self):
+        """Set Juju / Kubernetes pod spec built from `_build_pod_spec()`."""
+
+        # check for valid high availability (or single node) configuration
+        self._check_high_availability()
+        self._check_config()
+
+        # decide whether we can set the pod spec or not
+        # TODO: is this necessary?
+        if isinstance(self.unit.status, BlockedStatus):
+            log.error('Application is in a blocked state. '
+                      'Please resolve before pod spec can be set.')
+            return
+
+        if not self.unit.is_leader():
+            self.unit.status = ActiveStatus()
+            return
+
+        # general pod spec component updates
+        self.unit.status = MaintenanceStatus('Building pod spec.')
+        pod_spec = self._build_pod_spec()
+        self._update_pod_data_source_file(pod_spec)
+
+        # set the pod spec with Juju
+        self.model.pod.set_spec(pod_spec)
+        self.app.status = APPLICATION_ACTIVE_STATUS
+        self.unit.status = APPLICATION_ACTIVE_STATUS
 
 
 if __name__ == '__main__':
