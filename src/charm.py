@@ -1,14 +1,14 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# TODO: refactor _set_pod_spec to call smaller "pod update" functions for
-#       various things -- e.g. configure database or datasource
-# TODO: add config.ini to set_pod_spec and ensure the persistent storage
-#       matches what is defined in metadata.yaml
 # TODO: CONFIRM: 'update-status' hook only sets a maintenance mode and
 #       _set_pod_spec() is the only thing that will set the application
 #       or unit into an active state
+# TODO: remove all app status setting and instead set unit statuses
+# TODO: to ensure HA works properly, add datasource version increments
+#       https://grafana.com/docs/grafana/latest/administration/provisioning/#running-multiple-grafana-instances
 # TODO: create actions that will help users. e.g. "upload-dashboard"
+# TODO: handle the removal of datasources in coniguration and "on_source_changed"
 
 import logging
 import textwrap
@@ -396,7 +396,8 @@ class GrafanaK8s(CharmBase):
                 )
         return config_text
 
-    def _update_pod_data_source_file(self, pod_spec):
+    def _update_pod_data_source_config_file(self, pod_spec):
+        """Adds datasources to pod configuration."""
         file_text = self._make_data_source_config_text()
         data_source_file_contents = {
             'name': 'grafana-data-sources',
@@ -408,8 +409,44 @@ class GrafanaK8s(CharmBase):
         container = get_container(pod_spec, self.app.name)
         container['files'].append(data_source_file_contents)
 
-    def _update_pod_database_config(self, pod_spec):
-        pass
+    def _make_config_ini_text(self):
+        """Create the text of the config.ini file.
+
+        More information about this can be found in the Grafana docs:
+        https://grafana.com/docs/grafana/latest/administration/configuration/
+        """
+
+        # set default data storage path so make sure sqlite3 db is always
+        # available in single node mode
+        config_text = textwrap.dedent("""
+        [paths]
+        data = {0}
+        """.format(
+            self.meta.storages['sqlitedb'].location,
+        ))
+
+        # if there is a database available, add that information
+        if self.datastore.database:
+            db_config = self.datastore.database
+            config_text += textwrap.dedent("""
+            [database]
+            type = {0}
+            host = {1}
+            name = {2}
+            user = {3}
+            password = {4}
+            url = {0}://{3}:{4}@{1}/{2}""".format(
+                db_config['type'],
+                db_config['host'],
+                db_config['name'],
+                db_config['user'],
+                db_config['password'],
+            ))
+
+        return config_text
+
+    def _update_pod_config_ini_file(self, pod_spec):
+        container = get_container(pod_spec, self.app.name)
 
     def _build_pod_spec(self):
         """Builds the pod spec based on available info in datastore`."""
@@ -471,7 +508,7 @@ class GrafanaK8s(CharmBase):
         # general pod spec component updates
         self.unit.status = MaintenanceStatus('Building pod spec.')
         pod_spec = self._build_pod_spec()
-        self._update_pod_data_source_file(pod_spec)
+        self._update_pod_data_source_config_file(pod_spec)
 
         # set the pod spec with Juju
         self.model.pod.set_spec(pod_spec)

@@ -441,3 +441,61 @@ class GrafanaCharmTest(unittest.TestCase):
         actual_container_files_spec = container['files']
         self.assertEqual(expected_container_files_spec,
                          actual_container_files_spec)
+
+    def test__access_sqlite_storage_location(self):
+        harness = Harness(GrafanaK8s)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        expected_path = '/var/lib/grafana'
+        actual_path = harness.charm.meta.storages['sqlitedb'].location
+        self.assertEqual(expected_path, actual_path)
+
+    def test__config_ini_without_database(self):
+        harness = Harness(GrafanaK8s)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        expected_config_text = textwrap.dedent("""
+        [paths]
+        data = /var/lib/grafana
+        """)
+
+        actual_config_text = harness.charm._make_config_ini_text()
+        self.assertEqual(expected_config_text, actual_config_text)
+
+    def test__config_ini_with_database(self):
+        harness = Harness(GrafanaK8s)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        harness.set_leader(True)
+        harness.update_config(BASE_CONFIG)
+
+        # add database relation and update relation data
+        rel_id = harness.add_relation('database', 'mysql')
+        # rel = harness.charm.model.get_relation('database')
+        harness.add_relation_unit(rel_id, 'mysql/0')
+        test_relation_data = {
+            'type': 'mysql',
+            'host': '0.1.2.3:3306',
+            'name': 'my-test-db',
+            'user': 'test-user',
+            'password': 'super!secret!password',
+        }
+        harness.update_relation_data(rel_id,
+                                     'mysql/0',
+                                     test_relation_data)
+
+        # test the results of _make_config_ini_text()
+        expected_config_text = textwrap.dedent("""
+        [paths]
+        data = /var/lib/grafana
+        
+        [database]
+        type = mysql
+        host = 0.1.2.3:3306
+        name = my-test-db
+        user = test-user
+        password = super!secret!password
+        url = mysql://test-user:super!secret!password@0.1.2.3:3306/my-test-db""")
+
+        actual_config_text = harness.charm._make_config_ini_text()
+        self.assertEqual(expected_config_text, actual_config_text)
