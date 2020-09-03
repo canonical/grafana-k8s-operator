@@ -159,7 +159,7 @@ class GrafanaK8s(CharmBase):
 
         # if there is no available unit, remove data-source info if it exists
         if event.unit is None:
-            self._remove_source_from_datastore(event.relation.id, event.unit.name)
+            self._remove_source_from_datastore(event.relation.id)
             log.warning("event unit can't be None when setting data sources.")
             return
 
@@ -176,7 +176,7 @@ class GrafanaK8s(CharmBase):
         if len(missing_fields) > 0:
             log.error("Missing required data fields for grafana-source "
                       "relation: {}".format(missing_fields))
-            self._remove_source_from_datastore(event.relation.id, event.unit.name)
+            self._remove_source_from_datastore(event.relation.id)
             return
 
         # specifically handle optional fields if necessary
@@ -204,11 +204,7 @@ class GrafanaK8s(CharmBase):
             field: value for field, value in datasource_fields.items()
             if value is not None
         }
-        if event.relation.id in self.datastore.sources:
-            self.datastore.sources[event.relation.id].append(new_source_data)
-        else:
-            self.datastore.sources[event.relation.id] = [new_source_data]
-
+        self.datastore.sources.update({event.relation.id: new_source_data})
         self.configure_pod()
 
     def on_grafana_source_departed(self, event):
@@ -281,7 +277,6 @@ class GrafanaK8s(CharmBase):
         we will datastore.database structure to look more like
         datastore.sources.
         """
-        print('IN DATABASE DEPARTED')
         if not self.unit.is_leader():
             log.debug('{} is not leader. '.format(self.unit.name) +
                       'Skipping on_database_departed() handler')
@@ -293,33 +288,15 @@ class GrafanaK8s(CharmBase):
         # set pod spec because datastore config has changed
         self.configure_pod()
 
-    def _remove_source_from_datastore(self, rel_id, unit_name=None):
+    def _remove_source_from_datastore(self, rel_id):
         # TODO: based on provisioning docs, we will want to add
         #       'deleteDatasource' to Grafana configuration file
 
-        # if there is no unit supplied,
-        # remove data for all units of the relation
-        if unit_name is None:
-            log.warning('Removing all data for relation: {}'.format(rel_id))
-            self.datastore.sources.pop(rel_id)
-            return
-
-        # search for the unit that needs to be deleted
-        remove_index = None
-        for i, source_info in enumerate(self.datastore.sources[rel_id]):
-            if source_info['unit_name'] == unit_name:
-                remove_index = i
-                break
-        if remove_index is None:
-            log.error('Could not find unit to remove: {}'.format(unit_name))
-            self.unit.status = BlockedStatus()
-        else:
-            log.info('Removing data source unit: {}'.format(unit_name))
-            del self.datastore.sources[rel_id][remove_index]
-
-            # if this deleted all data in the relation, remove the rel_id
-            if not self.datastore.sources[rel_id]:
-                self.datastore.sources.pop(rel_id)
+        log.info('Removing all data for relation: {}'.format(rel_id))
+        removed_source = self.datastore.sources.pop(rel_id, None)
+        if removed_source is None:
+            log.warning('Could not remove source for relation: {}'.format(
+                rel_id))
 
     def _check_high_availability(self):
         """Checks whether the configuration allows for HA."""
@@ -376,23 +353,22 @@ class GrafanaK8s(CharmBase):
             apiVersion: 1
 
             datasources:""")
-        for rel_id, sources_list in self.datastore.sources.items():
-            for source_info in sources_list:
-                # TODO: handle more optional fields and verify that current
-                #       defaults are what we want (e.g. "access")
-                config_text += textwrap.dedent("""
-                    - name: {0}
-                      type: {1}
-                      access: proxy
-                      url: http://{2}:{3}
-                      isDefault: {4}
-                      editable: false""").format(
-                    source_info['source-name'],
-                    source_info['source-type'],
-                    source_info['host'],
-                    source_info['port'],
-                    source_info['isDefault']
-                )
+        for rel_id, source_info in self.datastore.sources.items():
+            # TODO: handle more optional fields and verify that current
+            #       defaults are what we want (e.g. "access")
+            config_text += textwrap.dedent("""
+                - name: {0}
+                  type: {1}
+                  access: proxy
+                  url: http://{2}:{3}
+                  isDefault: {4}
+                  editable: false""").format(
+                source_info['source-name'],
+                source_info['source-type'],
+                source_info['host'],
+                source_info['port'],
+                source_info['isDefault']
+            )
         return config_text
 
     def _update_pod_data_source_config_file(self, pod_spec):
