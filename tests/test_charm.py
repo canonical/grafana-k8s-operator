@@ -177,7 +177,7 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # add relation and update relation data
         rel_id = harness.add_relation('database', 'mysql')
-        rel = harness.charm.model.get_relation('database')
+        rel = harness.model.get_relation('database')
         harness.add_relation_unit(rel_id, 'mysql/0')
         test_relation_data = {
              'type': 'mysql',
@@ -416,3 +416,54 @@ class GrafanaCharmTest(unittest.TestCase):
 
         actual_config_text = harness.charm._make_config_ini_text()
         self.assertEqual(expected_config_text, actual_config_text)
+
+    def test__duplicate_source_names(self):
+        harness = Harness(GrafanaK8s)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        harness.set_leader(True)
+        harness.update_config(BASE_CONFIG)
+        self.assertEqual(harness.charm.datastore.sources, {})
+
+        # add first relation
+        p_rel_id = harness.add_relation('grafana-source', 'prometheus')
+        p_rel = harness.model.get_relation('grafana-source', p_rel_id)
+        harness.add_relation_unit(p_rel_id, 'prometheus/0')
+
+        # add test data to grafana-source relation
+        prom_source_data0 = {
+            'host': '192.0.2.1',
+            'port': 4321,
+            'source-type': 'prometheus',
+            'source-name': 'duplicate-source-name'
+        }
+        harness.update_relation_data(p_rel_id, 'prometheus/0', prom_source_data0)
+        expected_source_data = {
+            'host': '192.0.2.1',
+            'port': 4321,
+            'source-name': 'duplicate-source-name',
+            'source-type': 'prometheus',
+            'isDefault': 'true',
+            'unit_name': 'prometheus/0'
+        }
+        self.assertEqual(dict(harness.charm.datastore.sources[p_rel_id]),
+                         expected_source_data)
+
+        # add second source with the same name as the first source
+        g_rel_id = harness.add_relation('grafana-source', 'graphite')
+        harness.add_relation_unit(g_rel_id, 'graphite/0')
+
+        graphite_source_data0 = {
+            'host': '192.12.23.34',
+            'port': 4321,
+            'source-type': 'graphite',
+            'source-name': 'duplicate-source-name'
+        }
+        harness.update_relation_data(g_rel_id, 'graphite/0', graphite_source_data0)
+        self.assertEqual(None, harness.charm.datastore.sources.get(g_rel_id))
+        self.assertEqual(1, len(harness.charm.datastore.sources))
+
+        # now remove the relation and ensure datastore source-name is removed
+        harness.charm.on.grafana_source_relation_departed.emit(p_rel)
+        self.assertEqual(None, harness.charm.datastore.sources.get(p_rel_id))
+        self.assertEqual(0, len(harness.charm.datastore.sources))

@@ -1,13 +1,10 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# TODO: CONFIRM: 'update-status' hook only sets a maintenance mode and
-#       _set_pod_spec() is the only thing that will set the application
-#       or unit into an active state
 # TODO: to ensure HA works properly, add datasource version increments
 #       https://grafana.com/docs/grafana/latest/administration/provisioning/#running-multiple-grafana-instances
 # TODO: create actions that will help users. e.g. "upload-dashboard"
-# TODO: handle the removal of datasources in coniguration and "on_source_changed"
+# TODO: handle the removal of datasources in configuration and "on_source_changed"
 
 import logging
 import textwrap
@@ -119,6 +116,7 @@ class GrafanaK8s(CharmBase):
         # -- initialize states --
         self.datastore.set_default(sources=dict())  # available data sources
         self.datastore.set_default(database=dict())  # db configuration
+        self.datastore.set_default(source_names=set())  # unique source names
 
     @property
     def has_peer(self) -> bool:
@@ -184,6 +182,16 @@ class GrafanaK8s(CharmBase):
             datasource_fields['source-name'] = event.unit.name
             log.warning("No human readable name provided for 'grafana-source'"
                         "relation. Defaulting to unit name.")
+
+        # check if this name already exists in the current datasources
+        # TODO: do we want to handle this or just throw an error?
+        #       we don't want to just block this unit, but I wonder if
+        #       an error will be handled properly
+        if datasource_fields['source-name'] in self.datastore.source_names:
+            log.error('name already taken by existing grafana-source')
+            return
+        else:
+            self.datastore.source_names.add(datasource_fields['source-name'])
 
         # set the first grafana-source as the default (needed for pod config)
         # if `self.datastore.sources` is currently emtpy, this is the first
@@ -292,11 +300,14 @@ class GrafanaK8s(CharmBase):
         # TODO: based on provisioning docs, we will want to add
         #       'deleteDatasource' to Grafana configuration file
 
+        # free name from
         log.info('Removing all data for relation: {}'.format(rel_id))
         removed_source = self.datastore.sources.pop(rel_id, None)
         if removed_source is None:
             log.warning('Could not remove source for relation: {}'.format(
                 rel_id))
+        else:
+            self.datastore.source_names.remove(removed_source['source-name'])
 
     def _check_high_availability(self):
         """Checks whether the configuration allows for HA."""
