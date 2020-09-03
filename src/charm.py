@@ -4,7 +4,6 @@
 # TODO: CONFIRM: 'update-status' hook only sets a maintenance mode and
 #       _set_pod_spec() is the only thing that will set the application
 #       or unit into an active state
-# TODO: remove all app status setting and instead set unit statuses
 # TODO: to ensure HA works properly, add datasource version increments
 #       https://grafana.com/docs/grafana/latest/administration/provisioning/#running-multiple-grafana-instances
 # TODO: create actions that will help users. e.g. "upload-dashboard"
@@ -295,7 +294,7 @@ class GrafanaK8s(CharmBase):
         self.configure_pod()
 
     def _remove_source_from_datastore(self, rel_id, unit_name=None):
-        # TODO: based on provisioning docs, we may want to add
+        # TODO: based on provisioning docs, we will want to add
         #       'deleteDatasource' to Grafana configuration file
 
         # if there is no unit supplied,
@@ -399,7 +398,7 @@ class GrafanaK8s(CharmBase):
     def _update_pod_data_source_config_file(self, pod_spec):
         """Adds datasources to pod configuration."""
         file_text = self._make_data_source_config_text()
-        data_source_file_contents = {
+        data_source_file_meta = {
             'name': 'grafana-data-sources',
             'mountPath': self.model.config['datasource_mount_path'],
             'files': {
@@ -407,7 +406,7 @@ class GrafanaK8s(CharmBase):
             }
         }
         container = get_container(pod_spec, self.app.name)
-        container['files'].append(data_source_file_contents)
+        container['files'].append(data_source_file_meta)
 
     def _make_config_ini_text(self):
         """Create the text of the config.ini file.
@@ -446,7 +445,16 @@ class GrafanaK8s(CharmBase):
         return config_text
 
     def _update_pod_config_ini_file(self, pod_spec):
+        file_text = self._make_config_ini_text()
+        config_ini_file_meta = {
+            'name': 'grafana-config-ini',
+            'mountPath': self.model.config['config_ini_mount_path'],
+            'files': {
+                'config.ini': file_text
+            }
+        }
         container = get_container(pod_spec, self.app.name)
+        container['files'].append(config_ini_file_meta)
 
     def _build_pod_spec(self):
         """Builds the pod spec based on available info in datastore`."""
@@ -509,6 +517,7 @@ class GrafanaK8s(CharmBase):
         self.unit.status = MaintenanceStatus('Building pod spec.')
         pod_spec = self._build_pod_spec()
         self._update_pod_data_source_config_file(pod_spec)
+        self._update_pod_config_ini_file(pod_spec)
 
         # set the pod spec with Juju
         self.model.pod.set_spec(pod_spec)

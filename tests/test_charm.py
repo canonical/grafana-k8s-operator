@@ -31,6 +31,7 @@ BASE_CONFIG = {
     'grafana_image_username': '',
     'grafana_image_password': '',
     'datasource_mount_path': '/etc/grafana/provisioning/datasources',
+    'config_ini_mount_path': '/etc/grafana'
 }
 
 MISSING_IMAGE_PASSWORD_CONFIG = {
@@ -396,7 +397,7 @@ class GrafanaCharmTest(unittest.TestCase):
         expected = ['grafana_image_path']
         self.assertEqual(missing, expected)
 
-    def test__container_datasources_files(self):
+    def test__pod_spec_container_datasources(self):
         harness = Harness(GrafanaK8s)
         self.addCleanup(harness.cleanup)
         harness.begin()
@@ -416,7 +417,7 @@ class GrafanaCharmTest(unittest.TestCase):
             'source-type': 'prometheus'
         }
         harness.update_relation_data(rel_id, 'prometheus/0', prom_source_data)
-        file_text = textwrap.dedent("""
+        data_source_file_text = textwrap.dedent("""
             apiVersion: 1
 
             datasources:
@@ -427,14 +428,26 @@ class GrafanaCharmTest(unittest.TestCase):
               isDefault: true
               editable: false""")
 
+        config_ini_file_text = textwrap.dedent("""
+        [paths]
+        data = /var/lib/grafana
+        """)
+
         expected_container_files_spec = [
             {
                 'name': 'grafana-data-sources',
                 'mountPath': harness.model.config['datasource_mount_path'],
                 'files': {
-                    'datasources.yaml': file_text,
+                    'datasources.yaml': data_source_file_text,
                 },
             },
+            {
+                'name': 'grafana-config-ini',
+                'mountPath': harness.model.config['config_ini_mount_path'],
+                'files': {
+                    'config.ini': config_ini_file_text
+                }
+            }
         ]
         pod_spec = harness.get_pod_spec()[0]
         container = get_container(pod_spec, 'grafana')
