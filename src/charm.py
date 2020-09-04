@@ -115,8 +115,9 @@ class GrafanaK8s(CharmBase):
 
         # -- initialize states --
         self.datastore.set_default(sources=dict())  # available data sources
-        self.datastore.set_default(database=dict())  # db configuration
         self.datastore.set_default(source_names=set())  # unique source names
+        self.datastore.set_default(sources_to_delete=set())
+        self.datastore.set_default(database=dict())  # db configuration
 
     @property
     def has_peer(self) -> bool:
@@ -300,14 +301,16 @@ class GrafanaK8s(CharmBase):
         # TODO: based on provisioning docs, we will want to add
         #       'deleteDatasource' to Grafana configuration file
 
-        # free name from
         log.info('Removing all data for relation: {}'.format(rel_id))
         removed_source = self.datastore.sources.pop(rel_id, None)
         if removed_source is None:
             log.warning('Could not remove source for relation: {}'.format(
                 rel_id))
         else:
+            # free name from charm's set of source names
+            # and save to set which will be used in set_pod_spec
             self.datastore.source_names.remove(removed_source['source-name'])
+            self.datastore.sources_to_delete.add(removed_source['source-name'])
 
     def _check_high_availability(self):
         """Checks whether the configuration allows for HA."""
@@ -357,13 +360,32 @@ class GrafanaK8s(CharmBase):
 
         return missing
 
-    def _make_data_source_config_text(self):
-        """Build docs based on "Data Sources section of provisioning docs."""
-        # common starting config text
-        config_text = textwrap.dedent("""
-            apiVersion: 1
+    def _make_delete_datasources_config_text(self) -> str:
+        """Generate text of data sources to delete."""
+        if not self.datastore.sources_to_delete:
+            return "\n"
 
-            datasources:""")
+        delete_datasources_text = textwrap.dedent("""
+        deleteDatasources:""")
+        for name in self.datastore.sources_to_delete:
+            delete_datasources_text += textwrap.dedent("""
+            - name: {}
+              orgId: 1""".format(name))
+
+        # clear datastore.sources_to_delete and return text result
+        self.datastore.sources_to_delete.clear()
+        return delete_datasources_text + '\n\n'
+
+    def _make_data_source_config_text(self) -> str:
+        """Build config based on Data Sources section of provisioning docs."""
+        # get starting text for the config file and sources to delete
+        delete_text = self._make_delete_datasources_config_text()
+        config_text = textwrap.dedent("""
+        apiVersion: 1
+        """)
+        config_text += delete_text
+        if self.datastore.sources:
+            config_text += "datasources:"
         for rel_id, source_info in self.datastore.sources.items():
             # TODO: handle more optional fields and verify that current
             #       defaults are what we want (e.g. "access")

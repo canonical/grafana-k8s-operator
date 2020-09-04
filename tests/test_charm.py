@@ -274,7 +274,31 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # test removal of second source results in config_text
         # that is the same as the original
-        harness.charm.on.grafana_source_relation_departed.emit(rel)
+        # harness.charm.on.grafana_source_relation_departed.emit(rel)
+        harness.update_relation_data(rel_id1,
+                                     'jaeger/0',
+                                     {
+                                         'host': None,
+                                         'port': None,
+                                     })
+        generated_text = harness.charm._make_data_source_config_text()
+        correct_text_after_removal = textwrap.dedent("""
+            apiVersion: 1
+    
+            deleteDatasources:
+            - name: jaeger-application
+              orgId: 1
+            
+            datasources:
+            - name: prometheus/0
+              type: prometheus
+              access: proxy
+              url: http://192.0.2.1:4321
+              isDefault: true
+              editable: false""")
+        self.assertEqual(correct_text_after_removal, generated_text)
+
+        # now test that the 'deleteDatasources' is gone
         generated_text = harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text0, generated_text)
 
