@@ -395,7 +395,7 @@ class GrafanaK8s(CharmBase):
                   editable: false""").format(
                 source_info['source-name'],
                 source_info['source-type'],
-                source_info['host'],
+                source_info['private-address'],
                 source_info['port'],
                 source_info['isDefault']
             )
