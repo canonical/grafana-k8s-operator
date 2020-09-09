@@ -35,3 +35,9 @@ storage:
     sqlitedb:
         type: filesystem
         location: /var/lib/grafana
+#    datasources:
+#        type: filesystem
+#        location: /etc/grafana/provisioning/datasources
+#    config:
+#        type: filesystem
+#        location: /etc/grafana

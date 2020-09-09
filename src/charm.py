@@ -4,7 +4,6 @@
 # TODO: to ensure HA works properly, add datasource version increments
 #       https://grafana.com/docs/grafana/latest/administration/provisioning/#running-multiple-grafana-instances
 # TODO: create actions that will help users. e.g. "upload-dashboard"
-# TODO: handle the removal of datasources in configuration and "on_source_changed"
 
 import logging
 import textwrap
@@ -336,8 +335,6 @@ class GrafanaK8s(CharmBase):
 
         # set status for *at least* the unit and possibly the app
         self.unit.status = status
-        if self.unit.is_leader():
-            self.app.status = status
 
         return status
 
@@ -402,14 +399,22 @@ class GrafanaK8s(CharmBase):
                 source_info['port'],
                 source_info['isDefault']
             )
-        return config_text
+
+        # check if there these are empty
+        if delete_text.isspace() and self.datastore.sources:
+            return None
+        else:
+            return config_text
 
     def _update_pod_data_source_config_file(self, pod_spec):
         """Adds datasources to pod configuration."""
         file_text = self._make_data_source_config_text()
+        if file_text is None:
+            log.debug('No datasources to add or delete. No datasources.yaml.')
+            return
         data_source_file_meta = {
-            'name': 'grafana-data-sources',
-            'mountPath': self.model.config['datasource_mount_path'],
+            'name': 'grafana-datasources',
+            'mountPath': '/etc/grafana/provisioning/datasources',
             'files': {
                 'datasources.yaml': file_text
             }
@@ -426,12 +431,14 @@ class GrafanaK8s(CharmBase):
 
         # set default data storage path so make sure sqlite3 db is always
         # available in single node mode
-        config_text = textwrap.dedent("""
+        header = textwrap.dedent("""
         [paths]
         data = {0}
         """.format(
             self.meta.storages['sqlitedb'].location,
         ))
+
+        config_text = header
 
         # if there is a database available, add that information
         if self.datastore.database:
@@ -450,14 +457,16 @@ class GrafanaK8s(CharmBase):
                 db_config['user'],
                 db_config['password'],
             ))
-
-        return config_text
+        if config_text == header:
+            return None
+        else:
+            return config_text
 
     def _update_pod_config_ini_file(self, pod_spec):
         file_text = self._make_config_ini_text()
         config_ini_file_meta = {
             'name': 'grafana-config-ini',
-            'mountPath': self.model.config['config_ini_mount_path'],
+            'mountPath': '/etc/grafana',
             'files': {
                 'config.ini': file_text
             }
@@ -481,7 +490,7 @@ class GrafanaK8s(CharmBase):
             image_details['password'] = config['grafana_image_password']
 
         spec = {
-            'version': 3,
+            # 'version': 3,
             'containers': [{
                 'name': self.app.name,
                 'imageDetails': image_details,
@@ -499,6 +508,14 @@ class GrafanaK8s(CharmBase):
                     'timeoutSeconds': 30
                 },
                 'files': [],
+                # 'kubernetes': {
+                #     'readinessProbe': {
+                #         'httpGet': {
+                #             'path': '/api/v4/system/ping',
+                #             'port': config['advertised_port']
+                #         }
+                #     },
+                # },
             }]
         }
 
@@ -526,11 +543,10 @@ class GrafanaK8s(CharmBase):
         self.unit.status = MaintenanceStatus('Building pod spec.')
         pod_spec = self._build_pod_spec()
         self._update_pod_data_source_config_file(pod_spec)
-        self._update_pod_config_ini_file(pod_spec)
+        # self._update_pod_config_ini_file(pod_spec)  # TODO: uncomment for HA
 
         # set the pod spec with Juju
         self.model.pod.set_spec(pod_spec)
-        self.app.status = APPLICATION_ACTIVE_STATUS
         self.unit.status = APPLICATION_ACTIVE_STATUS
 
 

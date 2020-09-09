@@ -139,7 +139,6 @@ class GrafanaCharmTest(unittest.TestCase):
         self.assertTrue(harness.charm.has_peer)
         self.assertFalse(harness.charm.has_db)
         self.assertEqual(harness.charm.unit.status, HA_NOT_READY_STATUS)
-        self.assertEqual(harness.charm.app.status, HA_NOT_READY_STATUS)
 
         # ensure update-status hook doesn't overwrite this
         harness.charm.on.update_status.emit()
@@ -160,7 +159,6 @@ class GrafanaCharmTest(unittest.TestCase):
                                          'password': 'super!secret!password',
                                      })
         self.assertTrue(harness.charm.has_db)
-        self.assertEqual(harness.charm.app.status, APPLICATION_ACTIVE_STATUS)
         self.assertEqual(harness.charm.unit.status, APPLICATION_ACTIVE_STATUS)
 
         # ensure _check_high_availability() ends up with the correct status
