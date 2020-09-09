@@ -24,7 +24,7 @@ log = logging.getLogger()
 # TODO: had these defined as sets for faster lookup than lists,
 #       but if I'm iterating over them more often, maybe they should be lists
 REQUIRED_DATASOURCE_FIELDS = {
-    'host',  # the hostname/IP of the data source server
+    'private-address',  # the hostname/IP of the data source server
     'port',  # the port of the data source server
     'source-type',  # the data source type (e.g. prometheus)
 }
