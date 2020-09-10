@@ -392,26 +392,25 @@ class GrafanaK8s(CharmBase):
                   access: proxy
                   url: http://{2}:{3}
                   isDefault: {4}
-                  editable: false""").format(
+                  editable: true
+                  basicAuthUser: {5}
+                  secureJsonData:
+                    basicAuthPassword: {6}""").format(
                 source_info['source-name'],
                 source_info['source-type'],
                 source_info['private-address'],
                 source_info['port'],
-                source_info['isDefault']
+                source_info['isDefault'],
+                self.model.config['basic_auth_username'],
+                self.model.config['basic_auth_password'],
             )
 
         # check if there these are empty
-        if delete_text.isspace() and self.datastore.sources:
-            return None
-        else:
-            return config_text
+        return config_text + '\n'
 
     def _update_pod_data_source_config_file(self, pod_spec):
         """Adds datasources to pod configuration."""
         file_text = self._make_data_source_config_text()
-        if file_text is None:
-            log.debug('No datasources to add or delete. No datasources.yaml.')
-            return
         data_source_file_meta = {
             'name': 'grafana-datasources',
             'mountPath': '/etc/grafana/provisioning/datasources',
@@ -431,14 +430,20 @@ class GrafanaK8s(CharmBase):
 
         # set default data storage path so make sure sqlite3 db is always
         # available in single node mode
-        header = textwrap.dedent("""
-        [paths]
-        data = {0}
+        config_text = textwrap.dedent("""        
+        [security]
+        admin_user = {0}
+        admin_password = {1}
+        
+        [log]
+        mode = {2}
+        level = {3}
         """.format(
-            self.meta.storages['sqlitedb'].location,
+            self.model.config['basic_auth_username'],
+            self.model.config['basic_auth_password'],
+            self.model.config['grafana_log_mode'],
+            self.model.config['grafana_log_level'],
         ))
-
-        config_text = header
 
         # if there is a database available, add that information
         if self.datastore.database:
@@ -457,10 +462,7 @@ class GrafanaK8s(CharmBase):
                 db_config['user'],
                 db_config['password'],
             ))
-        if config_text == header:
-            return None
-        else:
-            return config_text
+        return config_text
 
     def _update_pod_config_ini_file(self, pod_spec):
         file_text = self._make_config_ini_text()
@@ -468,7 +470,7 @@ class GrafanaK8s(CharmBase):
             'name': 'grafana-config-ini',
             'mountPath': '/etc/grafana',
             'files': {
-                'config.ini': file_text
+                'grafana.ini': file_text
             }
         }
         container = get_container(pod_spec, self.app.name)
@@ -543,7 +545,7 @@ class GrafanaK8s(CharmBase):
         self.unit.status = MaintenanceStatus('Building pod spec.')
         pod_spec = self._build_pod_spec()
         self._update_pod_data_source_config_file(pod_spec)
-        # self._update_pod_config_ini_file(pod_spec)  # TODO: uncomment for HA
+        self._update_pod_config_ini_file(pod_spec)
 
         # set the pod spec with Juju
         self.model.pod.set_spec(pod_spec)

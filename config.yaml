@@ -33,3 +33,23 @@ options:
         description: |
             The Grafana-defined location of the config.ini file.
         default: /etc/grafana
+    basic_auth_username:
+        type: string
+        description: Basic authorization username for Grafana
+        default: admin
+    basic_auth_password:
+        type: string
+        description: Basic authorization password for Grafana
+        default: admin
+    grafana_log_mode:
+        type: string
+        description: |
+            The mode of Grafana logs. Possible values are
+            'console', 'file', and 'syslog'.
+        default: file
+    grafana_log_level:
+        type: string
+        description: |
+            Logging level for Grafana. Options are “debug”, “info”,
+            “warn”, “error”, and “critical”.
+        default: info
