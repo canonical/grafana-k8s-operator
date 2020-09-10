@@ -33,6 +33,7 @@ BASE_CONFIG = {
     'basic_auth_password': 'admin',
     'grafana_log_mode': 'file',
     'grafana_log_level': 'info',
+    'provisioning_path': '/etc/grafana/provisioning',
 }
 
 MISSING_IMAGE_PASSWORD_CONFIG = {
@@ -237,6 +238,7 @@ class GrafanaCharmTest(unittest.TestCase):
               url: http://192.0.2.1:4321
               isDefault: true
               editable: true
+              orgId: 1
               basicAuthUser: {0}
               secureJsonData:
                 basicAuthPassword: {1}""").format(
@@ -265,6 +267,7 @@ class GrafanaCharmTest(unittest.TestCase):
               url: http://255.255.255.0:7890
               isDefault: false
               editable: true
+              orgId: 1
               basicAuthUser: {0}
               secureJsonData:
                 basicAuthPassword: {1}""").format(
@@ -298,6 +301,7 @@ class GrafanaCharmTest(unittest.TestCase):
               url: http://192.0.2.1:4321
               isDefault: true
               editable: true
+              orgId: 1
               basicAuthUser: {0}
               secureJsonData:
                 basicAuthPassword: {1}""").format(
@@ -354,6 +358,7 @@ class GrafanaCharmTest(unittest.TestCase):
               url: http://192.0.2.1:4321
               isDefault: true
               editable: true
+              orgId: 1
               basicAuthUser: {0}
               secureJsonData:
                 basicAuthPassword: {1}
@@ -362,14 +367,18 @@ class GrafanaCharmTest(unittest.TestCase):
                 self.harness.model.config['basic_auth_username'])
 
         config_ini_file_text = textwrap.dedent("""
+        [paths]
+        provisioning = {0}
+        
         [security]
-        admin_user = {0}
-        admin_password = {1}
+        admin_user = {1}
+        admin_password = {2}
         
         [log]
-        mode = {2}
-        level = {3}
+        mode = {3}
+        level = {4}
         """).format(
+            self.harness.model.config['provisioning_path'],
             self.harness.model.config['basic_auth_username'],
             self.harness.model.config['basic_auth_password'],
             self.harness.model.config['grafana_log_mode'],
@@ -406,14 +415,18 @@ class GrafanaCharmTest(unittest.TestCase):
     def test__config_ini_without_database(self):
         self.harness.update_config(BASE_CONFIG)
         expected_config_text = textwrap.dedent("""
+        [paths]
+        provisioning = {0}
+        
         [security]
-        admin_user = {0}
-        admin_password = {1}
+        admin_user = {1}
+        admin_password = {2}
         
         [log]
-        mode = {2}
-        level = {3}
+        mode = {3}
+        level = {4}
         """).format(
+            self.harness.model.config['provisioning_path'],
             self.harness.model.config['basic_auth_username'],
             self.harness.model.config['basic_auth_password'],
             self.harness.model.config['grafana_log_mode'],
@@ -444,13 +457,16 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # test the results of _make_config_ini_text()
         expected_config_text = textwrap.dedent("""
+        [paths]
+        provisioning = {0}
+        
         [security]
-        admin_user = {0}
-        admin_password = {1}
+        admin_user = {1}
+        admin_password = {2}
         
         [log]
-        mode = {2}
-        level = {3}
+        mode = {3}
+        level = {4}
         
         [database]
         type = mysql
@@ -459,6 +475,7 @@ class GrafanaCharmTest(unittest.TestCase):
         user = test-user
         password = super!secret!password
         url = mysql://test-user:super!secret!password@0.1.2.3:3306/my-test-db""").format(
+            self.harness.model.config['provisioning_path'],
             self.harness.model.config['basic_auth_username'],
             self.harness.model.config['basic_auth_password'],
             self.harness.model.config['grafana_log_mode'],

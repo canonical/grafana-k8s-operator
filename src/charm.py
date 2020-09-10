@@ -180,7 +180,7 @@ class GrafanaK8s(CharmBase):
         # specifically handle optional fields if necessary
         if datasource_fields['source-name'] is None:
             datasource_fields['source-name'] = event.unit.name
-            log.warning("No human readable name provided for 'grafana-source'"
+            log.warning("No human readable name provided for 'grafana-source' "
                         "relation. Defaulting to unit name.")
 
         # check if this name already exists in the current datasources
@@ -393,6 +393,7 @@ class GrafanaK8s(CharmBase):
                   url: http://{2}:{3}
                   isDefault: {4}
                   editable: true
+                  orgId: 1
                   basicAuthUser: {5}
                   secureJsonData:
                     basicAuthPassword: {6}""").format(
@@ -430,15 +431,19 @@ class GrafanaK8s(CharmBase):
 
         # set default data storage path so make sure sqlite3 db is always
         # available in single node mode
-        config_text = textwrap.dedent("""        
+        config_text = textwrap.dedent("""
+        [paths]
+        provisioning = {0}
+        
         [security]
-        admin_user = {0}
-        admin_password = {1}
+        admin_user = {1}
+        admin_password = {2}
         
         [log]
-        mode = {2}
-        level = {3}
+        mode = {3}
+        level = {4}
         """.format(
+            self.model.config['provisioning_path'],
             self.model.config['basic_auth_username'],
             self.model.config['basic_auth_password'],
             self.model.config['grafana_log_mode'],
@@ -510,6 +515,7 @@ class GrafanaK8s(CharmBase):
                     'timeoutSeconds': 30
                 },
                 'files': [],
+                # TODO: this is required in pod spec V3
                 # 'kubernetes': {
                 #     'readinessProbe': {
                 #         'httpGet': {

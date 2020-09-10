@@ -22,6 +22,11 @@ options:
             The password associated with grafana_image_username for
             accessing the registry specified in grafana_image_path.
         default: ''
+    provisioning_path:
+        type: string
+        description: |
+            The location of all the provisioning files used by Grafana.
+        default: /etc/grafana/provisioning
     datasource_mount_path:
         type: string
         description: |
