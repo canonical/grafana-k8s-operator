@@ -105,8 +105,6 @@ class GrafanaCharmTest(unittest.TestCase):
         """If there is a peer connection and no database (needed for HA),
         the charm should put the application in a blocked state."""
 
-        # TODO: this is becoming quite a long test -- possibly break it up
-
         # start charm with one peer and no database relation
         self.harness.set_leader(True)
         self.harness.update_config(BASE_CONFIG)

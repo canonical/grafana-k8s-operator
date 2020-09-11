@@ -117,6 +117,7 @@ class GrafanaK8s(CharmBase):
         self.datastore.set_default(source_names=set())  # unique source names
         self.datastore.set_default(sources_to_delete=set())
         self.datastore.set_default(database=dict())  # db configuration
+        self.datastore.set_default(pod_change_var=0)
 
     @property
     def has_peer(self) -> bool:
@@ -134,7 +135,7 @@ class GrafanaK8s(CharmBase):
     def on_update_status(self, event):
         """Various health checks of the charm."""
         self._check_high_availability()
-        # TODO: add more health checks in the future
+        # TODO: add pod status check here
 
     def on_start(self, event):
         # TODO:
@@ -213,11 +214,13 @@ class GrafanaK8s(CharmBase):
             if value is not None
         }
         self.datastore.sources.update({event.relation.id: new_source_data})
+        self.datastore.pod_change_var += 1  # to trigger pod restart
         self.configure_pod()
 
     def on_grafana_source_departed(self, event):
         """When a grafana-source is removed, delete from the datastore."""
         if self.unit.is_leader():
+            self.datastore.pod_change_var += 1  # to trigger pod restart
             self._remove_source_from_datastore(event.relation.id)
         self.configure_pod()
 
@@ -275,6 +278,7 @@ class GrafanaK8s(CharmBase):
         })
 
         # set pod spec with new database config data
+        self.datastore.pod_change_var += 1
         self.configure_pod()
 
     def on_database_departed(self, event):
@@ -294,12 +298,10 @@ class GrafanaK8s(CharmBase):
         self.datastore.database = dict()
 
         # set pod spec because datastore config has changed
+        self.datastore.pod_change_var += 1
         self.configure_pod()
 
     def _remove_source_from_datastore(self, rel_id):
-        # TODO: based on provisioning docs, we will want to add
-        #       'deleteDatasource' to Grafana configuration file
-
         log.info('Removing all data for relation: {}'.format(rel_id))
         removed_source = self.datastore.sources.pop(rel_id, None)
         if removed_source is None:
@@ -350,7 +352,7 @@ class GrafanaK8s(CharmBase):
                 and not config['grafana_image_password']:
             missing.append('grafana_image_password')
 
-        # TODO: does it make sense to set state directly in this function?
+        # TODO: does it make sense to set state directly in this method?
         if missing:
             self.unit.status = \
                 BlockedStatus('Missing configuration: {}'.format(missing))
@@ -512,7 +514,14 @@ class GrafanaK8s(CharmBase):
                     },
                     # TODO: should these be in the config?
                     'initialDelaySeconds': 10,
-                    'timeoutSeconds': 30
+                    # TODO: this is a super hacky fix to make sure
+                    #       a restart is triggered by changing this value
+                    #       by adding either 0 or 1. Since datasource and
+                    #       database changes only change ConfigMaps, which
+                    #       don't trigger a pod restart, we need to change
+                    #       kubernetes-specific info to trigger a restart
+                    # as is, this value will be either 30 or 31 seconds
+                    'timeoutSeconds': 30 + (int(self.datastore.pod_change_var) % 2)
                 },
                 'files': [],
                 # TODO: this is required in pod spec V3
