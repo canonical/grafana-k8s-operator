@@ -6,8 +6,8 @@
 # TODO: create actions that will help users. e.g. "upload-dashboard"
 
 import logging
+import hashlib
 import textwrap
-import pprint
 
 # from oci_image import OCIImageResource, OCIImageResourceError
 from ops.charm import CharmBase
@@ -117,7 +117,6 @@ class GrafanaK8s(CharmBase):
         self.datastore.set_default(source_names=set())  # unique source names
         self.datastore.set_default(sources_to_delete=set())
         self.datastore.set_default(database=dict())  # db configuration
-        self.datastore.set_default(pod_change_var=0)
 
     @property
     def has_peer(self) -> bool:
@@ -214,13 +213,11 @@ class GrafanaK8s(CharmBase):
             if value is not None
         }
         self.datastore.sources.update({event.relation.id: new_source_data})
-        self.datastore.pod_change_var += 1  # to trigger pod restart
         self.configure_pod()
 
     def on_grafana_source_departed(self, event):
         """When a grafana-source is removed, delete from the datastore."""
         if self.unit.is_leader():
-            self.datastore.pod_change_var += 1  # to trigger pod restart
             self._remove_source_from_datastore(event.relation.id)
         self.configure_pod()
 
@@ -278,7 +275,6 @@ class GrafanaK8s(CharmBase):
         })
 
         # set pod spec with new database config data
-        self.datastore.pod_change_var += 1
         self.configure_pod()
 
     def on_database_departed(self, event):
@@ -298,7 +294,6 @@ class GrafanaK8s(CharmBase):
         self.datastore.database = dict()
 
         # set pod spec because datastore config has changed
-        self.datastore.pod_change_var += 1
         self.configure_pod()
 
     def _remove_source_from_datastore(self, rel_id):
@@ -424,6 +419,15 @@ class GrafanaK8s(CharmBase):
         container = get_container(pod_spec, self.app.name)
         container['files'].append(data_source_file_meta)
 
+        # get hash string of the new file text and put into container config
+        # if this changes, it will trigger a pod restart
+        file_text_hash = hashlib.md5(file_text.encode()).hexdigest()
+        if 'DATASOURCES_YAML' in container['config'] \
+                and container['config']['DATASOURCES_YAML'] != file_text_hash:
+            log.info('datasources.yaml hash has changed. '
+                     'Triggering pod restart.')
+        container['config']['DATASOURCES_YAML'] = file_text_hash
+
     def _make_config_ini_text(self):
         """Create the text of the config.ini file.
 
@@ -483,6 +487,14 @@ class GrafanaK8s(CharmBase):
         container = get_container(pod_spec, self.app.name)
         container['files'].append(config_ini_file_meta)
 
+        # get hash string of the new file text and put into container config
+        # if this changes, it will trigger a pod restart
+        file_text_hash = hashlib.md5(file_text.encode()).hexdigest()
+        if 'GRAFANA_INI' in container['config'] \
+                and container['config']['GRAFANA_INI'] != file_text_hash:
+            log.info('grafana.ini hash has changed. Triggering pod restart.')
+        container['config']['GRAFANA_INI'] = file_text_hash
+
     def _build_pod_spec(self):
         """Builds the pod spec based on available info in datastore`."""
 
@@ -514,25 +526,10 @@ class GrafanaK8s(CharmBase):
                     },
                     # TODO: should these be in the config?
                     'initialDelaySeconds': 10,
-                    # TODO: this is a super hacky fix to make sure
-                    #       a restart is triggered by changing this value
-                    #       by adding either 0 or 1. Since datasource and
-                    #       database changes only change ConfigMaps, which
-                    #       don't trigger a pod restart, we need to change
-                    #       kubernetes-specific info to trigger a restart
-                    # as is, this value will be either 30 or 31 seconds
-                    'timeoutSeconds': 30 + (int(self.datastore.pod_change_var) % 2)
+                    'timeoutSeconds': 30
                 },
                 'files': [],
-                # TODO: this is required in pod spec V3
-                # 'kubernetes': {
-                #     'readinessProbe': {
-                #         'httpGet': {
-                #             'path': '/api/v4/system/ping',
-                #             'port': config['advertised_port']
-                #         }
-                #     },
-                # },
+                'config': {},  # used to store hashes of config file text
             }]
         }
 

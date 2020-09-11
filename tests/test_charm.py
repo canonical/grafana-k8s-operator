@@ -1,3 +1,4 @@
+import hashlib
 import importlib
 import pathlib
 import shutil
@@ -530,3 +531,33 @@ class GrafanaCharmTest(unittest.TestCase):
         self.harness.charm.on.grafana_source_relation_departed.emit(p_rel)
         self.assertEqual(None, self.harness.charm.datastore.sources.get(p_rel_id))
         self.assertEqual(0, len(self.harness.charm.datastore.sources))
+
+    def test__idempotent_datasource_file_hash(self):
+        self.harness.set_leader(True)
+        self.harness.update_config(BASE_CONFIG)
+
+        rel_id = self.harness.add_relation('grafana-source', 'prometheus')
+        self.harness.add_relation_unit(rel_id, 'prometheus/0')
+        self.assertIsInstance(rel_id, int)
+        rel = self.harness.charm.model.get_relation('grafana-source')
+
+        # test that the unit data propagates the correct way
+        # which is through the triggering of on_relation_changed
+        self.harness.update_relation_data(rel_id,
+                                          'prometheus/0',
+                                          {
+                                              'private-address': '192.0.2.1',
+                                              'port': 1234,
+                                              'source-type': 'prometheus',
+                                              'source-name': 'prometheus-app',
+                                          })
+
+        # get a hash of the created file and check that it matches the pod spec
+        container = get_container(self.harness.get_pod_spec()[0], 'grafana')
+        hash_text = hashlib.md5(
+            container['files'][0]['files']['datasources.yaml'].encode()).hexdigest()
+        self.assertEqual(container['config']['DATASOURCES_YAML'], hash_text)
+
+        # test the idempotence of the call by re-configuring the pod spec
+        self.harness.charm.configure_pod()
+        self.assertEqual(container['config']['DATASOURCES_YAML'], hash_text)
