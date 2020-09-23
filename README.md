@@ -24,7 +24,7 @@ juju deploy ./grafana.charm
 
 View the dashboard in a browser:
 1. `juju status` to check the IP of the of the running Grafana application
-2. Navigate to `http://IP_ADDRESS:3000
+2. Navigate to `http://IP_ADDRESS:3000`
 3. Log in with the default credentials username=admin, password=admin.
 
 Add Prometheus as a datasource:
