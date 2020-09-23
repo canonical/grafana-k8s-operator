@@ -240,7 +240,7 @@ class GrafanaK8s(CharmBase):
     def on_database_changed(self, event):
         """Sets configuration information for database connection."""
         if not self.unit.is_leader():
-            log.debug('{} is not leader. '.format(self.unit.name) +
+            log.debug('unit is not leader. '
                       'Skipping on_database_changed() handler')
             return
 
@@ -286,7 +286,7 @@ class GrafanaK8s(CharmBase):
         datastore.sources.
         """
         if not self.unit.is_leader():
-            log.debug('{} is not leader. '.format(self.unit.name) +
+            log.debug('unit is not leader. '
                       'Skipping on_database_departed() handler')
             return
 
@@ -440,11 +440,11 @@ class GrafanaK8s(CharmBase):
         config_text = textwrap.dedent("""
         [paths]
         provisioning = {0}
-        
+
         [security]
         admin_user = {1}
         admin_password = {2}
-        
+
         [log]
         mode = {3}
         level = {4}

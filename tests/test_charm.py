@@ -1,17 +1,9 @@
 import hashlib
-import importlib
-import pathlib
-import shutil
-import sys
-import tempfile
 import textwrap
 import unittest
 
 from ops.testing import Harness
 from ops.model import (
-    ActiveStatus,
-    MaintenanceStatus,
-    BlockedStatus,
     TooManyRelatedAppsError
 )
 from charm import (
@@ -68,7 +60,6 @@ class GrafanaCharmTest(unittest.TestCase):
         rel_id = self.harness.add_relation('grafana-source', 'prometheus')
         self.harness.add_relation_unit(rel_id, 'prometheus/0')
         self.assertIsInstance(rel_id, int)
-        rel = self.harness.charm.model.get_relation('grafana-source')
 
         # test that the unit data propagates the correct way
         # which is through the triggering of on_relation_changed
@@ -82,12 +73,12 @@ class GrafanaCharmTest(unittest.TestCase):
                                           })
 
         expected_first_source_data = {
-                'private-address': '192.0.2.1',
-                'port': 1234,
-                'source-name': 'prometheus-app',
-                'source-type': 'prometheus',
-                'isDefault': 'true',
-                'unit_name': 'prometheus/0'
+            'private-address': '192.0.2.1',
+            'port': 1234,
+            'source-name': 'prometheus-app',
+            'source-type': 'prometheus',
+            'isDefault': 'true',
+            'unit_name': 'prometheus/0'
         }
         self.assertEqual(expected_first_source_data,
                          dict(self.harness.charm.datastore.sources[rel_id]))
@@ -176,11 +167,11 @@ class GrafanaCharmTest(unittest.TestCase):
         rel = self.harness.model.get_relation('database')
         self.harness.add_relation_unit(rel_id, 'mysql/0')
         test_relation_data = {
-             'type': 'mysql',
-             'host': '0.1.2.3:3306',
-             'name': 'my-test-db',
-             'user': 'test-user',
-             'password': 'super!secret!password',
+            'type': 'mysql',
+            'host': '0.1.2.3:3306',
+            'name': 'my-test-db',
+            'user': 'test-user',
+            'password': 'super!secret!password',
         }
         self.harness.update_relation_data(rel_id,
                                           'mysql/0',
@@ -241,8 +232,8 @@ class GrafanaCharmTest(unittest.TestCase):
               basicAuthUser: {0}
               secureJsonData:
                 basicAuthPassword: {1}""").format(
-                self.harness.model.config['basic_auth_password'],
-                self.harness.model.config['basic_auth_username'])
+            self.harness.model.config['basic_auth_password'],
+            self.harness.model.config['basic_auth_username'])
 
         generated_text = self.harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text0 + '\n', generated_text)
@@ -255,7 +246,6 @@ class GrafanaCharmTest(unittest.TestCase):
             'source-name': 'jaeger-application'
         }
         rel_id1 = self.harness.add_relation('grafana-source', 'jaeger')
-        rel = self.harness.model.get_relation('grafana-source', rel_id1)
         self.harness.add_relation_unit(rel_id1, 'jaeger/0')
         self.harness.update_relation_data(rel_id1, 'jaeger/0', jaeger_source_data)
 
@@ -270,8 +260,8 @@ class GrafanaCharmTest(unittest.TestCase):
               basicAuthUser: {0}
               secureJsonData:
                 basicAuthPassword: {1}""").format(
-                self.harness.model.config['basic_auth_password'],
-                self.harness.model.config['basic_auth_username'])
+            self.harness.model.config['basic_auth_password'],
+            self.harness.model.config['basic_auth_username'])
 
         generated_text = self.harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text1 + '\n', generated_text)
@@ -288,11 +278,11 @@ class GrafanaCharmTest(unittest.TestCase):
         generated_text = self.harness.charm._make_data_source_config_text()
         correct_text_after_removal = textwrap.dedent("""
             apiVersion: 1
-    
+
             deleteDatasources:
             - name: jaeger-application
               orgId: 1
-            
+
             datasources:
             - name: prometheus/0
               type: prometheus
@@ -304,8 +294,8 @@ class GrafanaCharmTest(unittest.TestCase):
               basicAuthUser: {0}
               secureJsonData:
                 basicAuthPassword: {1}""").format(
-                self.harness.model.config['basic_auth_password'],
-                self.harness.model.config['basic_auth_username'])
+            self.harness.model.config['basic_auth_password'],
+            self.harness.model.config['basic_auth_username'])
 
         self.assertEqual(correct_text_after_removal + '\n', generated_text)
 
@@ -362,17 +352,17 @@ class GrafanaCharmTest(unittest.TestCase):
               secureJsonData:
                 basicAuthPassword: {1}
               """).format(
-                self.harness.model.config['basic_auth_password'],
-                self.harness.model.config['basic_auth_username'])
+            self.harness.model.config['basic_auth_password'],
+            self.harness.model.config['basic_auth_username'])
 
         config_ini_file_text = textwrap.dedent("""
         [paths]
         provisioning = {0}
-        
+
         [security]
         admin_user = {1}
         admin_password = {2}
-        
+
         [log]
         mode = {3}
         level = {4}
@@ -416,11 +406,11 @@ class GrafanaCharmTest(unittest.TestCase):
         expected_config_text = textwrap.dedent("""
         [paths]
         provisioning = {0}
-        
+
         [security]
         admin_user = {1}
         admin_password = {2}
-        
+
         [log]
         mode = {3}
         level = {4}
@@ -458,15 +448,15 @@ class GrafanaCharmTest(unittest.TestCase):
         expected_config_text = textwrap.dedent("""
         [paths]
         provisioning = {0}
-        
+
         [security]
         admin_user = {1}
         admin_password = {2}
-        
+
         [log]
         mode = {3}
         level = {4}
-        
+
         [database]
         type = mysql
         host = 0.1.2.3:3306
@@ -539,7 +529,6 @@ class GrafanaCharmTest(unittest.TestCase):
         rel_id = self.harness.add_relation('grafana-source', 'prometheus')
         self.harness.add_relation_unit(rel_id, 'prometheus/0')
         self.assertIsInstance(rel_id, int)
-        rel = self.harness.charm.model.get_relation('grafana-source')
 
         # test that the unit data propagates the correct way
         # which is through the triggering of on_relation_changed
