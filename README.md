@@ -1,4 +1,4 @@
-# charm-k8s-grafana
+# Grafana Charm
 
 ## Description
 
