@@ -17,9 +17,6 @@ from charm import (
 
 BASE_CONFIG = {
     'advertised_port': 3000,
-    'grafana_image_path': 'grafana/grafana:latest',
-    'grafana_image_username': '',
-    'grafana_image_password': '',
     'datasource_mount_path': '/etc/grafana/provisioning/datasources',
     'config_ini_mount_path': '/etc/grafana',
     'basic_auth_username': 'admin',
@@ -29,20 +26,6 @@ BASE_CONFIG = {
     'provisioning_path': '/etc/grafana/provisioning',
 }
 
-MISSING_IMAGE_PASSWORD_CONFIG = {
-    'advertised_port': 3000,
-    'grafana_image_path': 'grafana/grafana:latest',
-    'grafana_image_username': 'test-user',
-    'grafana_image_password': '',
-}
-
-MISSING_IMAGE_CONFIG = {
-    'advertised_port': 3000,
-    'grafana_image_path': '',
-    'grafana_image_username': '',
-    'grafana_image_password': '',
-}
-
 
 class GrafanaCharmTest(unittest.TestCase):
 
@@ -50,12 +33,15 @@ class GrafanaCharmTest(unittest.TestCase):
         self.harness = Harness(GrafanaK8s)
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
+        self.harness.add_oci_resource('grafana-image')
 
     def test__grafana_source_data(self):
 
         self.harness.set_leader(True)
         self.harness.update_config(BASE_CONFIG)
         self.assertEqual(self.harness.charm.datastore.sources, {})
+
+        print(self.harness.charm.meta.resources)
 
         rel_id = self.harness.add_relation('grafana-source', 'prometheus')
         self.harness.add_relation_unit(rel_id, 'prometheus/0')
@@ -303,22 +289,6 @@ class GrafanaCharmTest(unittest.TestCase):
         generated_text = self.harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text0 + '\n', generated_text)
 
-    def test__check_config_missing_image_path(self):
-        self.harness.update_config(MISSING_IMAGE_PASSWORD_CONFIG)
-
-        # test the return value of _check_config
-        missing = self.harness.charm._check_config()
-        expected = ['grafana_image_password']
-        self.assertEqual(missing, expected)
-
-    def test__check_config_missing_password(self):
-        self.harness.update_config(MISSING_IMAGE_CONFIG)
-
-        # test the return value of _check_config
-        missing = self.harness.charm._check_config()
-        expected = ['grafana_image_path']
-        self.assertEqual(missing, expected)
-
     def test__pod_spec_container_datasources(self):
         self.harness.set_leader(True)
         self.harness.update_config(BASE_CONFIG)
@@ -433,7 +403,6 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # add database relation and update relation data
         rel_id = self.harness.add_relation('database', 'mysql')
-        # rel = self.harness.charm.model.get_relation('database')
         self.harness.add_relation_unit(rel_id, 'mysql/0')
         test_relation_data = {
             'type': 'mysql',
