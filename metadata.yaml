@@ -27,3 +27,8 @@ storage:
     sqlitedb:
         type: filesystem
         location: /var/lib/grafana
+resources:
+    grafana-image:
+        type: oci-image
+        description: upstream docker image for Grafana
+        upstream-source: 'grafana/grafana:7.2.1'

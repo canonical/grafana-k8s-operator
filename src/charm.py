@@ -5,7 +5,7 @@ import logging
 import hashlib
 import textwrap
 
-# from oci_image import OCIImageResource, OCIImageResourceError
+from oci_image import OCIImageResource, OCIImageResourceError
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -82,6 +82,9 @@ class GrafanaK8s(CharmBase):
     def __init__(self, *args):
         log.debug('Initializing charm.')
         super().__init__(*args)
+
+        # -- get image information
+        self.image = OCIImageResource(self, 'grafana-image')
 
         # -- standard hooks
         self.framework.observe(self.on.config_changed, self.on_config_changed)
@@ -319,25 +322,6 @@ class GrafanaK8s(CharmBase):
         self.unit.status = status
         return status
 
-    def _check_config(self):
-        """Get list of missing charm settings."""
-        config = self.model.config
-        missing = []
-
-        if not config['grafana_image_path']:
-            missing.append('grafana_image_path')
-
-        if config['grafana_image_username'] \
-                and not config['grafana_image_password']:
-            missing.append('grafana_image_password')
-
-        # TODO: does it make sense to set state directly in this method?
-        if missing:
-            self.unit.status = \
-                BlockedStatus('Missing configuration: {}'.format(missing))
-
-        return missing
-
     def _make_delete_datasources_config_text(self) -> str:
         """Generate text of data sources to delete."""
         if not self.datastore.sources_to_delete:
@@ -484,19 +468,20 @@ class GrafanaK8s(CharmBase):
 
         config = self.model.config
 
-        # get image details
-        image_details = {
-            'imagePath': config['grafana_image_path']
-        }
-        if config['grafana_image_username']:
-            image_details['username'] = config['grafana_image_username']
-            image_details['password'] = config['grafana_image_password']
+        # get image details using OCI image helper library
+        try:
+            image_info = self.image.fetch()
+        except OCIImageResourceError as e:
+            logging.exception('An error occurred while fetching the image info')
+            self.unit.status = BlockedStatus("Error fetching image information")
+            print(e)
+            return {}
 
         spec = {
             'version': 3,
             'containers': [{
                 'name': self.app.name,
-                'imageDetails': image_details,
+                'imageDetails': image_info,
                 'ports': [{
                     'containerPort': config['advertised_port'],
                     'protocol': 'TCP'
@@ -523,7 +508,6 @@ class GrafanaK8s(CharmBase):
 
         # check for valid high availability (or single node) configuration
         self._check_high_availability()
-        self._check_config()
 
         if not self.unit.is_leader():
             self.unit.status = ActiveStatus()
@@ -537,6 +521,8 @@ class GrafanaK8s(CharmBase):
         # general pod spec component updates
         self.unit.status = MaintenanceStatus('Building pod spec.')
         pod_spec = self._build_pod_spec()
+        if not pod_spec:
+            return
         self._update_pod_data_source_config_file(pod_spec)
         self._update_pod_config_ini_file(pod_spec)
 
