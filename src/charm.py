@@ -1,10 +1,6 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# TODO: to ensure HA works properly, add datasource version increments
-#       https://grafana.com/docs/grafana/latest/administration/provisioning/#running-multiple-grafana-instances
-# TODO: create actions that will help users. e.g. "upload-dashboard"
-
 import logging
 import hashlib
 import textwrap
@@ -56,12 +52,9 @@ APPLICATION_ACTIVE_STATUS = ActiveStatus('Grafana pod ready.')
 # 1) Blocked status if we have peers and no DB
 # 2) HA available status if we have peers and DB
 # 3) Running in non-HA mode
-HA_NOT_READY_STATUS = \
-    BlockedStatus('Need database relation for HA.')
-HA_READY_STATUS = \
-    MaintenanceStatus('Grafana ready for HA.')
-SINGLE_NODE_STATUS = \
-    MaintenanceStatus('Grafana ready on single node.')
+HA_NOT_READY_STATUS = BlockedStatus('Need database relation for HA.')
+HA_READY_STATUS = MaintenanceStatus('Grafana ready for HA.')
+SINGLE_NODE_STATUS = MaintenanceStatus('Grafana ready on single node.')
 
 
 def get_container(pod_spec, container_name):
@@ -128,17 +121,12 @@ class GrafanaK8s(CharmBase):
         """Only consider a DB connection if we have config info."""
         return len(self.datastore.database) > 0
 
-    def on_config_changed(self, event):
+    def on_config_changed(self, _):
         self.configure_pod()
 
-    def on_update_status(self, event):
+    def on_update_status(self, _):
         """Various health checks of the charm."""
         self._check_high_availability()
-        # TODO: add pod status check here
-
-    def on_start(self, event):
-        # TODO:
-        pass
 
     def on_grafana_source_changed(self, event):
         """ Get relation data for Grafana source and set k8s pod spec.
@@ -194,7 +182,7 @@ class GrafanaK8s(CharmBase):
             self.datastore.source_names.add(datasource_fields['source-name'])
 
         # set the first grafana-source as the default (needed for pod config)
-        # if `self.datastore.sources` is currently emtpy, this is the first
+        # if `self.datastore.sources` is currently empty, this is the first
         # TODO: confirm that this is what we want
         if not dict(self.datastore.sources):
             datasource_fields['isDefault'] = 'true'
@@ -206,8 +194,6 @@ class GrafanaK8s(CharmBase):
         datasource_fields['unit_name'] = event.unit.name
 
         # add the new datasource relation data to the current state
-        # make sure that we can handle multiple units of the same relation
-        # as well as different relations altogether
         new_source_data = {
             field: value for field, value in datasource_fields.items()
             if value is not None
@@ -221,7 +207,7 @@ class GrafanaK8s(CharmBase):
             self._remove_source_from_datastore(event.relation.id)
         self.configure_pod()
 
-    def on_peer_changed(self, event):
+    def on_peer_changed(self, _):
         # TODO: https://grafana.com/docs/grafana/latest/tutorials/ha_setup/
         #       According to these docs ^, as long as we have a DB, HA should
         #       work out of the box if we are OK with "Sticky Sessions"
@@ -230,7 +216,7 @@ class GrafanaK8s(CharmBase):
         # if the config changed, set a new pod spec
         self.configure_pod()
 
-    def on_peer_departed(self, event):
+    def on_peer_departed(self, _):
         """Sets pod spec with new info."""
         # TODO: setting pod spec shouldn't do much now,
         #       but if we ever need to change config based peer units,
@@ -262,7 +248,7 @@ class GrafanaK8s(CharmBase):
                       "relation: {}".format(missing_fields))
             return
 
-        # check that the passed database type is not in VALID_DATABASE_TYPES
+        # check if the passed database type is not in VALID_DATABASE_TYPES
         if database_fields['type'] not in VALID_DATABASE_TYPES:
             log.error('Grafana can only accept databases of the following '
                       'types: {}'.format(VALID_DATABASE_TYPES))
@@ -273,18 +259,14 @@ class GrafanaK8s(CharmBase):
             field: value for field, value in database_fields.items()
             if value is not None
         })
-
-        # set pod spec with new database config data
         self.configure_pod()
 
-    def on_database_departed(self, event):
+    def on_database_departed(self, _):
         """Removes database connection info from datastore.
 
-        Since we are guaranteed to only have one DB connection, clearing
-        the datastore works. If we have multiple DB connections,
-        we will datastore.database structure to look more like
-        datastore.sources.
-        """
+        We are guaranteed to only have one DB connection, so clearing
+        datastore.database is all we need for the change to be propagated
+        to the pod spec."""
         if not self.unit.is_leader():
             log.debug('unit is not leader. '
                       'Skipping on_database_departed() handler')
@@ -297,6 +279,10 @@ class GrafanaK8s(CharmBase):
         self.configure_pod()
 
     def _remove_source_from_datastore(self, rel_id):
+        """Remove the grafana-source from the datastore.
+
+        Once removed from the datastore, this datasource will not
+        part of the next pod spec."""
         log.info('Removing all data for relation: {}'.format(rel_id))
         removed_source = self.datastore.sources.pop(rel_id, None)
         if removed_source is None:
@@ -330,9 +316,7 @@ class GrafanaK8s(CharmBase):
                 and isinstance(self.unit.status, ActiveStatus):
             return status
 
-        # set status for *at least* the unit and possibly the app
         self.unit.status = status
-
         return status
 
     def _check_config(self):
@@ -412,21 +396,22 @@ class GrafanaK8s(CharmBase):
         data_source_file_meta = {
             'name': 'grafana-datasources',
             'mountPath': '/etc/grafana/provisioning/datasources',
-            'files': {
-                'datasources.yaml': file_text
-            }
+            'files': [{
+                'path': 'datasources.yaml',
+                'content': file_text,
+            }]
         }
         container = get_container(pod_spec, self.app.name)
-        container['files'].append(data_source_file_meta)
+        container['volumeConfig'].append(data_source_file_meta)
 
         # get hash string of the new file text and put into container config
         # if this changes, it will trigger a pod restart
         file_text_hash = hashlib.md5(file_text.encode()).hexdigest()
-        if 'DATASOURCES_YAML' in container['config'] \
-                and container['config']['DATASOURCES_YAML'] != file_text_hash:
+        if 'DATASOURCES_YAML' in container['envConfig'] \
+                and container['envConfig']['DATASOURCES_YAML'] != file_text_hash:
             log.info('datasources.yaml hash has changed. '
                      'Triggering pod restart.')
-        container['config']['DATASOURCES_YAML'] = file_text_hash
+        container['envConfig']['DATASOURCES_YAML'] = file_text_hash
 
     def _make_config_ini_text(self):
         """Create the text of the config.ini file.
@@ -435,8 +420,6 @@ class GrafanaK8s(CharmBase):
         https://grafana.com/docs/grafana/latest/administration/configuration/
         """
 
-        # set default data storage path so make sure sqlite3 db is always
-        # available in single node mode
         config_text = textwrap.dedent("""
         [paths]
         provisioning = {0}
@@ -480,26 +463,25 @@ class GrafanaK8s(CharmBase):
         config_ini_file_meta = {
             'name': 'grafana-config-ini',
             'mountPath': '/etc/grafana',
-            'files': {
-                'grafana.ini': file_text
-            }
+            'files': [{
+                'path': 'grafana.ini',
+                'content': file_text
+            }]
         }
         container = get_container(pod_spec, self.app.name)
-        container['files'].append(config_ini_file_meta)
+        container['volumeConfig'].append(config_ini_file_meta)
 
         # get hash string of the new file text and put into container config
         # if this changes, it will trigger a pod restart
         file_text_hash = hashlib.md5(file_text.encode()).hexdigest()
-        if 'GRAFANA_INI' in container['config'] \
-                and container['config']['GRAFANA_INI'] != file_text_hash:
+        if 'GRAFANA_INI' in container['envConfig'] \
+                and container['envConfig']['GRAFANA_INI'] != file_text_hash:
             log.info('grafana.ini hash has changed. Triggering pod restart.')
-        container['config']['GRAFANA_INI'] = file_text_hash
+        container['envConfig']['GRAFANA_INI'] = file_text_hash
 
     def _build_pod_spec(self):
         """Builds the pod spec based on available info in datastore`."""
 
-        # this will set the baseline spec of the pod without
-        # worrying about `grafana-source` or `database` relations
         config = self.model.config
 
         # get image details
@@ -511,7 +493,7 @@ class GrafanaK8s(CharmBase):
             image_details['password'] = config['grafana_image_password']
 
         spec = {
-            # 'version': 3,
+            'version': 3,
             'containers': [{
                 'name': self.app.name,
                 'imageDetails': image_details,
@@ -519,17 +501,18 @@ class GrafanaK8s(CharmBase):
                     'containerPort': config['advertised_port'],
                     'protocol': 'TCP'
                 }],
-                'readinessProbe': {
-                    'httpGet': {
-                        'path': '/api/health',
-                        'port': config['advertised_port']
+                'volumeConfig': [],
+                'envConfig': {},  # used to store hashes of config file text
+                'kubernetes': {
+                    'readinessProbe': {
+                        'httpGet': {
+                            'path': '/api/health',
+                            'port': config['advertised_port']
+                        },
+                        'initialDelaySeconds': 10,
+                        'timeoutSeconds': 30
                     },
-                    # TODO: should these be in the config?
-                    'initialDelaySeconds': 10,
-                    'timeoutSeconds': 30
                 },
-                'files': [],
-                'config': {},  # used to store hashes of config file text
             }]
         }
 
@@ -542,15 +525,13 @@ class GrafanaK8s(CharmBase):
         self._check_high_availability()
         self._check_config()
 
-        # decide whether we can set the pod spec or not
-        # TODO: is this necessary?
+        if not self.unit.is_leader():
+            self.unit.status = ActiveStatus()
+            return
+
         if isinstance(self.unit.status, BlockedStatus):
             log.error('Application is in a blocked state. '
                       'Please resolve before pod spec can be set.')
-            return
-
-        if not self.unit.is_leader():
-            self.unit.status = ActiveStatus()
             return
 
         # general pod spec component updates

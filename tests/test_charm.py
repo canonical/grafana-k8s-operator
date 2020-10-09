@@ -378,21 +378,23 @@ class GrafanaCharmTest(unittest.TestCase):
             {
                 'name': 'grafana-datasources',
                 'mountPath': self.harness.model.config['datasource_mount_path'],
-                'files': {
-                    'datasources.yaml': data_source_file_text,
-                },
+                'files': [{
+                    'path': 'datasources.yaml',
+                    'content': data_source_file_text,
+                }],
             },
             {
                 'name': 'grafana-config-ini',
                 'mountPath': self.harness.model.config['config_ini_mount_path'],
-                'files': {
-                    'grafana.ini': config_ini_file_text
-                }
+                'files': [{
+                    'path': 'grafana.ini',
+                    'content': config_ini_file_text,
+                }]
             }
         ]
-        pod_spec = self.harness.get_pod_spec()[0]
+        pod_spec, _ = self.harness.get_pod_spec()
         container = get_container(pod_spec, 'grafana')
-        actual_container_files_spec = container['files']
+        actual_container_files_spec = container['volumeConfig']
         self.assertEqual(expected_container_files_spec,
                          actual_container_files_spec)
 
@@ -542,11 +544,12 @@ class GrafanaCharmTest(unittest.TestCase):
                                           })
 
         # get a hash of the created file and check that it matches the pod spec
-        container = get_container(self.harness.get_pod_spec()[0], 'grafana')
+        pod_spec, _ = self.harness.get_pod_spec()
+        container = get_container(pod_spec, 'grafana')
         hash_text = hashlib.md5(
-            container['files'][0]['files']['datasources.yaml'].encode()).hexdigest()
-        self.assertEqual(container['config']['DATASOURCES_YAML'], hash_text)
+            container['volumeConfig'][0]['files'][0]['content'].encode()).hexdigest()
+        self.assertEqual(container['envConfig']['DATASOURCES_YAML'], hash_text)
 
         # test the idempotence of the call by re-configuring the pod spec
         self.harness.charm.configure_pod()
-        self.assertEqual(container['config']['DATASOURCES_YAML'], hash_text)
+        self.assertEqual(container['envConfig']['DATASOURCES_YAML'], hash_text)
