@@ -509,13 +509,15 @@ class GrafanaK8s(CharmBase):
         # check for valid high availability (or single node) configuration
         self._check_high_availability()
 
-        if not self.unit.is_leader():
-            self.unit.status = ActiveStatus()
-            return
-
-        if isinstance(self.unit.status, BlockedStatus):
+        # in the case where we have peers but no DB connection,
+        # don't set the pod spec until it is resolved
+        if self.unit.status == HA_NOT_READY_STATUS:
             log.error('Application is in a blocked state. '
                       'Please resolve before pod spec can be set.')
+            return
+
+        if not self.unit.is_leader():
+            self.unit.status = ActiveStatus()
             return
 
         # general pod spec component updates
