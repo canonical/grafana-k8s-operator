@@ -41,8 +41,6 @@ class GrafanaCharmTest(unittest.TestCase):
         self.harness.update_config(BASE_CONFIG)
         self.assertEqual(self.harness.charm.datastore.sources, {})
 
-        print(self.harness.charm.meta.resources)
-
         rel_id = self.harness.add_relation('grafana-source', 'prometheus')
         self.harness.add_relation_unit(rel_id, 'prometheus/0')
         self.assertIsInstance(rel_id, int)
