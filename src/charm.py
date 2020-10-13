@@ -473,8 +473,7 @@ class GrafanaK8s(CharmBase):
             image_info = self.image.fetch()
         except OCIImageResourceError as e:
             logging.exception('An error occurred while fetching the image info')
-            self.unit.status = BlockedStatus("Error fetching image information")
-            print(e)
+            self.unit.status = BlockedStatus('Error fetching image information')
             return {}
 
         spec = {
