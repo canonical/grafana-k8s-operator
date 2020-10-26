@@ -31,4 +31,5 @@ resources:
     grafana-image:
         type: oci-image
         description: upstream docker image for Grafana
+        auto-fetch: true
         upstream-source: 'grafana/grafana:7.2.1'
