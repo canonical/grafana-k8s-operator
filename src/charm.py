@@ -150,7 +150,6 @@ class GrafanaK8s(CharmBase):
 
         # if there is no available unit, remove data-source info if it exists
         if event.unit is None:
-            self._remove_source_from_datastore(event.relation.id)
             log.warning("event unit can't be None when setting data sources.")
             return
 
