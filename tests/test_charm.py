@@ -17,7 +17,6 @@ from charm import (
 
 BASE_CONFIG = {
     'port': 3000,
-    'datasource_mount_path': '/etc/grafana/provisioning/datasources',
     'config_ini_mount_path': '/etc/grafana',
     'grafana_log_level': 'info',
 }
@@ -312,7 +311,7 @@ class GrafanaCharmTest(unittest.TestCase):
         expected_container_files_spec = [
             {
                 'name': 'grafana-datasources',
-                'mountPath': self.harness.model.config['datasource_mount_path'],
+                'mountPath': '/etc/grafana/provisioning/datasources',
                 'files': [{
                     'path': 'datasources.yaml',
                     'content': data_source_file_text,
