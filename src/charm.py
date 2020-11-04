@@ -45,9 +45,6 @@ OPTIONAL_DATABASE_FIELDS = set()
 
 VALID_DATABASE_TYPES = {'mysql', 'postgres', 'sqlite3'}
 
-# statuses
-APPLICATION_ACTIVE_STATUS = ActiveStatus('Grafana pod ready.')
-
 # There are three app states w.r.t. HA
 # 1) Blocked status if we have peers and no DB
 # 2) HA available status if we have peers and DB
@@ -534,7 +531,7 @@ class GrafanaK8s(CharmBase):
 
         # set the pod spec with Juju
         self.model.pod.set_spec(pod_spec)
-        self.unit.status = APPLICATION_ACTIVE_STATUS
+        self.unit.status = ActiveStatus()
 
 
 if __name__ == '__main__':
