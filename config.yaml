@@ -19,14 +19,6 @@ options:
         description: |
             The Grafana-defined location of the config.ini file.
         default: /etc/grafana
-    basic_auth_username:
-        type: string
-        description: Basic authorization username for Grafana
-        default: admin
-    basic_auth_password:
-        type: string
-        description: Basic authorization password for Grafana
-        default: admin
     grafana_log_mode:
         type: string
         description: |

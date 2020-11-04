@@ -19,8 +19,6 @@ BASE_CONFIG = {
     'port': 3000,
     'datasource_mount_path': '/etc/grafana/provisioning/datasources',
     'config_ini_mount_path': '/etc/grafana',
-    'basic_auth_username': 'admin',
-    'basic_auth_password': 'admin',
     'grafana_log_mode': 'file',
     'grafana_log_level': 'info',
     'provisioning_path': '/etc/grafana/provisioning',
@@ -212,12 +210,7 @@ class GrafanaCharmTest(unittest.TestCase):
               url: http://192.0.2.1:4321
               isDefault: true
               editable: true
-              orgId: 1
-              basicAuthUser: {0}
-              secureJsonData:
-                basicAuthPassword: {1}""").format(
-            self.harness.model.config['basic_auth_password'],
-            self.harness.model.config['basic_auth_username'])
+              orgId: 1""")
 
         generated_text = self.harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text0 + '\n', generated_text)
@@ -240,12 +233,7 @@ class GrafanaCharmTest(unittest.TestCase):
               url: http://255.255.255.0:7890
               isDefault: false
               editable: true
-              orgId: 1
-              basicAuthUser: {0}
-              secureJsonData:
-                basicAuthPassword: {1}""").format(
-            self.harness.model.config['basic_auth_password'],
-            self.harness.model.config['basic_auth_username'])
+              orgId: 1""")
 
         generated_text = self.harness.charm._make_data_source_config_text()
         self.assertEqual(correct_config_text1 + '\n', generated_text)
@@ -273,12 +261,7 @@ class GrafanaCharmTest(unittest.TestCase):
               url: http://192.0.2.1:4321
               isDefault: true
               editable: true
-              orgId: 1
-              basicAuthUser: {0}
-              secureJsonData:
-                basicAuthPassword: {1}""").format(
-            self.harness.model.config['basic_auth_password'],
-            self.harness.model.config['basic_auth_username'])
+              orgId: 1""")
 
         self.assertEqual(correct_text_after_removal + '\n', generated_text)
 
@@ -315,28 +298,17 @@ class GrafanaCharmTest(unittest.TestCase):
               isDefault: true
               editable: true
               orgId: 1
-              basicAuthUser: {0}
-              secureJsonData:
-                basicAuthPassword: {1}
-              """).format(
-            self.harness.model.config['basic_auth_password'],
-            self.harness.model.config['basic_auth_username'])
+              """)
 
         config_ini_file_text = textwrap.dedent("""
         [paths]
         provisioning = {0}
 
-        [security]
-        admin_user = {1}
-        admin_password = {2}
-
         [log]
-        mode = {3}
-        level = {4}
+        mode = {1}
+        level = {2}
         """).format(
             self.harness.model.config['provisioning_path'],
-            self.harness.model.config['basic_auth_username'],
-            self.harness.model.config['basic_auth_password'],
             self.harness.model.config['grafana_log_mode'],
             self.harness.model.config['grafana_log_level'],
         )
@@ -376,17 +348,11 @@ class GrafanaCharmTest(unittest.TestCase):
         [paths]
         provisioning = {0}
 
-        [security]
-        admin_user = {1}
-        admin_password = {2}
-
         [log]
-        mode = {3}
-        level = {4}
+        mode = {1}
+        level = {2}
         """).format(
             self.harness.model.config['provisioning_path'],
-            self.harness.model.config['basic_auth_username'],
-            self.harness.model.config['basic_auth_password'],
             self.harness.model.config['grafana_log_mode'],
             self.harness.model.config['grafana_log_level'],
         )
@@ -417,13 +383,9 @@ class GrafanaCharmTest(unittest.TestCase):
         [paths]
         provisioning = {0}
 
-        [security]
-        admin_user = {1}
-        admin_password = {2}
-
         [log]
-        mode = {3}
-        level = {4}
+        mode = {1}
+        level = {2}
 
         [database]
         type = mysql
@@ -433,8 +395,6 @@ class GrafanaCharmTest(unittest.TestCase):
         password = super!secret!password
         url = mysql://test-user:super!secret!password@0.1.2.3:3306/my-test-db""").format(
             self.harness.model.config['provisioning_path'],
-            self.harness.model.config['basic_auth_username'],
-            self.harness.model.config['basic_auth_password'],
             self.harness.model.config['grafana_log_mode'],
             self.harness.model.config['grafana_log_level'],
         )
