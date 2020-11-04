@@ -3,11 +3,6 @@ options:
         description: The port grafana will be listening on
         type: int
         default: 3000
-    config_ini_mount_path:
-        type: string
-        description: |
-            The Grafana-defined location of the config.ini file.
-        default: /etc/grafana
     grafana_log_level:
         type: string
         description: |

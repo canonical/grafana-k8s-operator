@@ -17,7 +17,6 @@ from charm import (
 
 BASE_CONFIG = {
     'port': 3000,
-    'config_ini_mount_path': '/etc/grafana',
     'grafana_log_level': 'info',
 }
 
@@ -319,7 +318,7 @@ class GrafanaCharmTest(unittest.TestCase):
             },
             {
                 'name': 'grafana-config-ini',
-                'mountPath': self.harness.model.config['config_ini_mount_path'],
+                'mountPath': '/etc/grafana',
                 'files': [{
                     'path': 'grafana.ini',
                     'content': config_ini_file_text,
