@@ -16,7 +16,7 @@ from charm import (
 )
 
 BASE_CONFIG = {
-    'advertised_port': 3000,
+    'port': 3000,
     'datasource_mount_path': '/etc/grafana/provisioning/datasources',
     'config_ini_mount_path': '/etc/grafana',
     'basic_auth_username': 'admin',

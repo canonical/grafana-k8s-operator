@@ -482,7 +482,7 @@ class GrafanaK8s(CharmBase):
                 'name': self.app.name,
                 'imageDetails': image_info,
                 'ports': [{
-                    'containerPort': config['advertised_port'],
+                    'containerPort': config['port'],
                     'protocol': 'TCP'
                 }],
                 'volumeConfig': [],
@@ -491,7 +491,7 @@ class GrafanaK8s(CharmBase):
                     'readinessProbe': {
                         'httpGet': {
                             'path': '/api/health',
-                            'port': config['advertised_port']
+                            'port': config['port']
                         },
                         'initialDelaySeconds': 10,
                         'timeoutSeconds': 30
