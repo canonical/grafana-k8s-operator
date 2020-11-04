@@ -4,11 +4,11 @@ import unittest
 
 from ops.testing import Harness
 from ops.model import (
-    TooManyRelatedAppsError
+    TooManyRelatedAppsError,
+    ActiveStatus,
 )
 from charm import (
     GrafanaK8s,
-    APPLICATION_ACTIVE_STATUS,
     HA_NOT_READY_STATUS,
     HA_READY_STATUS,
     SINGLE_NODE_STATUS,
@@ -85,7 +85,7 @@ class GrafanaCharmTest(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.update_config(BASE_CONFIG)
         self.assertEqual(self.harness.charm.unit.status,
-                         APPLICATION_ACTIVE_STATUS)
+                         ActiveStatus())
 
         # ensure _check_high_availability() ends up with the correct status
         status = self.harness.charm._check_high_availability()
@@ -95,7 +95,7 @@ class GrafanaCharmTest(unittest.TestCase):
         # overwrite the current active status
         self.harness.charm.on.update_status.emit()
         self.assertEqual(self.harness.charm.unit.status,
-                         APPLICATION_ACTIVE_STATUS)
+                         ActiveStatus())
 
         peer_rel_id = self.harness.add_relation('grafana', 'grafana')
 
@@ -135,7 +135,7 @@ class GrafanaCharmTest(unittest.TestCase):
                                               'password': 'super!secret!password',
                                           })
         self.assertTrue(self.harness.charm.has_db)
-        self.assertEqual(self.harness.charm.unit.status, APPLICATION_ACTIVE_STATUS)
+        self.assertEqual(self.harness.charm.unit.status, ActiveStatus())
 
         # ensure _check_high_availability() ends up with the correct status
         status = self.harness.charm._check_high_availability()
