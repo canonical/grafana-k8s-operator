@@ -25,7 +25,7 @@ requires:
         limit: 1
 peers:
     grafana:
-        interface: peer
+        interface: grafana-peers
 storage:
     sqlitedb:
         type: filesystem
