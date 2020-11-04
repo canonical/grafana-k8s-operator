@@ -1,5 +1,5 @@
 name: grafana
-summary: Data vizualization for the charmed LMA stack
+summary: Data vizualualization and observability with Grafana
 maintainers:
     - Justin Clark <justin.clark@canonical.com>
 description: |
@@ -11,18 +11,21 @@ tags:
     - grafana
     - prometheus
     - monitoring
+    - observability
 series:
     - kubernetes
 provides:
     grafana-source:
-        interface: grafana-dashsource
+        interface: grafana-datasource
+    grafana-dashboard:
+        interface: grafana-dash
 requires:
     database:
         interface: db
         limit: 1
 peers:
     grafana:
-        interface: grafana
+        interface: peer
 storage:
     sqlitedb:
         type: filesystem
