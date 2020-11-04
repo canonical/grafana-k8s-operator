@@ -360,17 +360,12 @@ class GrafanaK8s(CharmBase):
                   url: http://{2}:{3}
                   isDefault: {4}
                   editable: true
-                  orgId: 1
-                  basicAuthUser: {5}
-                  secureJsonData:
-                    basicAuthPassword: {6}""").format(
+                  orgId: 1""").format(
                 source_info['source-name'],
                 source_info['source-type'],
                 source_info['private-address'],
                 source_info['port'],
                 source_info['isDefault'],
-                self.model.config['basic_auth_username'],
-                self.model.config['basic_auth_password'],
             )
 
         # check if there these are empty
@@ -410,17 +405,11 @@ class GrafanaK8s(CharmBase):
         [paths]
         provisioning = {0}
 
-        [security]
-        admin_user = {1}
-        admin_password = {2}
-
         [log]
-        mode = {3}
-        level = {4}
+        mode = {1}
+        level = {2}
         """.format(
             self.model.config['provisioning_path'],
-            self.model.config['basic_auth_username'],
-            self.model.config['basic_auth_password'],
             self.model.config['grafana_log_mode'],
             self.model.config['grafana_log_level'],
         ))
