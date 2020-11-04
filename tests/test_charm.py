@@ -165,7 +165,7 @@ class GrafanaCharmTest(unittest.TestCase):
                          test_relation_data)
 
         # now depart this relation and ensure the datastore is emptied
-        self.harness.charm.on.database_relation_departed.emit(rel)
+        self.harness.charm.on.database_relation_broken.emit(rel)
         self.assertEqual({}, dict(self.harness.charm.datastore.database))
 
     def test__multiple_database_relation_handling(self):
@@ -252,7 +252,6 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # test removal of second source results in config_text
         # that is the same as the original
-        # self.harness.charm.on.grafana_source_relation_departed.emit(rel)
         self.harness.update_relation_data(rel_id1,
                                           'jaeger/0',
                                           {
@@ -487,7 +486,7 @@ class GrafanaCharmTest(unittest.TestCase):
         self.assertEqual(1, len(self.harness.charm.datastore.sources))
 
         # now remove the relation and ensure datastore source-name is removed
-        self.harness.charm.on.grafana_source_relation_departed.emit(p_rel)
+        self.harness.charm.on.grafana_source_relation_broken.emit(p_rel)
         self.assertEqual(None, self.harness.charm.datastore.sources.get(p_rel_id))
         self.assertEqual(0, len(self.harness.charm.datastore.sources))
 
