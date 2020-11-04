@@ -19,7 +19,6 @@ BASE_CONFIG = {
     'port': 3000,
     'datasource_mount_path': '/etc/grafana/provisioning/datasources',
     'config_ini_mount_path': '/etc/grafana',
-    'grafana_log_mode': 'file',
     'grafana_log_level': 'info',
     'provisioning_path': '/etc/grafana/provisioning',
 }
@@ -305,11 +304,10 @@ class GrafanaCharmTest(unittest.TestCase):
         provisioning = {0}
 
         [log]
-        mode = {1}
-        level = {2}
+        mode = console
+        level = {1}
         """).format(
             self.harness.model.config['provisioning_path'],
-            self.harness.model.config['grafana_log_mode'],
             self.harness.model.config['grafana_log_level'],
         )
 
@@ -349,11 +347,10 @@ class GrafanaCharmTest(unittest.TestCase):
         provisioning = {0}
 
         [log]
-        mode = {1}
-        level = {2}
+        mode = console
+        level = {1}
         """).format(
             self.harness.model.config['provisioning_path'],
-            self.harness.model.config['grafana_log_mode'],
             self.harness.model.config['grafana_log_level'],
         )
 
@@ -384,8 +381,8 @@ class GrafanaCharmTest(unittest.TestCase):
         provisioning = {0}
 
         [log]
-        mode = {1}
-        level = {2}
+        mode = console
+        level = {1}
 
         [database]
         type = mysql
@@ -395,7 +392,6 @@ class GrafanaCharmTest(unittest.TestCase):
         password = super!secret!password
         url = mysql://test-user:super!secret!password@0.1.2.3:3306/my-test-db""").format(
             self.harness.model.config['provisioning_path'],
-            self.harness.model.config['grafana_log_mode'],
             self.harness.model.config['grafana_log_level'],
         )
 
