@@ -89,12 +89,13 @@ class GrafanaK8s(CharmBase):
         # -- standard hooks
         self.framework.observe(self.on.config_changed, self.on_config_changed)
         self.framework.observe(self.on.update_status, self.on_update_status)
+        self.framework.observe(self.on.stop, self._on_stop)
 
         # -- grafana-source relation observations
         self.framework.observe(self.on['grafana-source'].relation_changed,
                                self.on_grafana_source_changed)
-        self.framework.observe(self.on['grafana-source'].relation_departed,
-                               self.on_grafana_source_departed)
+        self.framework.observe(self.on['grafana-source'].relation_broken,
+                               self.on_grafana_source_broken)
 
         # -- grafana (peer) relation observations
         self.framework.observe(self.on['grafana'].relation_changed,
@@ -105,8 +106,8 @@ class GrafanaK8s(CharmBase):
         # -- database relation observations
         self.framework.observe(self.on['database'].relation_changed,
                                self.on_database_changed)
-        self.framework.observe(self.on['database'].relation_departed,
-                               self.on_database_departed)
+        self.framework.observe(self.on['database'].relation_broken,
+                               self.on_database_broken)
 
         # -- initialize states --
         self.datastore.set_default(sources=dict())  # available data sources
@@ -123,6 +124,10 @@ class GrafanaK8s(CharmBase):
     def has_db(self) -> bool:
         """Only consider a DB connection if we have config info."""
         return len(self.datastore.database) > 0
+
+    def _on_stop(self, _):
+        """Go into maintenance state if the unit is stopped."""
+        self.unit.status = MaintenanceStatus('Pod is terminating.')
 
     def on_config_changed(self, _):
         self.configure_pod()
@@ -204,7 +209,7 @@ class GrafanaK8s(CharmBase):
         self.datastore.sources.update({event.relation.id: new_source_data})
         self.configure_pod()
 
-    def on_grafana_source_departed(self, event):
+    def on_grafana_source_broken(self, event):
         """When a grafana-source is removed, delete from the datastore."""
         if self.unit.is_leader():
             self._remove_source_from_datastore(event.relation.id)
@@ -264,7 +269,7 @@ class GrafanaK8s(CharmBase):
         })
         self.configure_pod()
 
-    def on_database_departed(self, _):
+    def on_database_broken(self, _):
         """Removes database connection info from datastore.
 
         We are guaranteed to only have one DB connection, so clearing
