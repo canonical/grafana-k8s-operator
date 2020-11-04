@@ -19,12 +19,6 @@ options:
         description: |
             The Grafana-defined location of the config.ini file.
         default: /etc/grafana
-    grafana_log_mode:
-        type: string
-        description: |
-            The mode of Grafana logs. Possible values are
-            'console', 'file', and 'syslog'.
-        default: file
     grafana_log_level:
         type: string
         description: |

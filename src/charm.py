@@ -405,11 +405,10 @@ class GrafanaK8s(CharmBase):
         provisioning = {0}
 
         [log]
-        mode = {1}
-        level = {2}
+        mode = console
+        level = {1}
         """.format(
             self.model.config['provisioning_path'],
-            self.model.config['grafana_log_mode'],
             self.model.config['grafana_log_level'],
         ))
 
