@@ -3,12 +3,6 @@ options:
         description: The port grafana will be listening on
         type: int
         default: 3000
-    datasource_mount_path:
-        type: string
-        description: |
-            The Grafana-defined location of the datasource
-            provisioning config file.
-        default: /etc/grafana/provisioning/datasources
     config_ini_mount_path:
         type: string
         description: |
