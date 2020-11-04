@@ -402,13 +402,12 @@ class GrafanaK8s(CharmBase):
 
         config_text = textwrap.dedent("""
         [paths]
-        provisioning = {0}
+        provisioning = /etc/grafana/provisioning
 
         [log]
         mode = console
-        level = {1}
+        level = {0}
         """.format(
-            self.model.config['provisioning_path'],
             self.model.config['grafana_log_level'],
         ))
 
