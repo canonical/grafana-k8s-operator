@@ -9,9 +9,8 @@ from ops.model import (
 )
 from charm import (
     GrafanaK8s,
-    HA_NOT_READY_STATUS,
-    HA_READY_STATUS,
-    SINGLE_NODE_STATUS,
+    MaintenanceStatus,
+    BlockedStatus,
     get_container,
 )
 
@@ -83,7 +82,7 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # ensure _check_high_availability() ends up with the correct status
         status = self.harness.charm._check_high_availability()
-        self.assertEqual(status, SINGLE_NODE_STATUS)
+        self.assertEqual(status, MaintenanceStatus('Grafana ready on single node.'))
 
         # make sure that triggering 'update-status' hook does not
         # overwrite the current active status
@@ -108,12 +107,15 @@ class GrafanaCharmTest(unittest.TestCase):
 
         self.assertTrue(self.harness.charm.has_peer)
         self.assertFalse(self.harness.charm.has_db)
-        self.assertEqual(self.harness.charm.unit.status, HA_NOT_READY_STATUS)
+        self.assertEqual(
+            self.harness.charm.unit.status,
+            BlockedStatus('Need database relation for HA.')
+        )
 
         # ensure update-status hook doesn't overwrite this
         self.harness.charm.on.update_status.emit()
         self.assertEqual(self.harness.charm.unit.status,
-                         HA_NOT_READY_STATUS)
+                         BlockedStatus('Need database relation for HA.'))
 
         # now add the database connection and the model should
         # not have a blocked status
@@ -133,7 +135,7 @@ class GrafanaCharmTest(unittest.TestCase):
 
         # ensure _check_high_availability() ends up with the correct status
         status = self.harness.charm._check_high_availability()
-        self.assertEqual(status, HA_READY_STATUS)
+        self.assertEqual(status, MaintenanceStatus('Grafana ready for HA.'))
 
     def test__database_relation_data(self):
         self.harness.set_leader(True)
