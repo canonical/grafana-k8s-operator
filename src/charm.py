@@ -17,8 +17,6 @@ log = logging.getLogger()
 # These are the required and optional relation data fields
 # In other words, when relating to this charm, these are the fields
 # that will be processed by this charm.
-# TODO: had these defined as sets for faster lookup than lists,
-#       but if I'm iterating over them more often, maybe they should be lists
 REQUIRED_DATASOURCE_FIELDS = {
     'private-address',  # the hostname/IP of the data source server
     'port',  # the port of the data source server
@@ -40,18 +38,10 @@ REQUIRED_DATABASE_FIELDS = {
 
 # verify with Grafana documentation to ensure fields have valid values
 # as this charm will not directly handle these cases
-# TODO: fill up with optional fields - leaving blank for now
+# TODO: fill with optional fields
 OPTIONAL_DATABASE_FIELDS = set()
 
 VALID_DATABASE_TYPES = {'mysql', 'postgres', 'sqlite3'}
-
-# There are three app states w.r.t. HA
-# 1) Blocked status if we have peers and no DB
-# 2) HA available status if we have peers and DB
-# 3) Running in non-HA mode
-HA_NOT_READY_STATUS = BlockedStatus('Need database relation for HA.')
-HA_READY_STATUS = MaintenanceStatus('Grafana ready for HA.')
-SINGLE_NODE_STATUS = MaintenanceStatus('Grafana ready on single node.')
 
 
 def get_container(pod_spec, container_name):
@@ -144,8 +134,6 @@ class GrafanaK8s(CharmBase):
         # if this unit is the leader, set the required data
         # of the grafana-source in this charm's datastore
         if not self.unit.is_leader():
-            log.debug("{} is not leader. Cannot set app data.".format(
-                self.unit.name))
             return
 
         # if there is no available unit, remove data-source info if it exists
@@ -187,7 +175,6 @@ class GrafanaK8s(CharmBase):
 
         # set the first grafana-source as the default (needed for pod config)
         # if `self.datastore.sources` is currently empty, this is the first
-        # TODO: confirm that this is what we want
         if not dict(self.datastore.sources):
             datasource_fields['isDefault'] = 'true'
         else:
@@ -215,14 +202,14 @@ class GrafanaK8s(CharmBase):
         # TODO: https://grafana.com/docs/grafana/latest/tutorials/ha_setup/
         #       According to these docs ^, as long as we have a DB, HA should
         #       work out of the box if we are OK with "Sticky Sessions"
-        #       but having "Stateless Sessions" will require more config
+        #       but having "Stateless Sessions" could require more config
 
         # if the config changed, set a new pod spec
         self.configure_pod()
 
     def on_peer_departed(self, _):
         """Sets pod spec with new info."""
-        # TODO: setting pod spec shouldn't do much now,
+        # TODO: setting pod spec shouldn't do anything now,
         #       but if we ever need to change config based peer units,
         #       we will want to make sure configure_pod() is called
         self.configure_pod()
@@ -230,8 +217,6 @@ class GrafanaK8s(CharmBase):
     def on_database_changed(self, event):
         """Sets configuration information for database connection."""
         if not self.unit.is_leader():
-            log.debug('unit is not leader. '
-                      'Skipping on_database_changed() handler')
             return
 
         if event.unit is None:
@@ -272,8 +257,6 @@ class GrafanaK8s(CharmBase):
         datastore.database is all we need for the change to be propagated
         to the pod spec."""
         if not self.unit.is_leader():
-            log.debug('unit is not leader. '
-                      'Skipping on_database_departed() handler')
             return
 
         # remove the existing database info from datastore
@@ -303,19 +286,17 @@ class GrafanaK8s(CharmBase):
         if self.has_peer:
             if self.has_db:
                 log.info('high availability possible.')
-                status = HA_READY_STATUS
+                status = MaintenanceStatus('Grafana ready for HA.')
             else:
                 log.warning('high availability not possible '
                             'with current configuration.')
-                status = HA_NOT_READY_STATUS
+                status = BlockedStatus('Need database relation for HA.')
         else:
             log.info('running Grafana on single node.')
-            status = SINGLE_NODE_STATUS
+            status = MaintenanceStatus('Grafana ready on single node.')
 
         # make sure we don't have a maintenance status overwrite
         # a currently active status
-        # *note* HA_READY_STATUS and SINGLE_NODE_STATUS are
-        # maintenance statuses
         if isinstance(status, MaintenanceStatus) \
                 and isinstance(self.unit.status, ActiveStatus):
             return status
@@ -498,7 +479,7 @@ class GrafanaK8s(CharmBase):
 
         # in the case where we have peers but no DB connection,
         # don't set the pod spec until it is resolved
-        if self.unit.status == HA_NOT_READY_STATUS:
+        if self.unit.status == BlockedStatus('Need database relation for HA.'):
             log.error('Application is in a blocked state. '
                       'Please resolve before pod spec can be set.')
             return
