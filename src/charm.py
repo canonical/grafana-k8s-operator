@@ -173,10 +173,9 @@ class GrafanaK8s(CharmBase):
 
         # set the first grafana-source as the default (needed for pod config)
         # if `self.datastore.sources` is currently empty, this is the first
+        datasource_fields['isDefault'] = 'false'
         if not dict(self.datastore.sources):
             datasource_fields['isDefault'] = 'true'
-        else:
-            datasource_fields['isDefault'] = 'false'
 
         # add unit name so the source can be removed might be a
         # duplicate of 'source-name', but this will guarantee lookup
