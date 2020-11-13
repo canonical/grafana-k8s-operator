@@ -2,7 +2,7 @@
 
 ## Description
 
-This is the Grafana charm for Kubernetes using the Operator Framework. It is under active development and should not yet be considered for production use.
+This is the Grafana charm for Kubernetes using the Operator Framework.
 
 ## Usage
 
@@ -44,7 +44,7 @@ This charm is written to support a high-availability Grafana cluster, but a data
 
 If HA is not required, there is no need to add a database relation.
 
-> NOTE: Consider HA to be in an alpha release.
+> NOTE: HA should not be considered for production use.
 
 ...
 
