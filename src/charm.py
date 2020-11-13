@@ -158,20 +158,18 @@ class GrafanaK8s(CharmBase):
             return
 
         # specifically handle optional fields if necessary
-        if datasource_fields['source-name'] is None:
-            datasource_fields['source-name'] = event.unit.name
-            log.warning("No human readable name provided for 'grafana-source' "
-                        "relation. Defaulting to unit name.")
+        # check if source-name was not passed or if we have already saved the provided name
+        if datasource_fields['source-name'] is None\
+                or datasource_fields['source-name'] in self.datastore.source_names:
+            default_source_name = '{}_{}'.format(
+                event.app.name,
+                event.relation.id
+            )
+            log.warning("No name 'grafana-source' or provided name is already in use. "
+                        "Using safe default: {}.".format(default_source_name))
+            datasource_fields['source-name'] = default_source_name
 
-        # check if this name already exists in the current datasources
-        # TODO: do we want to handle this or just throw an error?
-        #       we don't want to just block this unit, but I wonder if
-        #       an error will be handled properly
-        if datasource_fields['source-name'] in self.datastore.source_names:
-            log.error('name already taken by existing grafana-source')
-            return
-        else:
-            self.datastore.source_names.add(datasource_fields['source-name'])
+        self.datastore.source_names.add(datasource_fields['source-name'])
 
         # set the first grafana-source as the default (needed for pod config)
         # if `self.datastore.sources` is currently empty, this is the first
