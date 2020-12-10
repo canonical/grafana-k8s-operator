@@ -19,7 +19,7 @@ Deploy Grafana on its own:
 git clone git@github.com:canonical/grafana-operator.git
 cd grafana-operator
 charmcraft build
-juju deploy ./grafana.charm
+juju deploy ./grafana.charm --resource grafana-image=grafana/grafana:7.2.1
 ```
 
 View the dashboard in a browser:
