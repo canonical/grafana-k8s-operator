@@ -26,3 +26,6 @@ REQUIRED_DATABASE_FIELDS = {
 OPTIONAL_DATABASE_FIELDS = set()
 
 VALID_DATABASE_TYPES = {'mysql', 'postgres', 'sqlite3'}
+
+CONFIG_PATH = "/etc/grafana/grafana-config.ini"
+DATASOURCE_PATH = "/etc/grafana/provisioning"

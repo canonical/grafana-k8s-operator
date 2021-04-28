@@ -21,7 +21,6 @@ containers:
         mounts:
             - storage: database
               location: /var/lib/grafana
-
 provides:
     grafana-source:
         interface: grafana-datasource
