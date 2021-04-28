@@ -12,8 +12,16 @@ tags:
     - prometheus
     - monitoring
     - observability
-series:
-    - kubernetes
+bases:
+    - name: ubuntu
+      channel: 20.04/stable
+containers:
+    grafana:
+        resource: grafana-image
+        mounts:
+            - storage: database
+              location: /var/lib/grafana
+
 provides:
     grafana-source:
         interface: grafana-datasource
@@ -27,9 +35,8 @@ peers:
     grafana:
         interface: grafana-peers
 storage:
-    sqlitedb:
+    database:
         type: filesystem
-        location: /var/lib/grafana
 resources:
     grafana-image:
         type: oci-image

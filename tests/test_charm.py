@@ -61,7 +61,7 @@ class GrafanaCharmTest(unittest.TestCase):
                          dict(self.harness.charm.datastore.sources[rel_id]))
 
         # test that clearing the relation data leads to
-        # the datastore for this data source being cleared
+        # the _stored for this data source being cleared
         self.harness.update_relation_data(rel_id,
                                           'prometheus/0',
                                           {
@@ -156,11 +156,11 @@ class GrafanaCharmTest(unittest.TestCase):
         self.harness.update_relation_data(rel_id,
                                           'mysql/0',
                                           test_relation_data)
-        # check that charm datastore was properly set
+        # check that charm _stored was properly set
         self.assertEqual(dict(self.harness.charm.datastore.database),
                          test_relation_data)
 
-        # now depart this relation and ensure the datastore is emptied
+        # now depart this relation and ensure the _stored is emptied
         self.harness.charm.on.database_relation_broken.emit(rel)
         self.assertEqual({}, dict(self.harness.charm.datastore.database))
 
@@ -302,7 +302,7 @@ class GrafanaCharmTest(unittest.TestCase):
         [paths]
         provisioning = /etc/grafana/provisioning
 
-        [log]
+        [logger]
         mode = console
         level = {0}
         """).format(
@@ -335,7 +335,7 @@ class GrafanaCharmTest(unittest.TestCase):
 
     def test__access_sqlite_storage_location(self):
         expected_path = '/var/lib/grafana'
-        actual_path = self.harness.charm.meta.storages['sqlitedb'].location
+        actual_path = self.harness.charm.meta.storages['database'].location
         self.assertEqual(expected_path, actual_path)
 
     def test__config_ini_without_database(self):
@@ -344,7 +344,7 @@ class GrafanaCharmTest(unittest.TestCase):
         [paths]
         provisioning = /etc/grafana/provisioning
 
-        [log]
+        [logger]
         mode = console
         level = {0}
         """).format(
@@ -377,7 +377,7 @@ class GrafanaCharmTest(unittest.TestCase):
         [paths]
         provisioning = /etc/grafana/provisioning
 
-        [log]
+        [logger]
         mode = console
         level = {0}
 
@@ -449,7 +449,7 @@ class GrafanaCharmTest(unittest.TestCase):
         )
         self.assertEqual(2, len(self.harness.charm.datastore.sources))
 
-        # now remove the relation and ensure datastore source-name is removed
+        # now remove the relation and ensure _stored source-name is removed
         self.harness.charm.on.grafana_source_relation_broken.emit(p_rel)
         self.assertEqual(None, self.harness.charm.datastore.sources.get(p_rel_id))
         self.assertEqual(1, len(self.harness.charm.datastore.sources))
