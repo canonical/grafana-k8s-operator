@@ -287,7 +287,7 @@ class GrafanaCharm(CharmBase):
         data = StringIO()
         config_ini.write(data)
         data.close()
-        return data
+        return data.read()
 
     def _generate_database_config(self):
         db_config = self._stored.database
@@ -315,7 +315,7 @@ class GrafanaCharm(CharmBase):
         data = StringIO()
         config_ini.write(data)
         data.close()
-        return data
+        return data.read()
 
     #####################################
 
