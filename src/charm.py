@@ -21,7 +21,9 @@ from grafana_provider import MonitoringProvider
 
 logger = logging.getLogger()
 
+PEER = "grafana"
 SERVICE = "grafana"
+
 
 class GrafanaCharm(CharmBase):
     """Charm to run Grafana on Kubernetes.
@@ -42,7 +44,8 @@ class GrafanaCharm(CharmBase):
         # -- initialize states --
         self._stored.set_default(database=dict())  # db configuration
         self._stored.set_default(provider_ready=False)
-        self._stored.set_default(grafana_config_hash=None)
+        self._stored.set_default(grafana_config_ini_hash=None)
+        self._stored.set_default(grafana_datasources_hash=None)
 
         # -- standard hooks
         self.framework.observe(self.on.grafana_pebble_ready, self._on_config_changed)
@@ -51,7 +54,7 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.stop, self._on_stop)
 
         # -- grafana (peer) relation observations
-        self.framework.observe(self.on['grafana'].relation_changed,
+        self.framework.observe(self.on[PEER].relation_changed,
                                self.on_peer_changed)
         # self.framework.observe(self.on['grafana'].relation_departed,
         #                        self.on_peer_departed)
@@ -72,13 +75,11 @@ class GrafanaCharm(CharmBase):
                                    self._on_grafana_source_broken)
 
     def _on_grafana_source_changed(self, event):
-        self._update_datasource_config()
-        self._restart_grafana()
+        self._on_config_changed(event)
 
     def _on_grafana_source_broken(self, event):
         """When a grafana-source is removed, delete from the _stored."""
-        self._update_datasource_config()
-        self._restart_grafana()
+        self._on_config_changed(event)
 
     def _on_stop(self, _):
         """Go into maintenance state if the unit is stopped."""
@@ -86,7 +87,6 @@ class GrafanaCharm(CharmBase):
 
     def _on_config_changed(self, event):
         logger.info("Handling config change")
-        container = self.unit.get_container("grafana")
 
         missing_config = self._check_config()
         if missing_config:
@@ -100,13 +100,15 @@ class GrafanaCharm(CharmBase):
         config_ini_hash = str(hashlib.md5(str(grafana_config_ini).encode('utf-8')))
         if not self._stored.grafana_config_ini_hash == config_ini_hash:
             self._stored.grafana_config_ini_hash = config_ini_hash
+            self._update_grafana_config_ini(grafana_config_ini)
+            logger.info("Pushed new grafana base configuration")
 
         grafana_datasources = self._generate_datasource_config()
         datasources_hash = str(hashlib.md5(str(grafana_datasources).encode('utf-8')))
         if not self._stored.grafana_datasources_hash == datasources_hash:
             self._stored.grafana_datasources_hash = datasources_hash
-            self._update_datasource_config()
-            logger.info("Pushed new configuration")
+            self._update_datasource_config(grafana_datasources)
+            logger.info("Pushed new datasource configuration")
 
         self._restart_grafana()
 
@@ -140,7 +142,7 @@ class GrafanaCharm(CharmBase):
             source = {"orgId": 1, "name": name}
             datasources_dict["deleteDatasources"].append(source)
 
-        datasources_string  = yaml.dump(datasources_dict)
+        datasources_string = yaml.dump(datasources_dict)
 
         return datasources_string
 
@@ -154,9 +156,14 @@ class GrafanaCharm(CharmBase):
         container = self.unit.get_container(SERVICE)
 
         datasources_path = os.path.join(
-            grafana_config.PROVISIONING_PATH, "datasources", "datasources.yaml"
+            grafana_config.DATASOURCE_PATH, "datasources", "datasources.yaml"
         )
         container.push(datasources_path, config)
+
+    def _update_grafana_config_ini(self, config):
+        container = self.unit.get_container(SERVICE)
+
+        container.push(grafana_config.CONFIG_PATH, config)
 
     #####################################
 
@@ -280,6 +287,7 @@ class GrafanaCharm(CharmBase):
         data = StringIO()
         config_ini.write(data)
         data.close()
+        return data
 
     def _generate_database_config(self):
         db_config = self._stored.database
@@ -307,6 +315,7 @@ class GrafanaCharm(CharmBase):
         data = StringIO()
         config_ini.write(data)
         data.close()
+        return data
 
     #####################################
 
