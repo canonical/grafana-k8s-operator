@@ -12,11 +12,10 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus
-from ops.pebble import Layer
 
 import grafana_config
 from grafana_server import Grafana
-from grafana_provider import MonitoringProvider
+from grafana_provider import GrafanaProvider
 
 
 logger = logging.getLogger()
@@ -48,7 +47,7 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(grafana_datasources_hash=None)
 
         # -- standard hooks
-        self.framework.observe(self.on.grafana_pebble_ready, self._on_config_changed)
+        self.framework.observe(self.on.grafana_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.stop, self._on_stop)
@@ -67,18 +66,25 @@ class GrafanaCharm(CharmBase):
 
         # -- grafana-source relation observations
         if self._stored.provider_ready:
-            self.grafana_provider = MonitoringProvider(self,
-                                                       'monitoring', 'grafana', self.version)
-            self.framework.observe(self.grafana_provider.on.sources_changed,
+            logging.info("Watching ready provider")
+            self.grafana_provider = GrafanaProvider(self, 'grafana-source',
+                                                    'grafana', self.version)
+            self.framework.observe(self.grafana_provider.on.grafana_sources_changed,
                                    self._on_grafana_source_changed)
-            self.framework.observe(self.grafana_provider.on.sources_to_delete_changed,
+            self.framework.observe(self.grafana_provider.on.grafana_sources_to_delete_changed,
                                    self._on_grafana_source_broken)
 
+    def _on_pebble_ready(self, event):
+        logger.info("PEBBLE READY")
+        self._on_config_changed(event)
+
     def _on_grafana_source_changed(self, event):
+        logger.debug("Source changed")
         self._on_config_changed(event)
 
     def _on_grafana_source_broken(self, event):
         """When a grafana-source is removed, delete from the _stored."""
+        logger.debug("Source removed")
         self._on_config_changed(event)
 
     def _on_stop(self, _):
@@ -116,13 +122,15 @@ class GrafanaCharm(CharmBase):
         """Identify missing but required items in configuration
         :returns: list of missing configuration items (configuration keys)
         """
-        logger.debug('Checking Config')
+        logger.info('Checking Config')
         # config = self.model.config
 
         # This is a noop for now -- keeping for an example
         return []
 
     def _generate_datasource_config(self):
+        if not self._stored.provider_ready:
+            return ""
         datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
 
         for source_info in self.grafana_provider.sources():
@@ -158,11 +166,17 @@ class GrafanaCharm(CharmBase):
         datasources_path = os.path.join(
             grafana_config.DATASOURCE_PATH, "datasources", "datasources.yaml"
         )
+        logger.info("Pushing new datasources config to {}".format(container))
+        logger.info(datasources_path)
+        logger.info(config)
         container.push(datasources_path, config)
 
     def _update_grafana_config_ini(self, config):
         container = self.unit.get_container(SERVICE)
 
+        logger.info("Pushing new config to {}".format(container))
+        logger.info(grafana_config.CONFIG_PATH)
+        logger.info(config)
         container.push(grafana_config.CONFIG_PATH, config)
 
     #####################################
@@ -213,7 +227,7 @@ class GrafanaCharm(CharmBase):
         # TODO: setting spec shouldn't do anything now,
         #       but if we ever need to change config based peer units,
         #       we will want to make sure pebble is reconfigured
-        self.configure_pod()
+        self._restart_grafana()
 
     #####################################
 
@@ -286,8 +300,10 @@ class GrafanaCharm(CharmBase):
 
         data = StringIO()
         config_ini.write(data)
+        data.seek(0)
+        ret = data.read()
         data.close()
-        return data.read()
+        return ret
 
     def _generate_database_config(self):
         db_config = self._stored.database
@@ -314,8 +330,10 @@ class GrafanaCharm(CharmBase):
 
         data = StringIO()
         config_ini.write(data)
+        data.seek(0)
+        ret = data.read()
         data.close()
-        return data.read()
+        return ret
 
     #####################################
 
@@ -343,29 +361,27 @@ class GrafanaCharm(CharmBase):
     def _grafana_layer(self):
         """Construct the pebble layer
         """
-        logger.debug('Building pebble layer')
+        logger.info('Building pebble layer')
 
         charm_config = self.model.config
 
-        layer = Layer(
-            raw={
-                "summary": "grafana layer",
-                "description": "grafana layer",
-                "services": {
-                    "grafana": {
-                        "override": "replace",
-                        "summary": "grafana service",
-                        "command": "grafana-server -config {}".format(grafana_config.CONFIG_PATH),
-                        "startup": "enabled",
-                        "environment": {
-                            "GF_HTTP_PORT": charm_config["port"],
-                            "GF_LOG_LEVEL": charm_config["grafana_log_level"],
-                            "GF_PATHS_PROVISIONING": grafana_config.DATASOURCE_PATH,
-                        },
-                    }
-                },
-            }
-        )
+        layer = {
+            "summary": "grafana layer",
+            "description": "grafana layer",
+            "services": {
+                "grafana": {
+                    "override": "replace",
+                    "summary": "grafana service",
+                    "command": "grafana-server -config {}".format(grafana_config.CONFIG_PATH),
+                    "startup": "enabled",
+                    "environment": {
+                        "GF_HTTP_PORT": charm_config["port"],
+                        "GF_LOG_LEVEL": charm_config["grafana_log_level"],
+                        "GF_PATHS_PROVISIONING": grafana_config.DATASOURCE_PATH,
+                    },
+                }
+            },
+        }
 
         return layer
 
@@ -379,8 +395,9 @@ class GrafanaCharm(CharmBase):
         """Various health checks of the charm."""
         provided = {'grafana': self.version}
         if provided:
-            logger.debug("Grafana provider is available")
-            logger.debug("Providing : {}".format(provided))
+            logger.info("Grafana provider is available")
+            logger.info("Providing : {}".format(provided))
+            self.grafana_provider.ready()
             if not self._stored.provider_ready:
                 self._stored.provider_ready = True
         self._check_high_availability()

@@ -7,7 +7,7 @@ import grafana_config
 logger = logging.getLogger(__name__)
 
 
-class SourcesChanged(EventBase):
+class GrafanaSourcesChanged(EventBase):
     def __init__(self, handle, data=None):
         super().__init__(handle)
         self.data = data
@@ -19,12 +19,12 @@ class SourcesChanged(EventBase):
         self.data = snapshot["data"]
 
 
-class MonitoringEvents(CharmEvents):
-    sources_changed = EventSource(SourcesChanged)
+class GrafanaSourceEvents(CharmEvents):
+    sources_changed = EventSource(GrafanaSourcesChanged)
 
 
-class MonitoringProvider(ProviderBase):
-    on = MonitoringEvents()
+class GrafanaProvider(ProviderBase):
+    on = GrafanaSourceEvents()
     _stored = StoredState()
 
     def __init__(self, charm, name, service, version=None):
@@ -36,6 +36,8 @@ class MonitoringProvider(ProviderBase):
 
         events = self.charm.on[name]
 
+        self.framework.observe(events.relation_joined,
+                               self._on_grafana_source_relation_changed)
         self.framework.observe(events.relation_changed,
                                self._on_grafana_source_relation_changed)
         self.framework.observe(events.relation_broken,
@@ -58,8 +60,8 @@ class MonitoringProvider(ProviderBase):
         # using this as a more generic way of getting data source fields
         datasource_fields = {
             field: data[event.unit].get(field)
-            for field in grafana_config.REQUIRED_DATASOURCE_FIELDS |
-                         grafana_config.OPTIONAL_DATASOURCE_FIELDS
+            for field in
+            grafana_config.REQUIRED_DATASOURCE_FIELDS | grafana_config.OPTIONAL_DATASOURCE_FIELDS
         }
 
         missing_fields = [
@@ -110,7 +112,7 @@ class MonitoringProvider(ProviderBase):
         }
 
         self._stored.sources.update({rel_id: new_source_data})
-        self.on.sources_changed.emit()
+        self.on.grafana_sources_changed.emit()
 
     def _on_grafana_source_relation_broken(self, event):
         if not self.charm.unit.is_leader():
@@ -121,7 +123,7 @@ class MonitoringProvider(ProviderBase):
         self._remove_source_from_datastore(rel_id)
         try:
             self._remove_source_from_datastore(rel_id)
-            self.on.sources_changed.emit()
+            self.on.grafana_sources_changed.emit()
         except KeyError:
             logger.warning("Could not remove source for relation: {}".format(rel_id))
 
@@ -132,7 +134,7 @@ class MonitoringProvider(ProviderBase):
         try:
             removed_source = self._stored.sources.pop(rel_id, None)
             self._stored.sources_to_delete.add(removed_source["source-name"])
-            self.on.sources_to_delete_changed.emit()
+            self.on.grafana_sources_to_delete_changed.emit()
         except KeyError:
             logger.warning("Could not remove source for relation: {}".format(rel_id))
 

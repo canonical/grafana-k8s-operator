@@ -1,6 +1,9 @@
 import json
 import urllib3
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Grafana:
 
@@ -20,6 +23,8 @@ class Grafana:
             response = self.http.request("GET", url)
         except urllib3.exceptions.MaxRetryError:
             return {}
+
+        logger.info("Listening on port {}".format(self.port))
 
         info = json.loads(response.data.decode('utf-8'))
         if info["database"] == "ok":
