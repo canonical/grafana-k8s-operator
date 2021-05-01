@@ -3,6 +3,8 @@ from ops.charm import CharmEvents
 from ops.framework import StoredState, EventSource, EventBase
 from ops.relation import ProviderBase
 
+import pprint
+
 import grafana_config
 logger = logging.getLogger(__name__)
 
@@ -19,8 +21,21 @@ class GrafanaSourcesChanged(EventBase):
         self.data = snapshot["data"]
 
 
+class GrafanaSourcesToDeleteChanged(EventBase):
+    def __init__(self, handle, data=None):
+        super().__init__(handle)
+        self.data = data
+
+    def snapshot(self):
+        return {"data": self.data}
+
+    def restore(self, snapshot):
+        self.data = snapshot["data"]
+
+
 class GrafanaSourceEvents(CharmEvents):
-    sources_changed = EventSource(GrafanaSourcesChanged)
+    grafana_sources_changed = EventSource(GrafanaSourcesChanged)
+    grafana_sources_to_delete_changed = EventSource(GrafanaSourcesToDeleteChanged)
 
 
 class GrafanaProvider(ProviderBase):
@@ -36,8 +51,8 @@ class GrafanaProvider(ProviderBase):
 
         events = self.charm.on[name]
 
-        self.framework.observe(events.relation_joined,
-                               self._on_grafana_source_relation_changed)
+        # self.framework.observe(events.relation_joined,
+        #                        self._on_grafana_source_relation_changed)
         self.framework.observe(events.relation_changed,
                                self._on_grafana_source_relation_changed)
         self.framework.observe(events.relation_broken,
@@ -54,13 +69,15 @@ class GrafanaProvider(ProviderBase):
             return
 
         rel_id = event.relation.id
-        data = event.relation.data[event.app]
+        data = event.relation.data[event.unit]
+
+        for line in pprint.pformat(data).split('\n'):
+            logger.info(line)
 
         # dictionary of all the required/optional datasource field values
         # using this as a more generic way of getting data source fields
         datasource_fields = {
-            field: data[event.unit].get(field)
-            for field in
+            field: data.get(field) for field in
             grafana_config.REQUIRED_DATASOURCE_FIELDS | grafana_config.OPTIONAL_DATASOURCE_FIELDS
         }
 
@@ -70,13 +87,18 @@ class GrafanaProvider(ProviderBase):
             if datasource_fields.get(field) is None
         ]
 
+        logger.info("PARSED")
+        for line in pprint.pformat(datasource_fields).split('\n'):
+            logger.info(line)
+
         # check the relation data for missing required fields
         if len(missing_fields) > 0:
             logger.error(
                 "Missing required data fields for grafana-source "
                 "relation: {}".format(missing_fields)
             )
-            self._remove_source_from_datastore(event.relation.id)
+            if self._stored.sources.get(rel_id, None) is not None:
+                self._remove_source_from_datastore(rel_id)
             return
 
         # specifically handle optional fields if necessary

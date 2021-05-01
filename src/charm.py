@@ -11,7 +11,7 @@ from io import StringIO
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus
+from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus, WaitingStatus
 
 import grafana_config
 from grafana_server import Grafana
@@ -40,6 +40,8 @@ class GrafanaCharm(CharmBase):
         logger.debug('Initializing charm.')
         super().__init__(*args)
 
+        self.grafana = Grafana("localhost", str(self.model.config['port']))
+
         # -- initialize states --
         self._stored.set_default(database=dict())  # db configuration
         self._stored.set_default(provider_ready=False)
@@ -47,6 +49,7 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(grafana_datasources_hash=None)
 
         # -- standard hooks
+        self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.grafana_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
@@ -66,7 +69,6 @@ class GrafanaCharm(CharmBase):
 
         # -- grafana-source relation observations
         if self._stored.provider_ready:
-            logging.info("Watching ready provider")
             self.grafana_provider = GrafanaProvider(self, 'grafana-source',
                                                     'grafana', self.version)
             self.framework.observe(self.grafana_provider.on.grafana_sources_changed,
@@ -79,17 +81,44 @@ class GrafanaCharm(CharmBase):
         self._on_config_changed(event)
 
     def _on_grafana_source_changed(self, event):
+        """When a grafana-source is added or modified, update the config"""
+
         logger.debug("Source changed")
+        if not self.grafana.is_ready():
+            event.defer()
         self._on_config_changed(event)
 
     def _on_grafana_source_broken(self, event):
-        """When a grafana-source is removed, delete from the _stored."""
+        """When a grafana-source is removed, update the config"""
+
         logger.debug("Source removed")
+        if not self.grafana.is_ready():
+            event.defer()
         self._on_config_changed(event)
+
+    def _on_start(self, event):
+        """Start Grafana
+
+        This event handler is deferred if starting Grafana
+        fails so we wait until it's ready
+        """
+
+        if not self.unit.is_leader():
+            return
+
+        if not self.grafana.is_ready():
+            status_message = "Waiting for Grafana"
+            self.unit.status = WaitingStatus(status_message)
+            logger.debug(status_message)
+            event.defer()
+            return
+
+        self._on_update_status(event)
+        self.unit.status = ActiveStatus()
 
     def _on_stop(self, _):
         """Go into maintenance state if the unit is stopped."""
-        self.unit.status = MaintenanceStatus('Pod is terminating.')
+        self.unit.status = MaintenanceStatus('Application is terminating.')
 
     def _on_config_changed(self, event):
         logger.info("Handling config change")
@@ -103,16 +132,22 @@ class GrafanaCharm(CharmBase):
             return
 
         grafana_config_ini = self._generate_grafana_config()
-        config_ini_hash = str(hashlib.md5(str(grafana_config_ini).encode('utf-8')))
+        config_ini_hash = hashlib.md5(str(grafana_config_ini).encode('utf-8')).hexdigest()
+        logger.info("config_ini_hash: {}".format(config_ini_hash))
         if not self._stored.grafana_config_ini_hash == config_ini_hash:
+            logger.info("_stored config_ini_hash is {}".format(self._stored.grafana_config_ini_hash))
             self._stored.grafana_config_ini_hash = config_ini_hash
+            logger.info("_stored config_ini_hash is {}".format(self._stored.grafana_config_ini_hash))
             self._update_grafana_config_ini(grafana_config_ini)
             logger.info("Pushed new grafana base configuration")
 
         grafana_datasources = self._generate_datasource_config()
-        datasources_hash = str(hashlib.md5(str(grafana_datasources).encode('utf-8')))
+        datasources_hash = hashlib.md5(str(grafana_datasources).encode('utf-8')).hexdigest()
+        logger.info("datasource_hash: {}".format(datasources_hash))
         if not self._stored.grafana_datasources_hash == datasources_hash:
+            logger.info("_stored datasource_hash: {}".format(self._stored.grafana_datasources_hash))
             self._stored.grafana_datasources_hash = datasources_hash
+            logger.info("_stored datasource_hash: {}".format(self._stored.grafana_datasources_hash))
             self._update_datasource_config(grafana_datasources)
             logger.info("Pushed new datasource configuration")
 
@@ -393,35 +428,40 @@ class GrafanaCharm(CharmBase):
 
     def _on_update_status(self, _):
         """Various health checks of the charm."""
+        if not self.unit.is_leader():
+            self.unit.status = ActiveStatus()
+            return
+
+        if not self.grafana.is_ready():
+            status_message = "Grafana is not ready yet"
+            self.unit.status = WaitingStatus(status_message)
+            return
+
         provided = {'grafana': self.version}
-        if provided:
-            logger.info("Grafana provider is available")
-            logger.info("Providing : {}".format(provided))
-            self.grafana_provider.ready()
-            if not self._stored.provider_ready:
-                self._stored.provider_ready = True
-        self._check_high_availability()
+        logger.info("Grafana provider is available")
+        logger.info("Providing : {}".format(provided))
+        if not self._stored.provider_ready:
+            # self.grafana_provider.ready()
+            self._stored.provider_ready = True
+            self.grafana_provider = GrafanaProvider(self, 'grafana-source',
+                                                    'grafana', self.version)
+            self.framework.observe(self.grafana_provider.on.grafana_sources_changed,
+                                   self._on_grafana_source_changed)
+            self.framework.observe(self.grafana_provider.on.grafana_sources_to_delete_changed,
+                                   self._on_grafana_source_broken)
+
+        # self._check_high_availability()
+        self.unit.status = ActiveStatus()
+
 
     @property
     def version(self):
         """Grafana version."""
         grafana = Grafana("localhost", str(self.model.config['port']))
-        info = grafana.build_info()
+        info = self.grafana.build_info
         if info:
             return info.get('version', None)
         return None
-
-    @property
-    def provides(self):
-        grafana = Grafana("localhost", str(self.model.config['port']))
-        info = grafana.build_info()
-        if info:
-            provided = {
-                'provides': {'grafana': info['version']}
-            }
-        else:
-            provided = {}
-        return provided
 
 
 if __name__ == '__main__':

@@ -5,7 +5,6 @@ from ops.relation import ConsumerBase
 LIBID = "1234"
 LIBAPI = 1
 LIBPATCH = 0
-logger = logging.getLogger(__name__)
 
 
 class GrafanaConsumer(ConsumerBase):
@@ -24,6 +23,8 @@ class GrafanaConsumer(ConsumerBase):
 
         self.framework.observe(events.relation_joined,
                                self._update_grafana_sources)
+        # self.framework.observe(events.relation_broken,
+        #                        self._on_grafana_source_relation_broken)
 
     def add_source(self, source, rel_id=None):
         if rel_id is None:
