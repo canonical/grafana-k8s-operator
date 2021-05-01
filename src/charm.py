@@ -169,6 +169,8 @@ class GrafanaCharm(CharmBase):
         datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
 
         for source_info in self.grafana_provider.sources():
+            logger.info("SOURCE INFO")
+            logger.info(source_info)
             source = {
                 "orgId": "1",
                 "access": "proxy",
@@ -384,10 +386,10 @@ class GrafanaCharm(CharmBase):
         if plan.services != layer["services"]:
             container.add_layer("grafana", layer, combine=True)
 
-            if container.get_service("grafana").is_running():
-                container.stop("grafana")
+            if container.get_service(SERVICE).is_running():
+                container.stop(SERVICE)
 
-            container.start("grafana")
+            container.start(SERVICE)
             logger.info("Restarted grafana container")
 
         self.app.status = ActiveStatus()
@@ -441,7 +443,6 @@ class GrafanaCharm(CharmBase):
         logger.info("Grafana provider is available")
         logger.info("Providing : {}".format(provided))
         if not self._stored.provider_ready:
-            # self.grafana_provider.ready()
             self._stored.provider_ready = True
             self.grafana_provider = GrafanaProvider(self, 'grafana-source',
                                                     'grafana', self.version)
@@ -449,6 +450,7 @@ class GrafanaCharm(CharmBase):
                                    self._on_grafana_source_changed)
             self.framework.observe(self.grafana_provider.on.grafana_sources_to_delete_changed,
                                    self._on_grafana_source_broken)
+            self.grafana_provider.ready()
 
         # self._check_high_availability()
         self.unit.status = ActiveStatus()

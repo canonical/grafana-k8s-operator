@@ -3,7 +3,7 @@ from ops.charm import CharmEvents
 from ops.framework import StoredState, EventSource, EventBase
 from ops.relation import ProviderBase
 
-import pprint
+# import pprint
 
 import grafana_config
 logger = logging.getLogger(__name__)
@@ -51,8 +51,6 @@ class GrafanaProvider(ProviderBase):
 
         events = self.charm.on[name]
 
-        # self.framework.observe(events.relation_joined,
-        #                        self._on_grafana_source_relation_changed)
         self.framework.observe(events.relation_changed,
                                self._on_grafana_source_relation_changed)
         self.framework.observe(events.relation_broken,
@@ -71,9 +69,6 @@ class GrafanaProvider(ProviderBase):
         rel_id = event.relation.id
         data = event.relation.data[event.unit]
 
-        for line in pprint.pformat(data).split('\n'):
-            logger.info(line)
-
         # dictionary of all the required/optional datasource field values
         # using this as a more generic way of getting data source fields
         datasource_fields = {
@@ -81,15 +76,16 @@ class GrafanaProvider(ProviderBase):
             grafana_config.REQUIRED_DATASOURCE_FIELDS | grafana_config.OPTIONAL_DATASOURCE_FIELDS
         }
 
+        # This should NOT be so hard to get, but private-address no longer appears to be part
+        # of the default event data. Maybe a framework bug?
+        datasource_fields['private-address'] = \
+            str(self.model.get_binding(event.relation.name).network.bind_address)
+
         missing_fields = [
             field
             for field in grafana_config.REQUIRED_DATASOURCE_FIELDS
             if datasource_fields.get(field) is None
         ]
-
-        logger.info("PARSED")
-        for line in pprint.pformat(datasource_fields).split('\n'):
-            logger.info(line)
 
         # check the relation data for missing required fields
         if len(missing_fields) > 0:
@@ -113,8 +109,6 @@ class GrafanaProvider(ProviderBase):
                 "Using safe default: {}.".format(default_source_name)
             )
             datasource_fields["source-name"] = default_source_name
-
-        self._stored.source_names.add(datasource_fields["source-name"])
 
         # set the first grafana-source as the default (needed for pod config)
         # if `self._stored.sources` is currently empty, this is the first
@@ -165,7 +159,7 @@ class GrafanaProvider(ProviderBase):
 
     def sources(self):
         sources = []
-        for source in self._stored.sources:
+        for source in self._stored.sources.values():
             sources.append(source)
 
         return sources
