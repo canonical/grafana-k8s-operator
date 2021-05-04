@@ -1,10 +1,12 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import base64
 import configparser
 import logging
 import hashlib
 import os
+import uuid
 import yaml
 
 from io import StringIO
@@ -67,6 +69,11 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on['database'].relation_broken,
                                self.on_database_broken)
 
+        # -- actions observations
+        self.framework.observe(
+            self.on.import_dashboard_action, self.on_import_dashboard_action
+        )
+
         # -- grafana-source relation observations
         if self._stored.provider_ready:
             self.grafana_provider = GrafanaProvider(self, 'grafana-source',
@@ -123,6 +130,8 @@ class GrafanaCharm(CharmBase):
     def _on_config_changed(self, event):
         logger.info("Handling config change")
 
+        restart = False
+
         missing_config = self._check_config()
         if missing_config:
             logger.error('Incomplete Configuration: {}. '
@@ -141,6 +150,8 @@ class GrafanaCharm(CharmBase):
             self._update_grafana_config_ini(grafana_config_ini)
             logger.info("Pushed new grafana base configuration")
 
+            restart = True
+
         grafana_datasources = self._generate_datasource_config()
         datasources_hash = hashlib.md5(str(grafana_datasources).encode('utf-8')).hexdigest()
         logger.info("datasource_hash: {}".format(datasources_hash))
@@ -151,7 +162,10 @@ class GrafanaCharm(CharmBase):
             self._update_datasource_config(grafana_datasources)
             logger.info("Pushed new datasource configuration")
 
-        self._restart_grafana()
+            restart = True
+
+        if restart:
+            self._restart_grafana()
 
     def _check_config(self):
         """Identify missing but required items in configuration
@@ -266,6 +280,55 @@ class GrafanaCharm(CharmBase):
         #       we will want to make sure pebble is reconfigured
         self._restart_grafana()
 
+    ############################
+    # DASHBOARD IMPORT
+    ###########################
+    def _init_dashboard_provisioning(self, dashboard_path):
+        container = self.unit.get_container(SERVICE)
+
+        dashboard_config = {
+            "apiVersion": 1,
+            "providers": [
+                {
+                    "name": "Default",
+                    "type": "file",
+                    "options": {"path": dashboard_path},
+                }
+            ],
+        }
+
+        default_config = os.path.join(dashboard_path, "default.yaml")
+        default_config_string = yaml.dump(dashboard_config)
+
+        if not os.path.exists(dashboard_path):
+            logger.info("Creating the initial Dashboards config")
+            container.push(default_config, default_config_string, make_dirs=True)
+        else:
+            logger.info("Dashboards config already exists. Skipping")
+
+    def on_import_dashboard_action(self, event):
+        container = self.unit.get_container(SERVICE)
+        dashboard_base64_string = event.params["dashboard"]
+
+        dashboard_path = os.path.join(
+            grafana_config.DATASOURCE_PATH, "dashboards")
+
+        name = "{}.json".format(uuid.uuid4())
+
+        self._init_dashboard_provisioning(dashboard_path)
+        imported_dashboard_path = os.path.join(dashboard_path, name)
+
+        logger.info(
+            "Newly created dashboard will be saved at: {}".format(dashboard_path)
+        )
+
+        imported_dashboard_string = base64.b64decode(dashboard_base64_string).decode("ascii")
+
+        container.push(imported_dashboard_path,
+                       imported_dashboard_string, make_dirs=True)
+
+        self._restart_grafana()
+
     #####################################
 
     # DATABASE EVENTS
@@ -333,14 +396,7 @@ class GrafanaCharm(CharmBase):
         self._on_config_changed(event)
 
     def _generate_init_database_config(self):
-        config_ini = configparser.ConfigParser()
-
-        data = StringIO()
-        config_ini.write(data)
-        data.seek(0)
-        ret = data.read()
-        data.close()
-        return ret
+        return ""
 
     def _generate_database_config(self):
         db_config = self._stored.database
@@ -455,11 +511,9 @@ class GrafanaCharm(CharmBase):
         # self._check_high_availability()
         self.unit.status = ActiveStatus()
 
-
     @property
     def version(self):
         """Grafana version."""
-        grafana = Grafana("localhost", str(self.model.config['port']))
         info = self.grafana.build_info
         if info:
             return info.get('version', None)
