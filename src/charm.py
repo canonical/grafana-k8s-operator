@@ -18,6 +18,7 @@ from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus, WaitingSta
 import grafana_config
 from grafana_server import Grafana
 from grafana_provider import GrafanaProvider
+from lib.charms.ingress.v0.ingress import IngressRequires
 
 
 logger = logging.getLogger()
@@ -74,6 +75,15 @@ class GrafanaCharm(CharmBase):
             self.on.import_dashboard_action, self.on_import_dashboard_action
         )
 
+        self.ingress = IngressRequires(
+            self,
+            {
+                "service-hostname": self.config["external_hostname"],
+                "service-name": self.app.name,
+                "service-port": self.model.config["port"],
+            },
+        )
+
         # -- grafana-source relation observations
         if self._stored.provider_ready:
             self.grafana_provider = GrafanaProvider(self, 'grafana-source',
@@ -93,6 +103,7 @@ class GrafanaCharm(CharmBase):
         logger.debug("Source changed")
         if not self.grafana.is_ready():
             event.defer()
+
         self._on_config_changed(event)
 
     def _on_grafana_source_broken(self, event):
@@ -101,6 +112,7 @@ class GrafanaCharm(CharmBase):
         logger.debug("Source removed")
         if not self.grafana.is_ready():
             event.defer()
+
         self._on_config_changed(event)
 
     def _on_start(self, event):
@@ -117,8 +129,6 @@ class GrafanaCharm(CharmBase):
             status_message = "Waiting for Grafana"
             self.unit.status = WaitingStatus(status_message)
             logger.debug(status_message)
-            event.defer()
-            return
 
         self._on_update_status(event)
         self.unit.status = ActiveStatus()
@@ -129,6 +139,12 @@ class GrafanaCharm(CharmBase):
 
     def _on_config_changed(self, event):
         logger.info("Handling config change")
+        self.ingress.update_config(
+            {
+                "service-hostname": self.config["external_hostname"],
+                "service-port": self.model.config["port"],
+            }
+        )
 
         restart = False
 
