@@ -90,7 +90,8 @@ class IngressRequires(Object):
         """Check our config dict for errors."""
         block_status = False
         unknown = [
-            x for x in self.config_dict if x not in REQUIRED_INGRESS_RELATION_FIELDS | OPTIONAL_INGRESS_RELATION_FIELDS
+            x for x in self.config_dict if x not in
+            REQUIRED_INGRESS_RELATION_FIELDS | OPTIONAL_INGRESS_RELATION_FIELDS
         ]
         if unknown:
             logger.error("Unknown key(s) in config dictionary found: %s", ", ".join(unknown))
@@ -98,10 +99,12 @@ class IngressRequires(Object):
         if not update_only:
             missing = [x for x in REQUIRED_INGRESS_RELATION_FIELDS if x not in self.config_dict]
             if missing:
-                logger.error("Missing required key(s) in config dictionary: %s", ", ".join(missing))
+                logger.error("Missing required key(s) in config dictionary: %s",
+                             ", ".join(missing))
                 block_status = True
         if block_status:
-            self.model.unit.status = BlockedStatus("Error in ingress relation, check `juju debug-log`")
+            self.model.unit.status = BlockedStatus(
+                "Error in ingress relation, check `juju debug-log`")
             return True
         return False
 
@@ -150,16 +153,20 @@ class IngressProvides(Object):
 
         ingress_data = {
             field: event.relation.data[event.app].get(field)
-            for field in REQUIRED_INGRESS_RELATION_FIELDS | OPTIONAL_INGRESS_RELATION_FIELDS
+            for field in REQUIRED_INGRESS_RELATION_FIELDS
+            | OPTIONAL_INGRESS_RELATION_FIELDS
         }
 
         missing_fields = sorted(
-            [field for field in REQUIRED_INGRESS_RELATION_FIELDS if ingress_data.get(field) is None]
+            [field for field in REQUIRED_INGRESS_RELATION_FIELDS
+             if ingress_data.get(field) is None]
         )
 
         if missing_fields:
-            logger.error("Missing required data fields for ingress relation: {}".format(", ".join(missing_fields)))
-            self.model.unit.status = BlockedStatus("Missing fields for ingress: {}".format(", ".join(missing_fields)))
+            logger.error("Missing required data fields for ingress relation: {}".format(
+                ", ".join(missing_fields)))
+            self.model.unit.status = BlockedStatus("Missing fields for ingress: {}".format(
+                ", ".join(missing_fields)))
 
         # Create an event that our charm can use to decide it's okay to
         # configure the ingress.

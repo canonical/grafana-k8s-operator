@@ -1,0 +1,7 @@
+import-dashboard:
+  description: Imports a Grafana Dashboard
+  params:
+    dashboard:
+      type: string
+      description: Base64 encoded string containing with Dashboard JSON (base64 dashboard.json)
+  required: [dashboard]

@@ -23,7 +23,7 @@ from lib.charms.grafana.v1.grafana import GrafanaSourceProvider
 
 logger = logging.getLogger()
 
-PEER = "grafana_peers"
+PEER = "grafana"
 SERVICE = "grafana"
 
 
@@ -157,7 +157,6 @@ class GrafanaCharm(CharmBase):
             datasources_dict["deleteDatasources"].append(source)
 
         datasources_string = yaml.dump(datasources_dict)
-
         return datasources_string
 
     def generate_grafana_config(self):
@@ -167,7 +166,7 @@ class GrafanaCharm(CharmBase):
         container = self.unit.get_container(SERVICE)
 
         datasources_path = os.path.join(
-            config.DATASOURCE_PATH, "datasources", "datasources.yaml"
+            grafana_config.DATASOURCE_PATH, "datasources", "datasources.yaml"
         )
         container.push(datasources_path, config)
 
