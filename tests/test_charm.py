@@ -31,6 +31,30 @@ BASIC_DATASOURCES = [
 ]
 
 
+def datasource_config(config):
+    config_yaml = config[1]
+    config_dict = yaml.safe_load(config_yaml)
+    return config_dict
+
+
+def global_config(config):
+    config_yaml = config[1]
+    config_dict = yaml.safe_load(config_yaml)
+    return config_dict['global']
+
+
+def cli_arg(plan, cli_opt):
+    plan_dict = plan.to_dict()
+    args = plan_dict["services"]["grafana"]["command"].split()
+    for arg in args:
+        opt_list = arg.split('=')
+        if len(opt_list) == 2 and opt_list[0] == cli_opt:
+            return opt_list[1]
+        if len(opt_list) == 1 and opt_list[0] == cli_opt:
+            return opt_list[0]
+    return None
+
+
 class TestCharm(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(GrafanaCharm)
@@ -94,27 +118,3 @@ class TestCharm(unittest.TestCase):
                          [])
         self.assertEqual(datasource_config(config).get('deleteDatasources'),
                          [{'name': 'prometheus_0', 'orgId': 1}])
-
-
-def datasource_config(config):
-    config_yaml = config[1]
-    config_dict = yaml.safe_load(config_yaml)
-    return config_dict
-
-
-def global_config(config):
-    config_yaml = config[1]
-    config_dict = yaml.safe_load(config_yaml)
-    return config_dict['global']
-
-
-def cli_arg(plan, cli_opt):
-    plan_dict = plan.to_dict()
-    args = plan_dict["services"]["grafana"]["command"].split()
-    for arg in args:
-        opt_list = arg.split('=')
-        if len(opt_list) == 2 and opt_list[0] == cli_opt:
-            return opt_list[1]
-        if len(opt_list) == 1 and opt_list[0] == cli_opt:
-            return opt_list[0]
-    return None

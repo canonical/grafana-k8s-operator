@@ -8,12 +8,7 @@ import unittest
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana.v1.grafana import (
-    GrafanaSourceProvider
-)
-from lib.charms.grafana.v1.relation import (
-    ProviderBase
-)
+from charm import GrafanaSourceProvider
 
 
 class GrafanaCharm(CharmBase):

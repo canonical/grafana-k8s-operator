@@ -16,9 +16,9 @@ from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus, WaitingStatus
 
 from grafana_server import Grafana
-from lib.charms.grafana.v1 import config as grafana_config
-from lib.charms.grafana.v1.grafana import GrafanaSourceProvider
-# from lib.charms.ingress.v0.ingress import IngressRequires
+import config as grafana_config
+from grafana_provider import GrafanaSourceProvider
+from lib.charms.ingress.v0.ingress import IngressRequires
 
 
 logger = logging.getLogger()
@@ -46,6 +46,7 @@ class GrafanaCharm(CharmBase):
         self.grafana = Grafana("localhost", str(self.model.config['port']))
 
         # -- initialize states --
+        self.ingress = None
         self._stored.set_default(database=dict())  # db configuration
         self._stored.set_default(provider_ready=False)
         self._stored.set_default(grafana_config_ini_hash=None)
@@ -71,6 +72,10 @@ class GrafanaCharm(CharmBase):
         # -- actions observations
         self.framework.observe(
             self.on.import_dashboard_action, self.on_import_dashboard_action
+        )
+
+        self.framework.observe(
+            self.on.add_ingress_action, self.on_add_ingress_action
         )
 
         # -- grafana-source relation observations
@@ -258,6 +263,16 @@ class GrafanaCharm(CharmBase):
                        imported_dashboard_string, make_dirs=True)
 
         self.restart_grafana()
+
+    def on_add_ingress_action(self, event):
+        self.ingress = IngressRequires(
+            self,
+            {
+                "service-hostname": event.params["external_hostname"],
+                "service-name": self.app.name,
+                "service-port": self.model.config["port"],
+            },
+        )
 
     #####################################
 

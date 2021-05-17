@@ -5,3 +5,13 @@ import-dashboard:
       type: string
       description: Base64 encoded string containing with Dashboard JSON (base64 dashboard.json)
   required: [dashboard]
+
+add-ingress:
+  description: Adds an Ingress route
+  params:
+    external_hostname:
+      type: string
+      description: >
+        External hostname this grafana app should respond to (required).
+      default: 'grafana.internal'
+  required: [external_hostname]
