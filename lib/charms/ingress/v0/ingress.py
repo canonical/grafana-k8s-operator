@@ -82,7 +82,9 @@ class IngressRequires(Object):
     def __init__(self, charm, config_dict):
         super().__init__(charm, "ingress")
 
-        self.framework.observe(charm.on["ingress"].relation_changed, self._on_relation_changed)
+        self.framework.observe(
+            charm.on["ingress"].relation_changed, self._on_relation_changed
+        )
 
         self.config_dict = config_dict
 
@@ -90,21 +92,30 @@ class IngressRequires(Object):
         """Check our config dict for errors."""
         block_status = False
         unknown = [
-            x for x in self.config_dict if x not in
-            REQUIRED_INGRESS_RELATION_FIELDS | OPTIONAL_INGRESS_RELATION_FIELDS
+            x
+            for x in self.config_dict
+            if x
+            not in REQUIRED_INGRESS_RELATION_FIELDS | OPTIONAL_INGRESS_RELATION_FIELDS
         ]
         if unknown:
-            logger.error("Unknown key(s) in config dictionary found: %s", ", ".join(unknown))
+            logger.error(
+                "Unknown key(s) in config dictionary found: %s", ", ".join(unknown)
+            )
             block_status = True
         if not update_only:
-            missing = [x for x in REQUIRED_INGRESS_RELATION_FIELDS if x not in self.config_dict]
+            missing = [
+                x for x in REQUIRED_INGRESS_RELATION_FIELDS if x not in self.config_dict
+            ]
             if missing:
-                logger.error("Missing required key(s) in config dictionary: %s",
-                             ", ".join(missing))
+                logger.error(
+                    "Missing required key(s) in config dictionary: %s",
+                    ", ".join(missing),
+                )
                 block_status = True
         if block_status:
             self.model.unit.status = BlockedStatus(
-                "Error in ingress relation, check `juju debug-log`")
+                "Error in ingress relation, check `juju debug-log`"
+            )
             return True
         return False
 
@@ -140,7 +151,9 @@ class IngressProvides(Object):
         super().__init__(charm, "ingress")
         # Observe the relation-changed hook event and bind
         # self.on_relation_changed() to handle the event.
-        self.framework.observe(charm.on["ingress"].relation_changed, self._on_relation_changed)
+        self.framework.observe(
+            charm.on["ingress"].relation_changed, self._on_relation_changed
+        )
         self.charm = charm
 
     def _on_relation_changed(self, event):
@@ -158,15 +171,22 @@ class IngressProvides(Object):
         }
 
         missing_fields = sorted(
-            [field for field in REQUIRED_INGRESS_RELATION_FIELDS
-             if ingress_data.get(field) is None]
+            [
+                field
+                for field in REQUIRED_INGRESS_RELATION_FIELDS
+                if ingress_data.get(field) is None
+            ]
         )
 
         if missing_fields:
-            logger.error("Missing required data fields for ingress relation: {}".format(
-                ", ".join(missing_fields)))
-            self.model.unit.status = BlockedStatus("Missing fields for ingress: {}".format(
-                ", ".join(missing_fields)))
+            logger.error(
+                "Missing required data fields for ingress relation: {}".format(
+                    ", ".join(missing_fields)
+                )
+            )
+            self.model.unit.status = BlockedStatus(
+                "Missing fields for ingress: {}".format(", ".join(missing_fields))
+            )
 
         # Create an event that our charm can use to decide it's okay to
         # configure the ingress.

@@ -19,12 +19,16 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(source_events=0)  # available data sources
         self._stored.set_default(source_delete_events=0)
 
-        self.grafana_provider = GrafanaSourceProvider(self, "grafana-source",
-                                                      "grafana", self.version)
-        self.framework.observe(self.grafana_provider.on.grafana_sources_changed,
-                               self.source_events)
-        self.framework.observe(self.grafana_provider.on.grafana_sources_to_delete_changed,
-                               self.source_delete_events)
+        self.grafana_provider = GrafanaSourceProvider(
+            self, "grafana-source", "grafana", self.version
+        )
+        self.framework.observe(
+            self.grafana_provider.on.grafana_sources_changed, self.source_events
+        )
+        self.framework.observe(
+            self.grafana_provider.on.grafana_sources_to_delete_changed,
+            self.source_delete_events,
+        )
 
     def source_events(self, _):
         self._stored.source_events += 1
@@ -51,18 +55,18 @@ class TestProvider(unittest.TestCase):
         source_data = {
             "private-address": "1.1.1.1",
             "port": 1234,
-            "source-type": "prometheus"
+            "source-type": "prometheus",
         }
-        self.harness.update_relation_data(rel_id, "prometheus", {
-            "sources": json.dumps(source_data)
-        })
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"sources": json.dumps(source_data)}
+        )
 
         completed_data = {
             "private-address": "1.1.1.1",
             "port": 1234,
             "source-type": "prometheus",
             "source-name": f"prometheus_{rel_id}",
-            "isDefault": "true"
+            "isDefault": "true",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id]
 
@@ -74,13 +78,10 @@ class TestProvider(unittest.TestCase):
         self.assertEqual(len(self.harness.charm.grafana_provider._stored.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
-        source_data = {
-            "port": 1234,
-            "source-type": "prometheus"
-        }
-        self.harness.update_relation_data(rel_id, "prometheus", {
-            "sources": json.dumps(source_data)
-        })
+        source_data = {"port": 1234, "source-type": "prometheus"}
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"sources": json.dumps(source_data)}
+        )
 
         with pytest.raises(KeyError):
             self.harness.charm.grafana_provider._stored.sources[rel_id]
@@ -94,11 +95,11 @@ class TestProvider(unittest.TestCase):
         source_data = {
             "private-address": "1.1.1.1",
             "port": 1234,
-            "source-type": "prometheus"
+            "source-type": "prometheus",
         }
-        self.harness.update_relation_data(rel_id, "prometheus", {
-            "sources": json.dumps(source_data)
-        })
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"sources": json.dumps(source_data)}
+        )
 
         with pytest.raises(KeyError):
             self.harness.charm.grafana_provider._stored.sources[rel_id]
@@ -109,9 +110,7 @@ class TestProvider(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.source_events, 0)
 
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
-        self.harness.update_relation_data(rel_id, "prometheus", {
-            "sources": "{}"
-        })
+        self.harness.update_relation_data(rel_id, "prometheus", {"sources": "{}"})
 
         with pytest.raises(KeyError):
             self.harness.charm.grafana_provider._stored.sources[rel_id]
@@ -125,18 +124,18 @@ class TestProvider(unittest.TestCase):
             "private-address": "1.1.1.1",
             "port": 1234,
             "source-type": "tester",
-            "source-name": "test-source"
+            "source-name": "test-source",
         }
-        self.harness.update_relation_data(rel_id, "tester", {
-            "sources": json.dumps(source_data)
-        })
+        self.harness.update_relation_data(
+            rel_id, "tester", {"sources": json.dumps(source_data)}
+        )
 
         completed_data = {
             "private-address": "1.1.1.1",
             "port": 1234,
             "source-type": "tester",
             "source-name": "test-source",
-            "isDefault": "true"
+            "isDefault": "true",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id]
         self.assertIsNotNone(sources)
@@ -151,20 +150,20 @@ class TestProvider(unittest.TestCase):
             "private-address": "1.1.1.1",
             "port": 1234,
             "source-type": "tester",
-            "source-name": "test-source"
+            "source-name": "test-source",
         }
-        self.harness.update_relation_data(rel_id, "tester", {
-            "sources": json.dumps(source_data)
-        })
+        self.harness.update_relation_data(
+            rel_id, "tester", {"sources": json.dumps(source_data)}
+        )
         self.assertEqual(self.harness.charm._stored.source_events, 1)
 
         bad_source_data = {
             "port": 1234,
             "source-type": "tester",
         }
-        self.harness.update_relation_data(rel_id, "tester", {
-            "sources": json.dumps(bad_source_data)
-        })
+        self.harness.update_relation_data(
+            rel_id, "tester", {"sources": json.dumps(bad_source_data)}
+        )
         self.assertEqual(self.harness.charm._stored.source_delete_events, 1)
 
     def test_provider_handles_multiple_relations(self):
@@ -174,18 +173,18 @@ class TestProvider(unittest.TestCase):
         source_data = {
             "private-address": "1.1.1.1",
             "port": 1234,
-            "source-type": "prometheus"
+            "source-type": "prometheus",
         }
-        self.harness.update_relation_data(rel_id, "prometheus", {
-            "sources": json.dumps(source_data)
-        })
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"sources": json.dumps(source_data)}
+        )
 
         completed_data = {
             "private-address": "1.1.1.1",
             "port": 1234,
             "source-type": "prometheus",
             "source-name": f"prometheus_{rel_id}",
-            "isDefault": "true"
+            "isDefault": "true",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id]
         self.assertIsNotNone(sources)
@@ -197,18 +196,18 @@ class TestProvider(unittest.TestCase):
         source_data = {
             "private-address": "2.2.2.2",
             "port": 1234,
-            "source-type": "other-source"
+            "source-type": "other-source",
         }
-        self.harness.update_relation_data(rel_id, "other-source", {
-            "sources": json.dumps(source_data)
-        })
+        self.harness.update_relation_data(
+            rel_id, "other-source", {"sources": json.dumps(source_data)}
+        )
 
         completed_data = {
             "private-address": "2.2.2.2",
             "port": 1234,
             "source-type": "other-source",
             "source-name": f"other-source_{rel_id}",
-            "isDefault": "false"
+            "isDefault": "false",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id]
         self.assertIsNotNone(sources)
@@ -224,18 +223,18 @@ class TestProvider(unittest.TestCase):
         source_data = {
             "private-address": "1.1.1.1",
             "port": 1234,
-            "source-type": "prometheus"
+            "source-type": "prometheus",
         }
-        self.harness.update_relation_data(rel_id, "prometheus", {
-            "sources": json.dumps(source_data)
-        })
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"sources": json.dumps(source_data)}
+        )
 
         completed_data = {
             "private-address": "1.1.1.1",
             "port": 1234,
             "source-type": "prometheus",
             "source-name": f"prometheus_{rel_id}",
-            "isDefault": "true"
+            "isDefault": "true",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id]
         self.assertIsNotNone(sources)
@@ -247,18 +246,18 @@ class TestProvider(unittest.TestCase):
         source_data = {
             "private-address": "2.2.2.2",
             "port": 1234,
-            "source-type": "other-source"
+            "source-type": "other-source",
         }
-        self.harness.update_relation_data(rel_id, "other-source", {
-            "sources": json.dumps(source_data)
-        })
+        self.harness.update_relation_data(
+            rel_id, "other-source", {"sources": json.dumps(source_data)}
+        )
 
         completed_data = {
             "private-address": "2.2.2.2",
             "port": 1234,
             "source-type": "other-source",
             "source-name": f"other-source_{rel_id}",
-            "isDefault": "false"
+            "isDefault": "false",
         }
 
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id]
@@ -267,29 +266,34 @@ class TestProvider(unittest.TestCase):
         self.assertEqual(len(self.harness.charm.grafana_provider._stored.sources), 2)
         self.assertEqual(self.harness.charm._stored.source_events, 2)
 
-        rel = self.harness.charm.framework.model.get_relation('grafana-source', rel_id)
+        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)
 
-        self.harness.charm.on['grafana-source'].relation_broken.emit(rel)
+        self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 1)
-        self.assertEqual(len(self.harness.charm.grafana_provider.sources_to_delete()), 1)
+        self.assertEqual(
+            len(self.harness.charm.grafana_provider.sources_to_delete()), 1
+        )
 
     def test_provider_noop_on_source_removal_if_not_leader(self):
         self.harness.set_leader(False)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
 
-        rel = self.harness.charm.framework.model.get_relation('grafana-source', rel_id)
+        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)
 
-        self.harness.charm.on['grafana-source'].relation_broken.emit(rel)
+        self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 0)
-        self.assertEqual(len(self.harness.charm.grafana_provider.sources_to_delete()), 0)
+        self.assertEqual(
+            len(self.harness.charm.grafana_provider.sources_to_delete()), 0
+        )
 
     def test_provider_noop_on_source_removal_if_bad_rel_id(self):
         self.harness.set_leader(False)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
 
-        rel = self.harness.charm.framework.model.get_relation('grafana-source', rel_id)
+        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)
 
-        self.harness.charm.on['grafana-source'].relation_broken.emit(rel)
+        self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 0)
-        self.assertEqual(len(self.harness.charm.grafana_provider.sources_to_delete()), 0)
-
+        self.assertEqual(
+            len(self.harness.charm.grafana_provider.sources_to_delete()), 0
+        )
