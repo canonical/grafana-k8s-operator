@@ -2,7 +2,7 @@
 # In other words, when relating to this charm, these are the fields
 # that will be processed by this charm.
 REQUIRED_DATASOURCE_FIELDS = {
-    "private-address",  # the hostname/IP of the data source server
+    "address",  # the hostname/IP of the data source server
     "port",  # the port of the data source server
     "source-type",  # the data source type (e.g. prometheus)
 }

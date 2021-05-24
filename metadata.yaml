@@ -1,20 +1,17 @@
 name: grafana
 summary: Data visualization and observability with Grafana
 maintainers:
-    - Justin Clark <justin.clark@canonical.com>
+    - Ryan Barry <ryan.barry@canonical.com>
 description: |
     Grafana provides dashboards for monitoring data and this
     charm is written to allow for HA on Kubernetes and can take
     multiple data sources (for example, Prometheus).
 tags:
+    - observability
     - lma
+    - monitoring
     - grafana
     - prometheus
-    - monitoring
-    - observability
-bases:
-    - name: ubuntu
-      channel: 20.04/stable
 containers:
     grafana:
         resource: grafana-image
@@ -26,6 +23,9 @@ provides:
         interface: grafana-datasource
     grafana-dashboard:
         interface: grafana-dash
+storage:
+    database:
+        type: filesystem
 requires:
     database:
         interface: db
@@ -33,13 +33,8 @@ requires:
 peers:
     grafana:
         interface: grafana-peers
-storage:
-    database:
-        type: filesystem
 resources:
     grafana-image:
         type: oci-image
         description: upstream docker image for Grafana
-        auto-fetch: true
-        upstream-source: 'grafana/grafana:7.2.1'
 

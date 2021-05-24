@@ -82,11 +82,11 @@ class GrafanaCharm(CharmBase):
             self, "grafana-source", "grafana", self.version
         )
         self.framework.observe(
-            self.grafana_provider.on.grafana_sources_changed,
+            self.grafana_provider.on.sources_changed,
             self.on_grafana_source_changed,
         )
         self.framework.observe(
-            self.grafana_provider.on.grafana_sources_to_delete_changed,
+            self.grafana_provider.on.sources_to_delete_changed,
             self.on_grafana_source_broken,
         )
 
@@ -457,11 +457,11 @@ class GrafanaCharm(CharmBase):
                 self, "grafana-source", "grafana", self.version
             )
             self.framework.observe(
-                self.grafana_provider.on.grafana_sources_changed,
+                self.grafana_provider.on.sources_changed,
                 self.on_grafana_source_changed,
             )
             self.framework.observe(
-                self.grafana_provider.on.grafana_sources_to_delete_changed,
+                self.grafana_provider.on.sources_to_delete_changed,
                 self.on_grafana_source_broken,
             )
             self.grafana_provider.ready()

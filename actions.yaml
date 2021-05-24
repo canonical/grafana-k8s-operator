@@ -1,3 +1,7 @@
+reload-config:
+  description: |
+    Tell Grafana to reload its config from the ConfigMap
+
 import-dashboard:
   description: Imports a Grafana Dashboard
   params:

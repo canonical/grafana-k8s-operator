@@ -9,3 +9,25 @@ options:
             Logging level for Grafana. Options are “debug”, “info”,
             “warn”, “error”, and “critical”.
         default: info
+    web-external-url:
+        description: |
+            The URL under which Grafana is externally reachable (for example,
+            if Grafana is served via a reverse proxy).
+
+            Used for generating relative and absolute links back to
+            Grafana itself. If the URL has a path portion, it will be used to
+            prefix all HTTP endpoints served by Grafana.
+
+            If omitted, relevant URL components will be derived automatically.
+        type: string
+        default: ""
+    ssl-cert:
+        type: string
+        default:
+        description: |
+            SSL certificate to install and use for the Grafana endpoint.
+    ssl-key:
+        type: string
+        default:
+        description: |
+            SSL key to use with certificate specified as ssl-cert.
