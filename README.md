@@ -2,24 +2,19 @@
 
 ## Description
 
-This is the Grafana charm for Kubernetes using the Operator Framework.
+This is the Grafana K8S charm for Kubernetes using the Operator Framework.
 
-## Usage
+Grafana allows you to query, visualize, alert on, and visualize metrics from mixed datasources in configurable
+dashboards for observability.
+
+The grafana-k8s charm provides an interface which can ingest data from a wide array of data sources, with Prometheus
+as a common input, then presents that data on configurable dashboards.
+
+## Deployment
 
 Initial setup (ensure microk8s is a clean slate with `microk8s.reset` or a fresh install with `snap install microk8s --classic`:
 ```bash
-microk8s.enable dns storage registry dashboard
-juju bootstrap microk8s mk8s
-juju add-model lma
-juju create-storage-pool operator-storage kubernetes storage-class=microk8s-hostpath
-```
-
-Deploy Grafana on its own:
-```bash
-git clone git@github.com:canonical/grafana-operator.git
-cd grafana-operator
-charmcraft build
-juju deploy ./grafana.charm --resource grafana-image=grafana/grafana:7.2.1
+juju deploy ./grafana-k8s.charm --resource grafana-image=grafana/grafana:7.2.1
 ```
 
 View the dashboard in a browser:
@@ -29,10 +24,7 @@ View the dashboard in a browser:
 
 Add Prometheus as a datasource:
 ```bash
-git clone git@github.com:canonical/prometheus-operator.git
-cd prometheus-operator
-charmcraft build
-juju deploy ./prometheus.charm
+juju deploy prometheus-k8s
 juju add-relation grafana prometheus
 watch -c juju status --color  # wait for things to settle down
 ```
@@ -48,17 +40,9 @@ If HA is not required, there is no need to add a database relation.
 
 ...
 
-## Developing
+## Provides Relations
 
-Create and activate a virtualenv,
-and install the development requirements,
-
-    virtualenv -p python3 venv
-    source venv/bin/activate
-    pip install -r requirements-dev.txt
-
-## Testing
-
-Just run `run_tests`:
-
-    ./run_tests
+```
+grafana-source - An input for grafana-k8s datasources
+grafana-dash - an input for base64 encoded dashboard data
+```

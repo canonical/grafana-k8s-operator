@@ -1,4 +1,4 @@
-name: grafana
+name: grafana-k8s
 summary: Data visualization and observability with Grafana
 maintainers:
     - Ryan Barry <ryan.barry@canonical.com>
