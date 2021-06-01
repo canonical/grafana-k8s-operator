@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2020 Ryan
+# Copyright 2020 Ryan Barry
 # See LICENSE file for licensing details.
 
 if [ -z "$VIRTUAL_ENV" -a -d venv/ ]; then

@@ -1,6 +1,7 @@
 import json
 import logging
 
+from collections import namedtuple
 from ops.charm import CharmEvents, RelationBrokenEvent
 from ops.framework import EventBase, EventSource, StoredState
 from ops.relation import ConsumerBase, ProviderBase
@@ -13,14 +14,88 @@ LIBPATCH = 0
 
 logger = logging.getLogger(__name__)
 
+SourceData = namedtuple("SourceData", "name unit app rel_id data")
 
-def _get_defaults(self, source_name):
-    """Check whether a source name is already in use, since Grafana
-    does not gracefully handle duplicate names.
+
+class SourceFieldsMissingError(Exception):
+    pass
+
+
+def _validate(self, source):
+    """Check whether given source data is valid. If it is missing optional
+    fields only, those are set from defaults. If it is missing required fields,
+    `False` is returned. If not, correct defaults are substituted.
+
+    Args:
+        self: A :class:`GrafanaConsumer` or :class:`GrafanaProvider` object
+        source: A :dict: representing the source data
     """
-    return any(
-        [s["source-name"] == source_name for s in self._stored.sources.values()]
-    )
+    def source_name_in_use(source_name):
+        return any(
+            [s["source-name"] == source_name for s in self._stored.sources.values()]
+        )
+
+    def check_required_fields(source_data):
+        # dictionary of all the required/optional datasource field values
+        # using this as a more generic way of getting data source fields
+        validated_source = {
+            field: source_data.get(field)
+            for field in config.REQUIRED_DATASOURCE_FIELDS
+            | config.OPTIONAL_DATASOURCE_FIELDS
+        }
+
+        validated_source["address"] = source_data.get("address") if "address" in source_data.keys() else \
+            source_data.get("private-address")
+
+        missing_fields = [
+            field
+            for field in config.REQUIRED_DATASOURCE_FIELDS
+            if validated_source.get(field) is None
+        ]
+
+        # check the relation data for missing required fields
+        if len(missing_fields) > 0:
+            logger.error(
+                "Missing required data fields for grafana-source "
+                "relation: {}".format(missing_fields)
+            )
+
+            logger.error("Removing bad datasource from the configuration")
+
+            if self._stored.sources.get(source.rel_id, None) is not None:
+                self._remove_source_from_datastore(source.rel_id)
+
+            raise SourceFieldsMissingError("Missing required data fields for "
+                                           "grafana-source relation: ", missing_fields)
+
+    def set_defaults():
+        # specifically handle optional fields if necessary
+        # check if source-name was not passed or if we have already saved the provided name
+        if source.data.get("source-name") is None or source_name_in_use(
+                source.data.get("source-name")
+        ):
+            default_source_name = "{}_{}".format(source.name, source.rel_id)
+            logger.warning(
+                "'source-name' not specified' or provided name is already in use. "
+                "Using safe default: {}.".format(default_source_name)
+            )
+            source.data["source-name"] = default_source_name
+
+        # set the first grafana-source as the default (needed for pod config)
+        # if `self._stored.sources` is currently empty, this is the first
+        source.data["isDefault"] = "false" if dict(self._stored.sources) else "true"
+
+        # normalize the new datasource relation data
+        data = {
+            field: value
+            for field, value in source.data.items()
+            if value is not None
+        }
+
+        return data
+
+    check_required_fields(source.data)
+    return set_defaults()
 
 
 class GrafanaSourceConsumer(ConsumerBase):
@@ -38,9 +113,10 @@ class GrafanaSourceConsumer(ConsumerBase):
         adding its datasources as follows:
 
             self.grafana = GrafanaConsumer(self, "monitoring", {"grafana-source"}: ">=1.0"})
-            self.grana.add_source({
+            self.granfana.add_source({
                 "source-type": <source-type>,
-                "address": <address>
+                "address": <address>,
+                "port": <port>
             })
 
         Args:
@@ -72,14 +148,14 @@ class GrafanaSourceConsumer(ConsumerBase):
         events = self.charm.on[self._relation_name]
         self.framework.observe(events.relation_joined, self._update_sources)
 
-    def add_source(self, source_data, rel_id=None):
+    def add_source(self, data, rel_id=None):
         """Add an additional source to the Grafana source service.
 
         Args:
-            source_data: a :dict: object of the source to monitor,
+            data: a :dict: object of the source to monitor,
                 in the format of:
                 {
-                "source-type": <source-type<,
+                "source-type": <source-type>,
                 "address": <address>,
                 "port": <port>,
                 "source-name": <source-name> (optional),
@@ -92,18 +168,22 @@ class GrafanaSourceConsumer(ConsumerBase):
         """
         rel = self.framework.model.get_relation(self._relation_name, rel_id)
 
-        if source_data["source-name"] is None or _get_defaults(
-            self, source_data["source-name"]
-        ):
-            default_source_name = "{}_{}".format(self._relation_name, rel_id)
-            logger.warning(
-                "'source-name' not specified' or provided name is already in use. "
-                "Using safe default: {}.".format(default_source_name)
-            )
-            source_data["source-name"] = default_source_name
+        source_data = SourceData(
+            self.name,
+            self.charm.unit,
+            rel.app,
+            rel_id,
+            data,
+        )
 
-        rel.data[self.charm.app]["sources"] = json.dumps(source_data)
-        self._stored.sources[rel_id] = source_data
+        try:
+            data = _validate(self, source_data)
+        except SourceFieldsMissingError as e:
+            logger.critical(f"Missing data on added grafana-k8s source {e}", exc_info=True)
+            return
+
+        rel.data[self.charm.app]["sources"] = json.dumps(data)
+        self._stored.sources[rel_id] = data
 
     def remove_source(self, rel_id=None):
         """Removes a source relation.
@@ -232,64 +312,25 @@ class GrafanaSourceProvider(ProviderBase):
         rel_id = event.relation.id
         data = event.relation.data[event.app]
 
-        sources = json.loads(data.get("sources", {}))
-        if not sources:
+        data = json.loads(data.get("sources", {}))
+        if not data:
             return
 
-        # dictionary of all the required/optional datasource field values
-        # using this as a more generic way of getting data source fields
-        datasource_fields = {
-            field: sources.get(field)
-            for field in config.REQUIRED_DATASOURCE_FIELDS
-            | config.OPTIONAL_DATASOURCE_FIELDS
-        }
+        source = SourceData(
+            event.app.name,
+            event.unit,
+            event.app,
+            rel_id,
+            data
+        )
 
-        missing_fields = [
-            field
-            for field in config.REQUIRED_DATASOURCE_FIELDS
-            if datasource_fields.get(field) is None
-        ]
-
-        # check the relation data for missing required fields
-        if len(missing_fields) > 0:
-            logger.error(
-                "Missing required data fields for grafana-source "
-                "relation: {}".format(missing_fields)
-            )
-            if self._stored.sources.get(rel_id, None) is not None:
-                self._remove_source_from_datastore(rel_id)
+        try:
+            data = _validate(self, source)
+        except SourceFieldsMissingError as e:
+            logger.critical(f"Missing data on added grafana-k8s source {e}", exc_info=True)
             return
 
-        # specifically handle optional fields if necessary
-        # check if source-name was not passed or if we have already saved the provided name
-        if datasource_fields["source-name"] is None or _get_defaults(
-            self, datasource_fields["source-name"]
-        ):
-            default_source_name = "{}_{}".format(event.app.name, rel_id)
-            logger.warning(
-                "'source-name' not specified' or provided name is already in use. "
-                "Using safe default: {}.".format(default_source_name)
-            )
-            datasource_fields["source-name"] = default_source_name
-
-        # set the first grafana-source as the default (needed for pod config)
-        # if `self._stored.sources` is currently empty, this is the first
-        datasource_fields["isDefault"] = "false"
-        if not dict(self._stored.sources):
-            datasource_fields["isDefault"] = "true"
-
-        # add unit name so the source can be removed might be a
-        # duplicate of 'source-name', but this will guarantee lookup
-        datasource_fields["unit_name"] = event.unit
-
-        # add the new datasource relation data to the current state
-        new_source_data = {
-            field: value
-            for field, value in datasource_fields.items()
-            if value is not None
-        }
-
-        self._stored.sources[rel_id] = new_source_data
+        self._stored.sources[rel_id] = data
         self.on.sources_changed.emit()
 
     def on_grafana_source_relation_broken(self, event):
@@ -321,14 +362,6 @@ class GrafanaSourceProvider(ProviderBase):
         except KeyError:
             logger.warning("Could not remove source for relation: {}".format(rel_id))
 
-    def _source_name_in_use(self, source_name):
-        """Check whether a source name is already in use, since Grafana
-        does not gracefully handle duplicate names.
-        """
-        return any(
-            [s["source-name"] == source_name for s in self._stored.sources.values()]
-        )
-
     def sources(self):
         """Returns an array of sources the provdier knows about"""
         sources = []
@@ -336,6 +369,13 @@ class GrafanaSourceProvider(ProviderBase):
             sources.append(source)
 
         return sources
+
+    def update_port(self, relation_name, port):
+        if self.charm.unit.is_leader():
+            for relation in self.charm.model.relations[relation_name]:
+                logger.info("Setting address data for relation", relation)
+                if str(port) != relation.data[self.charm.app].get("port", None):
+                    relation.data[self.charm.app]["port"] = str(port)
 
     def sources_to_delete(self):
         """Returns an array of source names which have been removed"""

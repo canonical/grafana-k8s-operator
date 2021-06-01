@@ -8,7 +8,7 @@ import unittest
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from charm import GrafanaSourceProvider
+from lib.charms.grafana.v1.grafana import GrafanaSourceProvider, SourceFieldsMissingError
 
 
 class GrafanaCharm(CharmBase):
@@ -42,6 +42,10 @@ class GrafanaCharm(CharmBase):
 
 
 class TestProvider(unittest.TestCase):
+    @pytest.fixture(autouse=True)
+    def inject_fixtures(self, caplog):
+        self._caplog = caplog
+
     def setUp(self):
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
@@ -83,8 +87,7 @@ class TestProvider(unittest.TestCase):
             rel_id, "prometheus", {"sources": json.dumps(source_data)}
         )
 
-        with pytest.raises(KeyError):
-            self.harness.charm.grafana_provider._stored.sources[rel_id]
+        assert "Missing required data fields" in self._caplog.text
         self.assertEqual(self.harness.charm._stored.source_events, 0)
 
     def test_provider_noop_if_not_leader_on_new_sources(self):
@@ -105,7 +108,7 @@ class TestProvider(unittest.TestCase):
             self.harness.charm.grafana_provider._stored.sources[rel_id]
         self.assertEqual(self.harness.charm._stored.source_events, 0)
 
-    def test_provider_noop_if_data_is_emptysources(self):
+    def test_provider_noop_if_data_is_empty_sources(self):
         self.assertEqual(len(self.harness.charm.grafana_provider._stored.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
 
@@ -188,6 +191,8 @@ class TestProvider(unittest.TestCase):
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id]
         self.assertIsNotNone(sources)
+        print(sources)
+        print(completed_data)
         self.assertEqual(sources, completed_data)
         self.assertEqual(len(self.harness.charm.grafana_provider._stored.sources), 1)
         self.assertEqual(self.harness.charm._stored.source_events, 1)
