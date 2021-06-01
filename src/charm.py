@@ -17,7 +17,7 @@ from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus, WaitingSta
 
 from grafana_server import Grafana
 import lib.charms.grafana.v1.config as grafana_config
-from lib.charms.grafana.v1.grafana import GrafanaSourceProvider
+from lib.charms.grafana.v1.grafana_source import GrafanaSourceProvider
 from lib.charms.ingress.v0.ingress import IngressRequires
 
 

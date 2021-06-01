@@ -8,7 +8,7 @@ import unittest
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana.v1.grafana import GrafanaSourceProvider, SourceFieldsMissingError
+from lib.charms.grafana.v1.grafana_source import GrafanaSourceProvider, SourceFieldsMissingError
 
 
 class GrafanaCharm(CharmBase):

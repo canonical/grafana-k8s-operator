@@ -7,7 +7,7 @@ import unittest
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana.v1.grafana import GrafanaSourceConsumer
+from lib.charms.grafana.v1.grafana_source import GrafanaSourceConsumer
 
 SOURCE_DATA = {
     "isDefault": True,
