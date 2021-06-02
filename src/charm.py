@@ -10,21 +10,28 @@ import uuid
 import yaml
 
 from io import StringIO
-from ops.charm import CharmBase
+from ops.charm import (
+    CharmBase,
+    ConfigChangedEvent,
+    PebbleReadyEvent,
+    RelationBrokenEvent,
+    RelationChangedEvent,
+)
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
-from grafana_server import Grafana
+from lib.charms.grafana.v1.grafana_server import Grafana
 import lib.charms.grafana.v1.config as grafana_config
-from lib.charms.grafana.v1.grafana_source import GrafanaSourceProvider
+from lib.charms.grafana.v1.grafana_source import (
+    GrafanaSourceProvider,
+    GrafanaSourceEvents,
+    SourceFieldsMissingError,
+)
 from lib.charms.ingress.v0.ingress import IngressRequires
 
 
 logger = logging.getLogger()
-
-PEER = "grafana"
-SERVICE = "grafana"
 
 
 class GrafanaCharm(CharmBase):
@@ -42,8 +49,9 @@ class GrafanaCharm(CharmBase):
     def __init__(self, *args):
         logger.debug("Initializing charm.")
         super().__init__(*args)
+        self.name = "grafana"
 
-        self.grafana = Grafana("localhost", str(self.model.config["port"]))
+        self.grafana = Grafana("localhost", self.model.config["port"])
 
         # -- initialize states --
         self.ingress = None
@@ -52,15 +60,31 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(grafana_config_ini_hash=None)
         self._stored.set_default(grafana_datasources_hash=None)
 
-        # -- standard hooks
+        # -- standard events
         self.framework.observe(self.on.grafana_pebble_ready, self.on_pebble_ready)
         self.framework.observe(self.on.config_changed, self.on_config_changed)
         self.framework.observe(self.on.stop, self.on_stop)
 
+        # -- grafana-source relation observations
+        self.grafana_provider = GrafanaSourceProvider(
+            self, "grafana-source", "grafana", self.version
+        )
+        self.framework.observe(
+            self.grafana_provider.on.sources_changed,
+            self.on_grafana_source_changed,
+        )
+        self.framework.observe(
+            self.grafana_provider.on.sources_to_delete_changed,
+            self.on_grafana_source_changed,
+        )
+
         # -- grafana (peer) relation observations
-        self.framework.observe(self.on[PEER].relation_changed, self.on_peer_changed)
-        # self.framework.observe(self.on['grafana'].relation_departed,
-        #                        self.on_peer_departed)
+        self.framework.observe(
+            self.on[self.name].relation_changed, self.on_peer_changed
+        )
+        self.framework.observe(
+            self.on[self.name].relation_departed, self.on_peer_changed
+        )
 
         # -- database relation observations
         self.framework.observe(
@@ -77,53 +101,61 @@ class GrafanaCharm(CharmBase):
 
         self.framework.observe(self.on.add_ingress_action, self.on_add_ingress_action)
 
-        # -- grafana-source relation observations
-        self.grafana_provider = GrafanaSourceProvider(
-            self, "grafana-source", "grafana", self.version
-        )
-        self.framework.observe(
-            self.grafana_provider.on.sources_changed,
-            self.on_grafana_source_changed,
-        )
-        self.framework.observe(
-            self.grafana_provider.on.sources_to_delete_changed,
-            self.on_grafana_source_broken,
-        )
+    def on_pebble_ready(self, event: PebbleReadyEvent) -> None:
+        """
+        When Pebble is ready, start everything up
 
-    def on_pebble_ready(self, event):
-        self._configure(event)
+        Args:
+            event: A :class:`PebbleReadyEvent` to signal us
+        """
         logger.debug("Pebble ready")
 
         container = event.workload
-        if not container.get_service(SERVICE).is_running():
+        if not container.get_service(self.name).is_running():
             logger.info("Starting Grafana")
-            container.start(SERVICE)
+            container.start(self.name)
 
-    def on_config_changed(self, event):
+    def on_config_changed(self, event: ConfigChangedEvent) -> None:
+        """
+        If the configuration is changed, update the variables we know about and
+        restart the services. We don't know specifically whether it's a new install,
+        a relation change, a leader election, or other, so call `_configure` to check
+        the config files
+
+        Args:
+            event: a :class:`ConfigChangedEvent` to signal that something happened
+        """
         self._configure(event)
-        self.grafana_provider.update_port(SERVICE, self.model.config["port"])
+        self.grafana_provider.update_port(self.name, self.model.config["port"])
 
-    def on_grafana_source_changed(self, event):
-        """When a grafana-source is added or modified, update the config"""
+    def on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
+        """
+        When a grafana-source is added or modified, update the config
+
+        Args:
+            event: a :class:`GrafanaSourceEvents` instance sent from the consumer
+        """
 
         logger.debug("Source changed")
         self._configure(event)
 
-    def on_grafana_source_broken(self, event):
-        """When a grafana-source is removed, update the config"""
-
-        logger.debug("Source removed")
-        self._configure(event)
-
-    def on_stop(self, _):
+    def on_stop(self, _) -> None:
         """Go into maintenance state if the unit is stopped."""
         self.unit.status = MaintenanceStatus("Application is terminating.")
 
-    def _configure(self, _):
+    def _configure(self, _) -> None:
+        """
+        Generate configuration files and check the sums against what is
+        already stored in the charm. If either the base Grafana config
+        or the datasource config differs, restart Grafana.
+        """
+
         logger.info("Handling config change")
 
         restart = False
 
+        # Generate a new base config and see if it differs from what we have.
+        # If it does, store it and signal that we should restart Grafana
         grafana_config_ini = self.generate_grafana_config()
         config_ini_hash = hashlib.md5(
             str(grafana_config_ini).encode("utf-8")
@@ -135,6 +167,7 @@ class GrafanaCharm(CharmBase):
 
             restart = True
 
+        # Do the same thing for datasources
         grafana_datasources = self.generate_datasource_config()
         datasources_hash = hashlib.md5(
             str(grafana_datasources).encode("utf-8")
@@ -149,9 +182,15 @@ class GrafanaCharm(CharmBase):
         if restart:
             self.restart_grafana()
 
-    def generate_datasource_config(self):
+    def generate_datasource_config(self) -> str:
+        """
+        Template out a Grafana datasource config from the sources (and
+        removed sources) the consumer knows about, and dump it to YAML
+        """
+        # Boilerplate for the config file
         datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
 
+        #
         for source_info in self.grafana_provider.sources():
             source = {
                 "orgId": "1",
@@ -165,6 +204,7 @@ class GrafanaCharm(CharmBase):
             }
             datasources_dict["datasources"].append(source)
 
+        # Also get a list of all the sources which have previously been purged and add them
         for name in self.grafana_provider.sources_to_delete():
             source = {"orgId": 1, "name": name}
             datasources_dict["deleteDatasources"].append(source)
@@ -172,19 +212,38 @@ class GrafanaCharm(CharmBase):
         datasources_string = yaml.dump(datasources_dict)
         return datasources_string
 
-    def generate_grafana_config(self):
+    def generate_grafana_config(self) -> str:
+        """
+        For now, this only creates databse information, since everything else
+        can be set in ENV variables, but leave for expansion later so we can
+        hide auth secrets
+        """
         return self.generate_database_config() if self.has_db else ""
 
-    def update_datasource_config(self, config):
-        container = self.unit.get_container(SERVICE)
+    def update_datasource_config(self, config: str) -> None:
+        """
+        Write an updated datasource configuration file to the
+        Pebble container if necessary
+
+        Args:
+            config: A :str: containing the datasource configuraiton
+        """
+        container = self.unit.get_container(self.name)
 
         datasources_path = os.path.join(
             grafana_config.DATASOURCE_PATH, "datasources", "datasources.yaml"
         )
         container.push(datasources_path, config)
 
-    def update_grafana_config_ini(self, config):
-        container = self.unit.get_container(SERVICE)
+    def update_grafana_config_ini(self, config: str) -> None:
+        """
+        Write an updated Grafana configuration file to the
+        Pebble container if necessary
+
+        Args:
+            config: A :str: containing the datasource configuraiton
+        """
+        container = self.unit.get_container(self.name)
         container.push(grafana_config.CONFIG_PATH, config)
 
     #####################################
@@ -195,7 +254,8 @@ class GrafanaCharm(CharmBase):
 
     @property
     def has_peer(self) -> bool:
-        rel = self.model.get_relation("grafana")
+        """Check whether or nto there are any other Grafanas as peers"""
+        rel = self.model.get_relation(self.name)
         return len(rel.units) > 0 if rel is not None else False
 
     def check_high_availability(self):
@@ -203,12 +263,12 @@ class GrafanaCharm(CharmBase):
         if self.has_peer:
             if self.has_db:
                 logger.info("high availability possible.")
-                status = MaintenanceStatus("Grafana ready for HA.")
+                status = ActiveStatus("Grafana ready for HA.")
             else:
                 logger.warning(
-                    "high availability not possible " "with current configuration."
+                    "high availability is not possible with the current configuration."
                 )
-                status = BlockedStatus("Need database relation for HA.")
+                status = BlockedStatus("A database relation is neededfor HA.")
         else:
             logger.info("running Grafana on single node.")
             status = MaintenanceStatus("Grafana ready on single node.")
@@ -218,22 +278,19 @@ class GrafanaCharm(CharmBase):
         if isinstance(status, MaintenanceStatus) and isinstance(
             self.unit.status, ActiveStatus
         ):
-            return status
+            return
 
         self.unit.status = status
-        return status
 
-    def on_peer_changed(self, _):
-        self.check_high_availability()
-
-    def on_peer_departed(self, _):
+    def on_peer_changed(self, _) -> None:
+        """Check whether HA is valid"""
         self.check_high_availability()
 
     ############################
     # DASHBOARD IMPORT
     ###########################
-    def init_dashboard_provisioning(self, dashboard_path):
-        container = self.unit.get_container(SERVICE)
+    def init_dashboard_provisioning(self, dashboard_path: str):
+        container = self.unit.get_container(self.name)
 
         dashboard_config = {
             "apiVersion": 1,
@@ -254,7 +311,7 @@ class GrafanaCharm(CharmBase):
             container.push(default_config, default_config_string, make_dirs=True)
 
     def on_import_dashboard_action(self, event):
-        container = self.unit.get_container(SERVICE)
+        container = self.unit.get_container(self.name)
         dashboard_path = os.path.join(grafana_config.DATASOURCE_PATH, "dashboards")
 
         self.init_dashboard_provisioning(dashboard_path)
@@ -296,15 +353,19 @@ class GrafanaCharm(CharmBase):
         """Only consider a DB connection if we have config info."""
         return len(self._stored.database) > 0
 
-    def on_database_changed(self, event):
-        """Sets configuration information for database connection."""
+    def on_database_changed(self, event: RelationChangedEvent) -> None:
+        """Sets configuration information for database connection.
+
+        Args:
+            event: A :class:`RelationChangedEvent` from a `database` source
+        """
         if not self.unit.is_leader():
             return
 
         if event.unit is None:
             return
 
-        # save the necessary configuration of this database connection
+        # Get required information
         database_fields = {
             field: event.relation.data[event.unit].get(field)
             for field in grafana_config.REQUIRED_DATABASE_FIELDS
@@ -317,11 +378,10 @@ class GrafanaCharm(CharmBase):
             if database_fields.get(field) is None
         ]
         if len(missing_fields) > 0:
-            logger.error(
-                "Missing required data fields for related database "
+            raise SourceFieldsMissingError(
+                "Missing required data fields for grafana-k8s database "
                 "relation: {}".format(missing_fields)
             )
-            return
 
         # add the new database relation data to the datastore
         self._stored.database.update(
@@ -332,25 +392,32 @@ class GrafanaCharm(CharmBase):
             }
         )
 
-        logger.info("Configuring database settings ...")
         self._configure(event)
 
-    def on_database_broken(self, event):
+    def on_database_broken(self, event: RelationBrokenEvent) -> None:
         """Removes database connection info from datastore.
         We are guaranteed to only have one DB connection, so clearing
         datastore.database is all we need for the change to be propagated
-        to the pod spec."""
+        to the Pebble container.
+
+        Args:
+            event: a :class:`RelationBrokenEvent` from a `database` source
+        """
         if not self.unit.is_leader():
             return
 
         # remove the existing database info from datastore
         self._stored.database = dict()
-        logger.info("Removing the Grafana database backend config")
+        logger.info("Removing the grafana-k8s database backend config")
 
         # Cleanup the config file
         self._configure(event)
 
-    def generate_database_config(self):
+    def generate_database_config(self) -> str:
+        """
+        Returns a :str: containing the required database information to
+        be stubbed into the config file
+        """
         db_config = self._stored.database
         config_ini = configparser.ConfigParser()
         db_type = "mysql"
@@ -371,8 +438,8 @@ class GrafanaCharm(CharmBase):
             "url": db_url,
         }
 
-        logger.info("Config set to :{}".format(config_ini))
-
+        # This is silly, but a ConfigParser() handles this nicer than
+        # raw string manipulation
         data = StringIO()
         config_ini.write(data)
         data.seek(0)
@@ -386,43 +453,40 @@ class GrafanaCharm(CharmBase):
 
     #####################################
 
-    def restart_grafana(self):
-        container = self.unit.get_container(SERVICE)
+    def restart_grafana(self) -> None:
+        """Restart the pebble container"""
+        container = self.unit.get_container(self.name)
         layer = self._grafana_layer()
 
         plan = container.get_plan()
         if plan.services != layer["services"]:
-            container.add_layer("grafana", layer, combine=True)
+            container.add_layer(self.name, layer, combine=True)
 
-            if container.get_service(SERVICE).is_running():
-                container.stop(SERVICE)
+            if container.get_service(self.name).is_running():
+                container.stop(self.name)
 
-            container.start(SERVICE)
-            logger.info("Restarted grafana container")
+            container.start(self.name)
+            logger.info("Restarted grafana-k8s")
 
         self.app.status = ActiveStatus()
         self.unit.status = ActiveStatus()
 
-    def _grafana_layer(self):
-        """Construct the pebble layer"""
-        logger.info("Building pebble layer")
-
-        charm_config = self.model.config
-
+    def _grafana_layer(self) -> dict:
+        """Construct the pebble layer information"""
         layer = {
-            "summary": "grafana layer",
-            "description": "grafana layer",
+            "summary": "grafana-k8s layer",
+            "description": "grafana-k8s layer",
             "services": {
-                "grafana": {
+                self.name: {
                     "override": "replace",
-                    "summary": "grafana service",
+                    "summary": "grafana-k8s service",
                     "command": "grafana-server -config {}".format(
                         grafana_config.CONFIG_PATH
                     ),
                     "startup": "enabled",
                     "environment": {
-                        "GF_HTTP_PORT": charm_config["port"],
-                        "GF_LOG_LEVEL": charm_config["grafana_log_level"],
+                        "GF_HTTP_PORT": self.model.config["port"],
+                        "GF_LOG_LEVEL": self.model.config["grafana_log_level"],
                         "GF_PATHS_PROVISIONING": grafana_config.DATASOURCE_PATH,
                     },
                 }
@@ -444,17 +508,17 @@ class GrafanaCharm(CharmBase):
             return
 
         if not self.grafana.is_ready():
-            status_message = "Grafana is not ready yet"
+            status_message = "grafana-k8s is not ready yet"
             self.unit.status = WaitingStatus(status_message)
             return
 
-        provided = {"grafana": self.version}
-        logger.info("Grafana provider is available")
+        provided = {self.name: self.version}
+        logger.info("Grafana-k8s consumer is available")
         logger.info("Providing : {}".format(provided))
         if not self._stored.provider_ready:
             self._stored.provider_ready = True
             self.grafana_provider = GrafanaSourceProvider(
-                self, "grafana-source", "grafana", self.version
+                self, "grafana-source", self.name, self.version
             )
             self.framework.observe(
                 self.grafana_provider.on.sources_changed,
@@ -462,11 +526,11 @@ class GrafanaCharm(CharmBase):
             )
             self.framework.observe(
                 self.grafana_provider.on.sources_to_delete_changed,
-                self.on_grafana_source_broken,
+                self.on_grafana_source_changed,
             )
             self.grafana_provider.ready()
 
-        # self._check_high_availability()
+        self.check_high_availability()
         self.unit.status = ActiveStatus()
 
     @property

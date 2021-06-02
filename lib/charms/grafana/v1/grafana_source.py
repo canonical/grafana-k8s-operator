@@ -2,7 +2,7 @@ import json
 import logging
 
 from collections import namedtuple
-from ops.charm import CharmEvents, RelationBrokenEvent
+from ops.charm import CharmBase, CharmEvents, RelationBrokenEvent, RelationChangedEvent
 from ops.framework import EventBase, EventSource, StoredState
 from ops.relation import ConsumerBase, ProviderBase
 
@@ -21,7 +21,30 @@ class SourceFieldsMissingError(Exception):
     pass
 
 
-def _validate(self, source):
+class GrafanaSourcesChanged(EventBase):
+    """Event emitted when Grafana sources change"""
+
+    def __init__(self, handle, data=None):
+        super().__init__(handle)
+        self.data = data
+
+    def snapshot(self):
+        """Save grafana source information"""
+        return {"data": self.data}
+
+    def restore(self, snapshot):
+        """Restore grafana source information"""
+        self.data = snapshot["data"]
+
+
+class GrafanaSourceEvents(CharmEvents):
+    """Events raised by :class:`GrafanaSourceEvents`"""
+
+    sources_changed = EventSource(GrafanaSourcesChanged)
+    sources_to_delete_changed = EventSource(GrafanaSourcesChanged)
+
+
+def _validate(self, source: SourceData) -> dict:
     """Check whether given source data is valid. If it is missing optional
     fields only, those are set from defaults. If it is missing required fields,
     `False` is returned. If not, correct defaults are substituted.
@@ -30,12 +53,13 @@ def _validate(self, source):
         self: A :class:`GrafanaConsumer` or :class:`GrafanaProvider` object
         source: A :dict: representing the source data
     """
+
     def source_name_in_use(source_name):
         return any(
             [s["source-name"] == source_name for s in self._stored.sources.values()]
         )
 
-    def check_required_fields(source_data):
+    def check_required_fields(source_data: dict):
         # dictionary of all the required/optional datasource field values
         # using this as a more generic way of getting data source fields
         validated_source = {
@@ -44,8 +68,11 @@ def _validate(self, source):
             | config.OPTIONAL_DATASOURCE_FIELDS
         }
 
-        validated_source["address"] = source_data.get("address") if "address" in source_data.keys() else \
-            source_data.get("private-address")
+        validated_source["address"] = (
+            source_data.get("address")
+            if "address" in source_data.keys()
+            else source_data.get("private-address")
+        )
 
         missing_fields = [
             field
@@ -65,14 +92,16 @@ def _validate(self, source):
             if self._stored.sources.get(source.rel_id, None) is not None:
                 self._remove_source_from_datastore(source.rel_id)
 
-            raise SourceFieldsMissingError("Missing required data fields for "
-                                           "grafana-source relation: ", missing_fields)
+            raise SourceFieldsMissingError(
+                "Missing required data fields for " "grafana-source relation: ",
+                missing_fields,
+            )
 
     def set_defaults():
         # specifically handle optional fields if necessary
         # check if source-name was not passed or if we have already saved the provided name
         if source.data.get("source-name") is None or source_name_in_use(
-                source.data.get("source-name")
+            source.data.get("source-name")
         ):
             default_source_name = "{}_{}".format(source.name, source.rel_id)
             logger.warning(
@@ -87,9 +116,7 @@ def _validate(self, source):
 
         # normalize the new datasource relation data
         data = {
-            field: value
-            for field, value in source.data.items()
-            if value is not None
+            field: value for field, value in source.data.items() if value is not None
         }
 
         return data
@@ -101,7 +128,9 @@ def _validate(self, source):
 class GrafanaSourceConsumer(ConsumerBase):
     _stored = StoredState()
 
-    def __init__(self, charm, name, consumes, multi=False):
+    def __init__(
+        self, charm: CharmBase, name: str, consumes: dict, multi=False
+    ) -> None:
         """Construct a Grafana charm client.
 
         The :class:`GrafanaConsumer` object provides an interface
@@ -112,7 +141,7 @@ class GrafanaSourceConsumer(ConsumerBase):
         by instantiating a :class:`GrafanaConsumer` object and
         adding its datasources as follows:
 
-            self.grafana = GrafanaConsumer(self, "monitoring", {"grafana-source"}: ">=1.0"})
+            self.grafana = GrafanaConsumer(self, "grafana-source", {"grafana-source"}: ">=1.0"})
             self.granfana.add_source({
                 "source-type": <source-type>,
                 "address": <address>,
@@ -140,15 +169,15 @@ class GrafanaSourceConsumer(ConsumerBase):
         super().__init__(charm, name, consumes, multi)
 
         self.charm = charm
-        self._relation_name = name
+        events = self.charm.on[name]
 
         self._stored.set_default(sources=dict())  # available data sources
         self._stored.set_default(sources_to_delete=set())
-        self._stored.set_default(dashboards=set())
-        events = self.charm.on[self._relation_name]
-        self.framework.observe(events.relation_joined, self._update_sources)
+        self.framework.observe(
+            events.relation_changed, self._update_sources
+        )
 
-    def add_source(self, data, rel_id=None):
+    def add_source(self, data: dict, rel_id=None) -> None:
         """Add an additional source to the Grafana source service.
 
         Args:
@@ -166,7 +195,7 @@ class GrafanaSourceConsumer(ConsumerBase):
                 `multi` mode.
 
         """
-        rel = self.framework.model.get_relation(self._relation_name, rel_id)
+        rel = self.framework.model.get_relation(self.name, rel_id)
 
         source_data = SourceData(
             self.name,
@@ -179,13 +208,15 @@ class GrafanaSourceConsumer(ConsumerBase):
         try:
             data = _validate(self, source_data)
         except SourceFieldsMissingError as e:
-            logger.critical(f"Missing data on added grafana-k8s source {e}", exc_info=True)
+            logger.critical(
+                f"Missing data on added grafana-k8s source {e}", exc_info=True
+            )
             return
 
         rel.data[self.charm.app]["sources"] = json.dumps(data)
         self._stored.sources[rel_id] = data
 
-    def remove_source(self, rel_id=None):
+    def remove_source(self, rel_id=None) -> None:
         """Removes a source relation.
 
         Args:
@@ -194,7 +225,7 @@ class GrafanaSourceConsumer(ConsumerBase):
                 :class:`GrafanaConsumer` has been instantiated in
                 `multi` mode.
         """
-        rel = self.framework.model.get_relation(self._relation_name, rel_id)
+        rel = self.framework.model.get_relation(self.name, rel_id)
 
         if rel_id is None:
             rel_id = rel.id
@@ -205,7 +236,7 @@ class GrafanaSourceConsumer(ConsumerBase):
         if source is not None:
             self._stored.sources_to_delete.add(source["source-name"])
 
-    def list_sources(self):
+    def list_sources(self) -> []:
         """Returns an array of currently valid sources"""
         sources = []
         for source in self._stored.sources.values():
@@ -214,7 +245,7 @@ class GrafanaSourceConsumer(ConsumerBase):
         return sources
 
     @property
-    def removed_source_names(self):
+    def removed_source_names(self) -> []:
         """Returns an array of source names which have been removed"""
         sources = []
         for source in self._stored.sources_to_delete:
@@ -222,7 +253,7 @@ class GrafanaSourceConsumer(ConsumerBase):
 
         return sources
 
-    def _update_sources(self, event):
+    def _update_sources(self, event: RelationChangedEvent) -> None:
         """
         Update the stored grafana sources if this is not a
         :class:`RelationBrokenEvent` and :class:`GrafanaConsumer`
@@ -238,33 +269,12 @@ class GrafanaSourceConsumer(ConsumerBase):
         event.relation.data[rel_id]["sources"] = self._stored.sources[rel_id]
 
 
-class GrafanaSourcesChanged(EventBase):
-    """Event emitted when Grafana sources change"""
-    def __init__(self, handle, data=None):
-        super().__init__(handle)
-        self.data = data
-
-    def snapshot(self):
-        """Save grafana source information"""
-        return {"data": self.data}
-
-    def restore(self, snapshot):
-        """Restore grafana source information"""
-        self.data = snapshot["data"]
-
-
-class GrafanaSourceEvents(CharmEvents):
-    """Events raised by :class:`GrafanaSourceEvents`"""
-    sources_changed = EventSource(GrafanaSourcesChanged)
-    sources_to_delete_changed = EventSource(GrafanaSourcesChanged)
-
-
 class GrafanaSourceProvider(ProviderBase):
     on = GrafanaSourceEvents()
     _stored = StoredState()
 
-    def __init__(self, charm, name, service, version=None):
-        """A Grafana based Monitoring service provider
+    def __init__(self, charm: CharmBase, name: str, service: str, version=None) -> None:
+        """A Grafana based Monitoring service consumer
 
         Args:
             charm: a :class:`CharmBase` instance that manages this
@@ -282,12 +292,10 @@ class GrafanaSourceProvider(ProviderBase):
         """
         super().__init__(charm, name, service, version)
         self.charm = charm
+        events = self.charm.on[name]
 
         self._stored.set_default(sources=dict())  # available data sources
         self._stored.set_default(sources_to_delete=set())
-        self._stored.set_default(dashboards=set())
-
-        events = self.charm.on[name]
 
         self.framework.observe(
             events.relation_changed, self.on_grafana_source_relation_changed
@@ -296,7 +304,7 @@ class GrafanaSourceProvider(ProviderBase):
             events.relation_broken, self.on_grafana_source_relation_broken
         )
 
-    def on_grafana_source_relation_changed(self, event):
+    def on_grafana_source_relation_changed(self, event: RelationChangedEvent) -> None:
         """Handle relation changes in related consumers.
 
         If there are changes in relations between Grafana source providers
@@ -316,24 +324,20 @@ class GrafanaSourceProvider(ProviderBase):
         if not data:
             return
 
-        source = SourceData(
-            event.app.name,
-            event.unit,
-            event.app,
-            rel_id,
-            data
-        )
+        source = SourceData(event.app.name, event.unit, event.app, rel_id, data)
 
         try:
             data = _validate(self, source)
         except SourceFieldsMissingError as e:
-            logger.critical(f"Missing data on added grafana-k8s source {e}", exc_info=True)
+            logger.critical(
+                f"Missing data on added grafana-k8s source {e}", exc_info=True
+            )
             return
 
         self._stored.sources[rel_id] = data
         self.on.sources_changed.emit()
 
-    def on_grafana_source_relation_broken(self, event):
+    def on_grafana_source_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Update job config when consumers depart.
 
         When a Grafana source consumer departs, the configuration
@@ -347,7 +351,7 @@ class GrafanaSourceProvider(ProviderBase):
         rel_id = event.relation.id
         self._remove_source_from_datastore(rel_id)
 
-    def _remove_source_from_datastore(self, rel_id):
+    def _remove_source_from_datastore(self, rel_id: int) -> None:
         """Remove the grafana-source from the datastore. and add the
         name to the list of sources to remove when a relation is
         broken.
@@ -362,7 +366,7 @@ class GrafanaSourceProvider(ProviderBase):
         except KeyError:
             logger.warning("Could not remove source for relation: {}".format(rel_id))
 
-    def sources(self):
+    def sources(self) -> []:
         """Returns an array of sources the provdier knows about"""
         sources = []
         for source in self._stored.sources.values():
@@ -370,14 +374,14 @@ class GrafanaSourceProvider(ProviderBase):
 
         return sources
 
-    def update_port(self, relation_name, port):
+    def update_port(self, relation_name: str, port: int) -> None:
         if self.charm.unit.is_leader():
             for relation in self.charm.model.relations[relation_name]:
                 logger.info("Setting address data for relation", relation)
                 if str(port) != relation.data[self.charm.app].get("port", None):
                     relation.data[self.charm.app]["port"] = str(port)
 
-    def sources_to_delete(self):
+    def sources_to_delete(self) -> []:
         """Returns an array of source names which have been removed"""
         sources_to_delete = []
         for source in self._stored.sources_to_delete:

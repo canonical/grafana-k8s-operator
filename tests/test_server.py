@@ -7,14 +7,14 @@ import urllib3
 
 from unittest.mock import patch
 
-from grafana_server import Grafana
+from lib.charms.grafana.v1.grafana_server import Grafana
 
 
 class TestServer(unittest.TestCase):
     def setUp(self):
         self.grafana = Grafana("localhost", "9090")
 
-    @patch("grafana_server.urllib3.PoolManager.request")
+    @patch("lib.charms.grafana.v1.grafana_server.urllib3.PoolManager.request")
     def test_grafana_server_returns_valid_data(self, request):
         version = "7.2.1"
         request.return_value.data = bytes(
@@ -32,7 +32,7 @@ class TestServer(unittest.TestCase):
         self.assertIsNotNone(got_version)
         self.assertEqual(got_version, version)
 
-    @patch("grafana_server.urllib3.PoolManager.request")
+    @patch("lib.charms.grafana.v1.grafana_server.urllib3.PoolManager.request")
     def test_grafana_server_max_retry_test(self, request):
         request.side_effect = urllib3.exceptions.MaxRetryError(
             None, "/", "We shouldn't get here"
@@ -40,7 +40,7 @@ class TestServer(unittest.TestCase):
         build_info = self.grafana.build_info
         self.assertEqual(build_info, {})
 
-    @patch("grafana_server.urllib3.PoolManager.request")
+    @patch("lib.charms.grafana.v1.grafana_server.urllib3.PoolManager.request")
     def test_grafana_server_becomes_ready(self, request):
         version = "7.2.1"
         request.return_value.data = bytes(
@@ -57,7 +57,7 @@ class TestServer(unittest.TestCase):
         self.assertIsNotNone(is_ready)
         self.assertTrue(is_ready)
 
-    @patch("grafana_server.urllib3.PoolManager.request")
+    @patch("lib.charms.grafana.v1.grafana_server.urllib3.PoolManager.request")
     def test_grafana_server_is_unready(self, request):
         request.return_value.data = bytes(
             json.dumps(

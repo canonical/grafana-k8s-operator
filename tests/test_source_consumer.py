@@ -31,22 +31,22 @@ class ConsumerCharm(CharmBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
-        self.provider = GrafanaSourceConsumer(
+        self.consumer = GrafanaSourceConsumer(
             self, "grafana-source", {"grafana": ">=1.0"}
         )
 
     def add_source(self, data, rel_id=None):
-        self.provider.add_source(data, rel_id)
+        self.consumer.add_source(data, rel_id)
 
     def list_sources(self):
-        return self.provider.list_sources()
+        return self.consumer.list_sources()
 
     @property
     def removed_source_names(self):
-        return self.provider.removed_source_names
+        return self.consumer.removed_source_names
 
     def remove_source(self, rel_id=None):
-        self.provider.remove_source(rel_id)
+        self.consumer.remove_source(rel_id)
 
 
 class TestConsumer(unittest.TestCase):
@@ -57,7 +57,7 @@ class TestConsumer(unittest.TestCase):
         self.harness.begin()
 
     def test_consumer_can_add_source(self):
-        rel_id = self.harness.add_relation("grafana-source", "provider")
+        rel_id = self.harness.add_relation("grafana-source", "consumer")
         data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
         self.assertFalse(data)
         self.harness.charm.add_source(SOURCE_DATA)
@@ -68,7 +68,7 @@ class TestConsumer(unittest.TestCase):
         self.assertEqual(source, SOURCE_DATA)
 
     def test_consumer_can_add_source_with_relid(self):
-        rel_id = self.harness.add_relation("grafana-source", "provider")
+        rel_id = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(SOURCE_DATA, rel_id)
 
         data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
@@ -76,17 +76,17 @@ class TestConsumer(unittest.TestCase):
         self.assertEqual(source, SOURCE_DATA)
 
     def test_consumer_can_list_sources(self):
-        rel_id = self.harness.add_relation("grafana-source", "provider")
+        rel_id = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(SOURCE_DATA, rel_id)
 
-        other_rel = self.harness.add_relation("grafana-source", "provider")
+        other_rel = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(EXTRA_SOURCE_DATA, other_rel)
 
         sources = self.harness.charm.list_sources()
         self.assertEqual(sources, [SOURCE_DATA, EXTRA_SOURCE_DATA])
 
     def test_consumer_can_remove_source(self):
-        rel_id = self.harness.add_relation("grafana-source", "provider")
+        rel_id = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(SOURCE_DATA, rel_id)
 
         data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
@@ -99,7 +99,7 @@ class TestConsumer(unittest.TestCase):
         )
 
     def test_consumer_can_remove_source_with_id(self):
-        rel_id = self.harness.add_relation("grafana-source", "provider")
+        rel_id = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(SOURCE_DATA, rel_id)
 
         data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
@@ -112,10 +112,10 @@ class TestConsumer(unittest.TestCase):
         )
 
     def test_consumer_can_list_removed_sources(self):
-        rel_id = self.harness.add_relation("grafana-source", "provider")
+        rel_id = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(SOURCE_DATA, rel_id)
 
-        other_rel = self.harness.add_relation("grafana-source", "provider")
+        other_rel = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(EXTRA_SOURCE_DATA, other_rel)
 
         self.harness.charm.remove_source(rel_id)

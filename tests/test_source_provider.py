@@ -8,7 +8,9 @@ import unittest
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana.v1.grafana_source import GrafanaSourceProvider, SourceFieldsMissingError
+from lib.charms.grafana.v1.grafana_source import (
+    GrafanaSourceProvider,
+)
 
 
 class GrafanaCharm(CharmBase):
@@ -191,8 +193,6 @@ class TestProvider(unittest.TestCase):
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id]
         self.assertIsNotNone(sources)
-        print(sources)
-        print(completed_data)
         self.assertEqual(sources, completed_data)
         self.assertEqual(len(self.harness.charm.grafana_provider._stored.sources), 1)
         self.assertEqual(self.harness.charm._stored.source_events, 1)
