@@ -21,7 +21,6 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import Layer
 
-import lib.charms.grafana.v1.config as grafana_config
 from lib.charms.grafana.v1.grafana_source import (
     GrafanaSourceProvider,
     GrafanaSourceEvents,
@@ -31,6 +30,20 @@ from lib.charms.ingress.v0.ingress import IngressRequires
 
 
 logger = logging.getLogger()
+
+REQUIRED_DATABASE_FIELDS = {
+    "type",  # mysql, postgres or sqlite3 (sqlite3 doesn't work for HA)
+    "host",  # in the form '<url_or_ip>:<port>', e.g. 127.0.0.1:3306
+    "name",
+    "user",
+    "password",
+}
+
+VALID_DATABASE_TYPES = {"mysql", "postgres", "sqlite3"}
+
+CONFIG_PATH = "/etc/grafana/grafana-config.ini"
+DATASOURCE_PATH = "/etc/grafana/provisioning"
+VERSION = "1.0.0"
 
 
 class GrafanaCharm(CharmBase):
@@ -58,13 +71,13 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(grafana_datasources_hash=None)
 
         # -- standard events
-        self.framework.observe(self.on.pebble_ready, self.on_pebble_ready)
+        self.framework.observe(self.on.grafana_pebble_ready, self.on_pebble_ready)
         self.framework.observe(self.on.config_changed, self.on_config_changed)
         self.framework.observe(self.on.stop, self.on_stop)
 
         # -- grafana-source relation observations
         self.provider = GrafanaSourceProvider(
-            self, "grafana-source", "grafana", self.version
+            self, "grafana-source", "grafana", VERSION
         )
         self.framework.observe(
             self.provider.on.sources_changed,
@@ -158,7 +171,7 @@ class GrafanaCharm(CharmBase):
         container = self.unit.get_container(self.name)
 
         datasources_path = os.path.join(
-            grafana_config.DATASOURCE_PATH, "datasources", "datasources.yaml"
+            DATASOURCE_PATH, "datasources", "datasources.yaml"
         )
         container.push(datasources_path, config)
 
@@ -170,7 +183,7 @@ class GrafanaCharm(CharmBase):
         Args:
             config: A :str: containing the datasource configuraiton
         """
-        self.container.push(grafana_config.CONFIG_PATH, config)
+        self.container.push(CONFIG_PATH, config)
 
     @property
     def has_peers(self) -> bool:
@@ -204,7 +217,7 @@ class GrafanaCharm(CharmBase):
 
     def on_import_dashboard_action(self, event):
         container = self.unit.get_container(self.name)
-        dashboard_path = os.path.join(grafana_config.DATASOURCE_PATH, "dashboards")
+        dashboard_path = os.path.join(DATASOURCE_PATH, "dashboards")
 
         self.init_dashboard_provisioning(dashboard_path)
         dashboard_base64_string = event.params["dashboard"]
@@ -260,13 +273,13 @@ class GrafanaCharm(CharmBase):
         # Get required information
         database_fields = {
             field: event.relation.data[event.unit].get(field)
-            for field in grafana_config.REQUIRED_DATABASE_FIELDS
+            for field in REQUIRED_DATABASE_FIELDS
         }
 
         # if any required fields are missing, warn the user and return
         missing_fields = [
             field
-            for field in grafana_config.REQUIRED_DATABASE_FIELDS
+            for field in REQUIRED_DATABASE_FIELDS
             if database_fields.get(field) is None
         ]
         if len(missing_fields) > 0:
@@ -382,36 +395,34 @@ class GrafanaCharm(CharmBase):
             # mysql_uri = self.mysql.get_cluster_info()
             mysql_uri = "fake data for now"
             # Populate for a MySQL relation
-            dbinfo = {
-                "GF_DATABASE_TYPE": "mysql",
-                "GF_DATABASE_URL": mysql_uri
-            }
+            dbinfo = {"GF_DATABASE_TYPE": "mysql", "GF_DATABASE_URL": mysql_uri}
         else:
-            dbinfo = {
-                "GF_DATABASE_TYPE": "sqlite3"
-            }
+            dbinfo = {"GF_DATABASE_TYPE": "sqlite3"}
 
-        layer = Layer({
-            "summary": "grafana-k8s layer",
-            "description": "grafana-k8s layer",
-            "services": {
-                self.name: {
-                    "override": "replace",
-                    "summary": "grafana-k8s service",
-                    "command": "grafana-server -config {}".format(
-                        grafana_config.CONFIG_PATH
-                    ),
-                    "startup": "enabled",
-                    "environment": {
-                        "GF_SERVER_HTTP_PORT": self.model.config["port"],
-                        "GF_LOG_LEVEL": self.model.config["grafana_log_level"],
-                        "GF_PATHS_PROVISIONING": grafana_config.DATASOURCE_PATH,
-                        "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
-                        "GF_SECURITY_ADMIN_PASSWORD": self.model.config["admin_password"],
-                    } | dbinfo,
-                }
-            },
-        })
+        layer = Layer(
+            {
+                "summary": "grafana-k8s layer",
+                "description": "grafana-k8s layer",
+                "services": {
+                    self.name: {
+                        "override": "replace",
+                        "summary": "grafana-k8s service",
+                        "command": "grafana-server -config {}".format(CONFIG_PATH),
+                        "startup": "enabled",
+                        "environment": {
+                            "GF_SERVER_HTTP_PORT": self.model.config["port"],
+                            "GF_LOG_LEVEL": self.model.config["grafana_log_level"],
+                            "GF_PATHS_PROVISIONING": DATASOURCE_PATH,
+                            "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
+                            "GF_SECURITY_ADMIN_PASSWORD": self.model.config[
+                                "admin_password"
+                            ],
+                            **dbinfo,
+                        },
+                    }
+                },
+            }
+        )
 
         return layer
 
@@ -443,7 +454,7 @@ class GrafanaCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     @property
-    def version(self):
+    def grafana_version(self):
         """Grafana server version."""
         info = self.provider.build_info
         if info:

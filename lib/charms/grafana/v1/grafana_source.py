@@ -7,8 +7,7 @@ from ops.charm import CharmBase, CharmEvents, RelationBrokenEvent, RelationChang
 from ops.framework import EventBase, EventSource, StoredState
 from ops.relation import ConsumerBase, ProviderBase
 
-from . import config
-from grafana_server import Grafana
+from .grafana_server import Grafana
 
 LIBID = "987654321"
 LIBAPI = 1
@@ -17,6 +16,15 @@ LIBPATCH = 0
 logger = logging.getLogger(__name__)
 
 SourceData = namedtuple("SourceData", "name unit app rel_id data")
+REQUIRED_DATASOURCE_FIELDS = {
+    "address",  # the hostname/IP of the data source server
+    "port",  # the port of the data source server
+    "source-type",  # the data source type (e.g. prometheus)
+}
+
+OPTIONAL_DATASOURCE_FIELDS = {
+    "source-name",  # a human-readable name of the source
+}
 
 
 class SourceFieldsMissingError(Exception):
@@ -66,8 +74,7 @@ def _validate(self, source: SourceData) -> dict:
         # using this as a more generic way of getting data source fields
         validated_source = {
             field: source_data.get(field)
-            for field in config.REQUIRED_DATASOURCE_FIELDS
-            | config.OPTIONAL_DATASOURCE_FIELDS
+            for field in REQUIRED_DATASOURCE_FIELDS | OPTIONAL_DATASOURCE_FIELDS
         }
 
         validated_source["address"] = (
@@ -78,7 +85,7 @@ def _validate(self, source: SourceData) -> dict:
 
         missing_fields = [
             field
-            for field in config.REQUIRED_DATASOURCE_FIELDS
+            for field in REQUIRED_DATASOURCE_FIELDS
             if validated_source.get(field) is None
         ]
 
@@ -175,9 +182,7 @@ class GrafanaSourceConsumer(ConsumerBase):
 
         self._stored.set_default(sources=dict())  # available data sources
         self._stored.set_default(sources_to_delete=set())
-        self.framework.observe(
-            events.relation_changed, self._update_sources
-        )
+        self.framework.observe(events.relation_changed, self._update_sources)
 
     def add_source(self, data: dict, rel_id=None) -> None:
         """Add an additional source to the Grafana source service.
@@ -407,7 +412,7 @@ class GrafanaSourceProvider(ProviderBase):
         datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
 
         #
-        for source_info in self._stored.sources.items():
+        for source_info in self._stored.sources.values():
             source = {
                 "orgId": "1",
                 "access": "proxy",
@@ -421,7 +426,7 @@ class GrafanaSourceProvider(ProviderBase):
             datasources_dict["datasources"].append(source)
 
         # Also get a list of all the sources which have previously been purged and add them
-        for name in self._stored.sources_to_delete():
+        for name in self._stored.sources_to_delete:
             source = {"orgId": 1, "name": name}
             datasources_dict["deleteDatasources"].append(source)
 

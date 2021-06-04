@@ -9,6 +9,14 @@ options:
             Logging level for Grafana. Options are “debug”, “info”,
             “warn”, “error”, and “critical”.
         default: info
+    admin_user:
+        description: The Grafana administrative user
+        type: string
+        default: admin
+    admin_password:
+        description: The password for the grafana administrative user
+        type: string
+        default: admin
     web-external-url:
         description: |
             The URL under which Grafana is externally reachable (for example,
