@@ -53,9 +53,8 @@ class TestServer(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        is_ready = self.grafana.is_ready()
-        self.assertIsNotNone(is_ready)
-        self.assertTrue(is_ready)
+        self.assertIsNotNone(self.grafana.is_ready)
+        self.assertTrue(self.grafana.is_ready)
 
     @patch("lib.charms.grafana.v1.grafana_server.urllib3.PoolManager.request")
     def test_grafana_server_is_unready(self, request):
@@ -67,6 +66,5 @@ class TestServer(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        is_ready = self.grafana.is_ready()
-        self.assertIsNotNone(is_ready)
-        self.assertFalse(is_ready)
+        self.assertIsNotNone(self.grafana.is_ready)
+        self.assertFalse(self.grafana.is_ready)

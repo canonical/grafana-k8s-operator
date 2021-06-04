@@ -1,5 +1,6 @@
 import json
 import logging
+import yaml
 
 from collections import namedtuple
 from ops.charm import CharmBase, CharmEvents, RelationBrokenEvent, RelationChangedEvent
@@ -7,6 +8,7 @@ from ops.framework import EventBase, EventSource, StoredState
 from ops.relation import ConsumerBase, ProviderBase
 
 from . import config
+from grafana_server import Grafana
 
 LIBID = "987654321"
 LIBAPI = 1
@@ -142,7 +144,7 @@ class GrafanaSourceConsumer(ConsumerBase):
         adding its datasources as follows:
 
             self.grafana = GrafanaConsumer(self, "grafana-source", {"grafana-source"}: ">=1.0"})
-            self.granfana.add_source({
+            self.grafana.add_source({
                 "source-type": <source-type>,
                 "address": <address>,
                 "port": <port>
@@ -157,7 +159,7 @@ class GrafanaSourceConsumer(ConsumerBase):
                 the Grafana charmed service.
             consumes: a :dict: of acceptable monitoring service
                 providers. The keys of the dictionary are :string:
-                names of grafaba siyrce service providers. Typically,
+                names of grafana source service providers. Typically,
                 this is `grafana-source`. The values of the dictionary
                 are corresponding minimal acceptable semantic versions
                 for the service.
@@ -221,7 +223,7 @@ class GrafanaSourceConsumer(ConsumerBase):
 
         Args:
             rel_id: an optional integer specifying the relation ID
-                for the grafana source service, only required if the
+                for the grafana-k8s source service, only required if the
                 :class:`GrafanaConsumer` has been instantiated in
                 `multi` mode.
         """
@@ -293,6 +295,8 @@ class GrafanaSourceProvider(ProviderBase):
         super().__init__(charm, name, service, version)
         self.charm = charm
         events = self.charm.on[name]
+
+        self.grafana_service = Grafana("localhost", self.model.config["port"])
 
         self._stored.set_default(sources=dict())  # available data sources
         self._stored.set_default(sources_to_delete=set())
@@ -367,7 +371,7 @@ class GrafanaSourceProvider(ProviderBase):
             logger.warning("Could not remove source for relation: {}".format(rel_id))
 
     def sources(self) -> []:
-        """Returns an array of sources the provdier knows about"""
+        """Returns an array of sources the provider knows about"""
         sources = []
         for source in self._stored.sources.values():
             sources.append(source)
@@ -388,3 +392,38 @@ class GrafanaSourceProvider(ProviderBase):
             sources_to_delete.append(source)
 
         return sources_to_delete
+
+    @property
+    def build_info(self) -> dict:
+        """Returns information about the running Grafana service"""
+        return self.grafana_service.build_info
+
+    def generate_datasource_config(self) -> str:
+        """
+        Template out a Grafana datasource config from the sources (and
+        removed sources) the consumer knows about, and dump it to YAML
+        """
+        # Boilerplate for the config file
+        datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
+
+        #
+        for source_info in self._stored.sources.items():
+            source = {
+                "orgId": "1",
+                "access": "proxy",
+                "isDefault": source_info["isDefault"],
+                "name": source_info["source-name"],
+                "type": source_info["source-type"],
+                "url": "http://{}:{}".format(
+                    source_info["private-address"], source_info["port"]
+                ),
+            }
+            datasources_dict["datasources"].append(source)
+
+        # Also get a list of all the sources which have previously been purged and add them
+        for name in self._stored.sources_to_delete():
+            source = {"orgId": 1, "name": name}
+            datasources_dict["deleteDatasources"].append(source)
+
+        datasources_string = yaml.dump(datasources_dict)
+        return datasources_string

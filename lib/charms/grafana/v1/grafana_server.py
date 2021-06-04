@@ -15,6 +15,7 @@ class Grafana:
         self.port = port
         self.http = urllib3.PoolManager()
 
+    @property
     def is_ready(self) -> bool:
         """Checks whether the Grafana server is up and running yet
 
