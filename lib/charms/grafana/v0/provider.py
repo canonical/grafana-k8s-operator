@@ -61,17 +61,12 @@ class GrafanaSourceProvider(ProviderBase):
         rel = event.relation
         rel_type = event.unit if event.unit else event.app
 
-        print(event.relation.data)
-        print(rel_type)
-        print(event.relation.data[rel_type])
-
         data = json.loads(event.relation.data[rel_type].get("sources", {}))
         if not data:
             return
 
         source = SourceData(event.app.name, event.unit, event.app, rel.id,
                             data)
-
         try:
             data = _validate(self, source)
         except SourceFieldsMissingError as e:

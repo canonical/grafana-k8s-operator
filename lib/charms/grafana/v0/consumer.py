@@ -219,7 +219,7 @@ class GrafanaSourceConsumer(ConsumerBase):
             )
             return
 
-        rel.data[self.charm.app]["sources"] = json.dumps(data)
+        rel.data[self.charm.unit]["sources"] = json.dumps(data)
         self._stored.sources[rel_id] = data
         self.on.available.emit()
 
@@ -237,7 +237,7 @@ class GrafanaSourceConsumer(ConsumerBase):
         if rel_id is None:
             rel_id = rel.id
 
-        rel.data[self.charm.app].pop("sources")
+        rel.data[self.charm.unit].pop("sources")
         source = self._stored.sources.pop(rel_id)
 
         if source is not None:
@@ -284,6 +284,8 @@ class GrafanaSourceConsumer(ConsumerBase):
                 event.relation.data[rel_type].get("sources")
             )
         )
+
+        event.relation.data[self.charm.unit]["sources"] = json.dumps(self._stored.sources[rel.id])
 
         self.on.available.emit()
 

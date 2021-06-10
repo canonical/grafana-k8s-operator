@@ -62,7 +62,7 @@ class TestConsumer(unittest.TestCase):
         self.assertFalse(data)
         self.harness.charm.add_source(SOURCE_DATA)
 
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+        data = self.harness.get_relation_data(rel_id, self.harness.model.unit.name)
         self.assertIn("sources", data)
         source = json.loads(data["sources"])
         self.assertEqual(source, SOURCE_DATA)
@@ -71,7 +71,7 @@ class TestConsumer(unittest.TestCase):
         rel_id = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(SOURCE_DATA, rel_id)
 
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+        data = self.harness.get_relation_data(rel_id, self.harness.model.unit.name)
         source = json.loads(data["sources"])
         self.assertEqual(source, SOURCE_DATA)
 
@@ -89,26 +89,26 @@ class TestConsumer(unittest.TestCase):
         rel_id = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(SOURCE_DATA, rel_id)
 
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+        data = self.harness.get_relation_data(rel_id, self.harness.model.unit.name)
         source = json.loads(data["sources"])
         self.assertEqual(source, SOURCE_DATA)
 
         self.harness.charm.remove_source()
         self.assertFalse(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+            self.harness.get_relation_data(rel_id, self.harness.model.unit.name)
         )
 
     def test_consumer_can_remove_source_with_id(self):
         rel_id = self.harness.add_relation("grafana-source", "consumer")
         self.harness.charm.add_source(SOURCE_DATA, rel_id)
 
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+        data = self.harness.get_relation_data(rel_id, self.harness.model.unit.name)
         source = json.loads(data["sources"])
         self.assertEqual(source, SOURCE_DATA)
 
         self.harness.charm.remove_source(rel_id)
         self.assertFalse(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+            self.harness.get_relation_data(rel_id, self.harness.model.unit.name)
         )
 
     def test_consumer_can_list_removed_sources(self):
