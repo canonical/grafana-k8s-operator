@@ -64,17 +64,21 @@ class GrafanaCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.name = "grafana"
-        self.container = self.unit.get_container(self.name)
 
         # -- initialize states --
-        self.ingress = None
-        self.mysql = MySQLConsumer(self, self.name, {"mysql": ">=2.v0"})
-        self._stored.set_default(database=dict())  # db configuration
-        self._stored.set_default(pebble_ready=False)
+        self.name = "grafana"
+        self.container = self.unit.get_container(self.name)
         self.grafana_service = Grafana("localhost", self.model.config["port"])
         self.grafana_config_ini_hash = None
         self.grafana_datasources_hash = None
+        self._stored.set_default(
+            database=dict(),
+            pebble_ready=False
+        )
+
+        # -- consumers --
+        self.ingress = None
+        self.mysql = MySQLConsumer(self, self.name, {"mysql": ">=2.v0"})
 
         # -- standard events
         self.framework.observe(self.on.grafana_pebble_ready, self.on_pebble_ready)
