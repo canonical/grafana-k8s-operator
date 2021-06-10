@@ -19,6 +19,8 @@ containers:
             - storage: database
               location: /var/lib/grafana
 provides:
+    grafana:
+        interface: grafana
     grafana-source:
         interface: grafana-datasource
     grafana-dashboard:
@@ -31,7 +33,7 @@ requires:
         interface: db
         limit: 1
 peers:
-    grafana:
+    grafana-peers:
         interface: grafana-peers
 resources:
     grafana-image:

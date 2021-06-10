@@ -7,7 +7,7 @@ from ops.charm import CharmBase, CharmEvents, RelationBrokenEvent, RelationChang
 from ops.framework import EventBase, EventSource, StoredState
 from ops.relation import ConsumerBase, ProviderBase
 
-from .grafana_server import Grafana
+from src.grafana_server import Grafana
 
 LIBID = "987654321"
 LIBAPI = 1
@@ -182,7 +182,8 @@ class GrafanaSourceConsumer(ConsumerBase):
 
         self._stored.set_default(sources=dict())  # available data sources
         self._stored.set_default(sources_to_delete=set())
-        self.framework.observe(events.relation_changed, self._update_sources)
+        self.framework.observe(events.relation_changed, self._on_relation_changed)
+        self.framework.observe(events.relation_broken, self._on_relation_broken)
 
     def add_source(self, data: dict, rel_id=None) -> None:
         """Add an additional source to the Grafana source service.
@@ -222,6 +223,7 @@ class GrafanaSourceConsumer(ConsumerBase):
 
         rel.data[self.charm.app]["sources"] = json.dumps(data)
         self._stored.sources[rel_id] = data
+        self.on.available.emit()
 
     def remove_source(self, rel_id=None) -> None:
         """Removes a source relation.
@@ -242,6 +244,7 @@ class GrafanaSourceConsumer(ConsumerBase):
 
         if source is not None:
             self._stored.sources_to_delete.add(source["source-name"])
+        self.on.available.emit()
 
     def list_sources(self) -> []:
         """Returns an array of currently valid sources"""
@@ -260,175 +263,37 @@ class GrafanaSourceConsumer(ConsumerBase):
 
         return sources
 
-    def _update_sources(self, event: RelationChangedEvent) -> None:
+    def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """
         Update the stored grafana sources if this is not a
         :class:`RelationBrokenEvent` and :class:`GrafanaConsumer`
         has previously seen this relation and has stored sources
         """
-        rel_id = event.relation.id
-        if not self._stored.sources.get(rel_id, {}):
-            return
+        rel = event.relation
+        rel_type = event.unit if event.unit else event.app
 
-        if type(event) is RelationBrokenEvent:
-            return
-
-        event.relation.data[rel_id]["sources"] = self._stored.sources[rel_id]
-
-
-class GrafanaSourceProvider(ProviderBase):
-    on = GrafanaSourceEvents()
-    _stored = StoredState()
-
-    def __init__(self, charm: CharmBase, name: str, service: str, version=None) -> None:
-        """A Grafana based Monitoring service consumer
-
-        Args:
-            charm: a :class:`CharmBase` instance that manages this
-                instance of the Grafana source service.
-            name: string name of the relation that is provides the
-                Grafana source service.
-            service: string name of service provided. This is used by
-                :class:`GrafanaProvider` to validate this service as
-                acceptable. Hence the string name must match one of the
-                acceptable service names in the :class:`GrafanaSourceProvider`s
-                `consumes` argument. Typically this string is just "grafana".
-            version: a string providing the semantic version of the Grafana
-                source being provided.
-
-        """
-        super().__init__(charm, name, service, version)
-        self.charm = charm
-        events = self.charm.on[name]
-
-        self.grafana_service = Grafana("localhost", self.model.config["port"])
-
-        self._stored.set_default(sources=dict())  # available data sources
-        self._stored.set_default(sources_to_delete=set())
-
-        self.framework.observe(
-            events.relation_changed, self.on_grafana_source_relation_changed
-        )
-        self.framework.observe(
-            events.relation_broken, self.on_grafana_source_relation_broken
-        )
-
-    def on_grafana_source_relation_changed(self, event: RelationChangedEvent) -> None:
-        """Handle relation changes in related consumers.
-
-        If there are changes in relations between Grafana source providers
-        and consumers, this event handler (if the unit is the leader) will
-        get data for an incoming grafana-source relation through a
-        :class:`GrafanaSourcesChanged` event, and make the relation data
-        is available in the app's datastore object. The Grafana charm can
-        then respond to the event to update its configuration
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        rel_id = event.relation.id
-        data = event.relation.data[event.app]
-
-        data = json.loads(data.get("sources", {}))
+        data = json.loads(event.relation.data[rel_type].get("sources", {}))
         if not data:
             return
 
-        source = SourceData(event.app.name, event.unit, event.app, rel_id, data)
-
-        try:
-            data = _validate(self, source)
-        except SourceFieldsMissingError as e:
-            logger.critical(
-                f"Missing data on added grafana-k8s source {e}", exc_info=True
+        self._stored.sources[rel.id] = _validate(
+            self,
+            SourceData(
+                self.name,
+                self.charm.unit,
+                rel.app,
+                rel.id,
+                event.relation.data[rel_type].get("sources")
             )
-            return
+        )
 
-        self._stored.sources[rel_id] = data
-        self.on.sources_changed.emit()
+        self.on.available.emit()
 
-    def on_grafana_source_relation_broken(self, event: RelationBrokenEvent) -> None:
-        """Update job config when consumers depart.
-
-        When a Grafana source consumer departs, the configuration
-        for that consumer is removed from the list of sources jobs,
-        added to a list of sources to remove, and other consumers
-        are informed through a :class:`GrafanaSourcesChanged` event.
+    def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
         """
-        if not self.charm.unit.is_leader():
-            return
+        Remove any known sources from this relation
+        """
 
         rel_id = event.relation.id
-        self._remove_source_from_datastore(rel_id)
-
-    def _remove_source_from_datastore(self, rel_id: int) -> None:
-        """Remove the grafana-source from the datastore. and add the
-        name to the list of sources to remove when a relation is
-        broken.
-        """
-
-        logger.info("Removing all data for relation: {}".format(rel_id))
-
-        try:
-            removed_source = self._stored.sources.pop(rel_id, None)
-            self._stored.sources_to_delete.add(removed_source["source-name"])
-            self.on.sources_to_delete_changed.emit()
-        except KeyError:
-            logger.warning("Could not remove source for relation: {}".format(rel_id))
-
-    def sources(self) -> []:
-        """Returns an array of sources the provider knows about"""
-        sources = []
-        for source in self._stored.sources.values():
-            sources.append(source)
-
-        return sources
-
-    def update_port(self, relation_name: str, port: int) -> None:
-        if self.charm.unit.is_leader():
-            for relation in self.charm.model.relations[relation_name]:
-                logger.info("Setting address data for relation", relation)
-                if str(port) != relation.data[self.charm.app].get("port", None):
-                    relation.data[self.charm.app]["port"] = str(port)
-
-    def sources_to_delete(self) -> []:
-        """Returns an array of source names which have been removed"""
-        sources_to_delete = []
-        for source in self._stored.sources_to_delete:
-            sources_to_delete.append(source)
-
-        return sources_to_delete
-
-    @property
-    def build_info(self) -> dict:
-        """Returns information about the running Grafana service"""
-        return self.grafana_service.build_info
-
-    def generate_datasource_config(self) -> str:
-        """
-        Template out a Grafana datasource config from the sources (and
-        removed sources) the consumer knows about, and dump it to YAML
-        """
-        # Boilerplate for the config file
-        datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
-
-        #
-        for source_info in self._stored.sources.values():
-            source = {
-                "orgId": "1",
-                "access": "proxy",
-                "isDefault": source_info["isDefault"],
-                "name": source_info["source-name"],
-                "type": source_info["source-type"],
-                "url": "http://{}:{}".format(
-                    source_info["private-address"], source_info["port"]
-                ),
-            }
-            datasources_dict["datasources"].append(source)
-
-        # Also get a list of all the sources which have previously been purged and add them
-        for name in self._stored.sources_to_delete:
-            source = {"orgId": 1, "name": name}
-            datasources_dict["deleteDatasources"].append(source)
-
-        datasources_string = yaml.dump(datasources_dict)
-        return datasources_string
+        self.remove_source(rel_id)
+        self.on.available.emit()
