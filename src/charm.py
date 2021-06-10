@@ -72,7 +72,6 @@ class GrafanaCharm(CharmBase):
         self.mysql = MySQLConsumer(self, self.name, {"mysql": ">=2.v0"})
         self._stored.set_default(database=dict())  # db configuration
         self._stored.set_default(pebble_ready=False)
-        self._stored.set_default(grafana_datasources_hash=None)
         self.grafana_service = Grafana("localhost", self.model.config["port"])
         self.grafana_config_ini_hash = None
         self.grafana_datasources_hash = None
