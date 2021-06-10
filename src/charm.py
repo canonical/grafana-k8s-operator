@@ -21,19 +21,22 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import Layer
 
-from lib.charms.grafana.v1.grafana_source import (
-    GrafanaSourceProvider,
+from lib.charms.grafana.v0.consumer import (
     GrafanaSourceEvents,
     SourceFieldsMissingError,
 )
+from lib.charms.grafana.v0.provider import GrafanaSourceProvider
 from lib.charms.ingress.v0.ingress import IngressRequires
+from lib.charms.mysql.v0.mysql import MySQLConsumer
+
+from grafana_server import Grafana
 
 
 logger = logging.getLogger()
 
 REQUIRED_DATABASE_FIELDS = {
     "type",  # mysql, postgres or sqlite3 (sqlite3 doesn't work for HA)
-    "host",  # in the form '<url_or_ip>:<port>', e.g. 127.0.0.1:3306
+    "host",  # in the form '<url_or_ip>:<port>', e.g. 127.v0.v0.1:3306
     "name",
     "user",
     "password",
@@ -43,7 +46,8 @@ VALID_DATABASE_TYPES = {"mysql", "postgres", "sqlite3"}
 
 CONFIG_PATH = "/etc/grafana/grafana-config.ini"
 DATASOURCE_PATH = "/etc/grafana/provisioning"
-VERSION = "1.0.0"
+VERSION = "1.v0.v0"
+PEER = "grafana-peers"
 
 
 class GrafanaCharm(CharmBase):
@@ -65,10 +69,13 @@ class GrafanaCharm(CharmBase):
 
         # -- initialize states --
         self.ingress = None
+        self.mysql = MySQLConsumer(self, self.name, {"mysql": ">=2.v0"})
         self._stored.set_default(database=dict())  # db configuration
         self._stored.set_default(pebble_ready=False)
-        self._stored.set_default(grafana_config_ini_hash=None)
         self._stored.set_default(grafana_datasources_hash=None)
+        self.grafana_service = Grafana("localhost", self.model.config["port"])
+        self.grafana_config_ini_hash = None
+        self.grafana_datasources_hash = None
 
         # -- standard events
         self.framework.observe(self.on.grafana_pebble_ready, self.on_pebble_ready)
@@ -135,25 +142,25 @@ class GrafanaCharm(CharmBase):
         # Generate a new base config and see if it differs from what we have.
         # If it does, store it and signal that we should restart Grafana
         grafana_config_ini = self.generate_grafana_config()
-        config_ini_hash = hashlib.md5(
+        config_ini_hash = hashlib.sha256(
             str(grafana_config_ini).encode("utf-8")
         ).hexdigest()
-        if not self._stored.grafana_config_ini_hash == config_ini_hash:
-            self._stored.grafana_config_ini_hash = config_ini_hash
+        if not self.grafana_config_ini_hash == config_ini_hash:
+            self.grafana_config_ini_hash = config_ini_hash
             self.update_grafana_config_ini(grafana_config_ini)
-            logger.debug("Pushed new grafana base configuration")
+            logger.debug("Pushed new grafana-k8s base configuration")
 
             restart = True
 
         # Do the same thing for datasources
-        grafana_datasources = self.provider.generate_datasource_config()
-        datasources_hash = hashlib.md5(
+        grafana_datasources = self.generate_datasource_config()
+        datasources_hash = hashlib.sha256(
             str(grafana_datasources).encode("utf-8")
         ).hexdigest()
-        if not self._stored.grafana_datasources_hash == datasources_hash:
-            self._stored.grafana_datasources_hash = datasources_hash
+        if not self.grafana_datasources_hash == datasources_hash:
+            self.grafana_datasources_hash = datasources_hash
             self.update_datasource_config(grafana_datasources)
-            logger.debug("Pushed new datasource configuration")
+            logger.debug("Pushed new grafana-k8s datasource configuration")
 
             restart = True
 
@@ -188,7 +195,7 @@ class GrafanaCharm(CharmBase):
     @property
     def has_peers(self) -> bool:
         """Check whether or nto there are any other Grafanas as peers"""
-        rel = self.model.get_relation(self.name)
+        rel = self.model.get_relation(PEER)
         return len(rel.units) > 0 if rel is not None else False
 
     ############################
@@ -411,7 +418,7 @@ class GrafanaCharm(CharmBase):
                         "startup": "enabled",
                         "environment": {
                             "GF_SERVER_HTTP_PORT": self.model.config["port"],
-                            "GF_LOG_LEVEL": self.model.config["grafana_log_level"],
+                            "GF_LOG_LEVEL": self.model.config["log_level"],
                             "GF_PATHS_PROVISIONING": DATASOURCE_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self.model.config[
@@ -456,10 +463,45 @@ class GrafanaCharm(CharmBase):
     @property
     def grafana_version(self):
         """Grafana server version."""
-        info = self.provider.build_info
+        info = self.grafana_service.build_info
         if info:
             return info.get("version", None)
         return None
+
+    @property
+    def build_info(self) -> dict:
+        """Returns information about the running Grafana service"""
+        return self.grafana_service.build_info
+
+    def generate_datasource_config(self) -> str:
+        """
+        Template out a Grafana datasource config from the sources (and
+        removed sources) the consumer knows about, and dump it to YAML
+        """
+        # Boilerplate for the config file
+        datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
+
+        #
+        for source_info in self.provider.sources:
+            source = {
+                "orgId": "1",
+                "access": "proxy",
+                "isDefault": source_info["isDefault"],
+                "name": source_info["source-name"],
+                "type": source_info["source-type"],
+                "url": "http://{}:{}".format(
+                    source_info["private-address"], source_info["port"]
+                ),
+            }
+            datasources_dict["datasources"].append(source)
+
+        # Also get a list of all the sources which have previously been purged and add them
+        for name in self.provider.sources_to_delete:
+            source = {"orgId": 1, "name": name}
+            datasources_dict["deleteDatasources"].append(source)
+
+        datasources_string = yaml.dump(datasources_dict)
+        return datasources_string
 
 
 if __name__ == "__main__":

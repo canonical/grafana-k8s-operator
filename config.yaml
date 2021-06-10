@@ -3,7 +3,7 @@ options:
         description: The port grafana will be listening on
         type: int
         default: 3000
-    grafana_log_level:
+    log_level:
         type: string
         description: |
             Logging level for Grafana. Options are “debug”, “info”,
@@ -17,7 +17,7 @@ options:
         description: The password for the grafana administrative user
         type: string
         default: admin
-    web-external-url:
+    web_external_url:
         description: |
             The URL under which Grafana is externally reachable (for example,
             if Grafana is served via a reverse proxy).
@@ -29,13 +29,3 @@ options:
             If omitted, relevant URL components will be derived automatically.
         type: string
         default: ""
-    ssl-cert:
-        type: string
-        default:
-        description: |
-            SSL certificate to install and use for the Grafana endpoint.
-    ssl-key:
-        type: string
-        default:
-        description: |
-            SSL key to use with certificate specified as ssl-cert.

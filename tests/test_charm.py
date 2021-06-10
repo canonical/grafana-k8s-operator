@@ -60,7 +60,7 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
 
-        self.minimal_datasource_hash = hashlib.md5(
+        self.minimal_datasource_hash = hashlib.sha256(
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
         ).hexdigest()
 
@@ -68,16 +68,9 @@ class TestCharm(unittest.TestCase):
     def test_datasource_config_is_updated_by_grafana_source_relation(self, push):
         self.harness.set_leader(True)
 
-        # check datasource config is empty without relation
-        self.harness.update_config(MINIMAL_CONFIG)
-        self.assertEqual(
-            self.harness.charm._stored.grafana_datasources_hash,
-            self.minimal_datasource_hash,
-        )
-
         # check datasource config is updated when a grafana-source joins
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
-        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.add_relation_unit(rel_id, "prometheus/v0")
         source_data = {
             "private-address": "1.1.1.1",
             "port": 1234,
@@ -98,7 +91,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(True)
 
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
-        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.add_relation_unit(rel_id, "prometheus/v0")
         source_data = {
             "private-address": "1.1.1.1",
             "port": 1234,

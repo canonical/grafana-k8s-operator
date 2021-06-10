@@ -1,13 +1,11 @@
 import json
 import logging
-import yaml
 
 from collections import namedtuple
 from ops.charm import CharmBase, CharmEvents, RelationBrokenEvent, RelationChangedEvent
 from ops.framework import EventBase, EventSource, StoredState
-from ops.relation import ConsumerBase, ProviderBase
+from ops.relation import ConsumerBase
 
-from src.grafana_server import Grafana
 
 LIBID = "987654321"
 LIBAPI = 1
@@ -150,7 +148,7 @@ class GrafanaSourceConsumer(ConsumerBase):
         by instantiating a :class:`GrafanaConsumer` object and
         adding its datasources as follows:
 
-            self.grafana = GrafanaConsumer(self, "grafana-source", {"grafana-source"}: ">=1.0"})
+            self.grafana = GrafanaConsumer(self, "grafana-source", {"grafana-source"}: ">=1.v0"})
             self.grafana.add_source({
                 "source-type": <source-type>,
                 "address": <address>,

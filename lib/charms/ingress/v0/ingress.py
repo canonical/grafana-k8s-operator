@@ -43,7 +43,7 @@ LIBID = "2d35a009b0d64fe186c99a8c9e53c6ab"
 LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft push-lib` or reset
-# to 0 if you are raising the major API version
+# to v0 if you are raising the major API version
 LIBPATCH = 7
 
 logger = logging.getLogger(__name__)

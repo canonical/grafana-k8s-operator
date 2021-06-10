@@ -7,7 +7,7 @@ import unittest
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana.v1.grafana_source import GrafanaSourceConsumer
+from lib.charms.grafana.v0.consumer import GrafanaSourceConsumer
 
 SOURCE_DATA = {
     "isDefault": True,
@@ -32,7 +32,7 @@ class ConsumerCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self.consumer = GrafanaSourceConsumer(
-            self, "grafana-source", {"grafana": ">=1.0"}
+            self, "grafana-source", {"grafana": ">=1.v0"}
         )
 
     def add_source(self, data, rel_id=None):
