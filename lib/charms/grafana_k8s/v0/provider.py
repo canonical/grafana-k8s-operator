@@ -6,7 +6,12 @@ from ops.framework import StoredState
 from ops.relation import ProviderBase
 from typing import List
 
-from .consumer import GrafanaSourceEvents, SourceData, SourceFieldsMissingError, _validate
+from .consumer import (
+    GrafanaSourceEvents,
+    SourceData,
+    SourceFieldsMissingError,
+    _validate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +67,15 @@ class GrafanaSourceProvider(ProviderBase):
         rel = event.relation
         rel_type = event.unit if event.unit else event.app
 
-        data = json.loads(event.relation.data[rel_type].get("sources", {})) if \
-            event.relation.data[rel_type].get("sources", {}) else None
+        data = (
+            json.loads(event.relation.data[rel_type].get("sources", {}))
+            if event.relation.data[rel_type].get("sources", {})
+            else None
+        )
         if not data:
             return
 
-        source = SourceData(event.app.name, event.unit, event.app, rel.id,
-                            data)
+        source = SourceData(event.app.name, event.unit, event.app, rel.id, data)
         try:
             data = _validate(self, source)
         except SourceFieldsMissingError as e:

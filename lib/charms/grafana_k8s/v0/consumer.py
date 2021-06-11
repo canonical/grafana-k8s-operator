@@ -105,32 +105,34 @@ def _validate(self, source: SourceData) -> dict:
                 missing_fields,
             )
 
-    def set_defaults():
+        return validated_source
+
+    def set_defaults(validated_source):
         # specifically handle optional fields if necessary
         # check if source-name was not passed or if we have already saved the provided name
-        if source.data.get("source-name") is None or source_name_in_use(
-            source.data.get("source-name")
+        if validated_source.get("source-name") is None or source_name_in_use(
+            validated_source.get("source-name")
         ):
             default_source_name = "{}_{}".format(source.name, source.rel_id)
             logger.warning(
                 "'source-name' not specified' or provided name is already in use. "
                 "Using safe default: {}.".format(default_source_name)
             )
-            source.data["source-name"] = default_source_name
+            validated_source["source-name"] = default_source_name
 
         # set the first grafana-source as the default (needed for pod config)
         # if `self._stored.sources` is currently empty, this is the first
-        source.data["isDefault"] = "false" if dict(self._stored.sources) else "true"
+        validated_source["isDefault"] = "false" if dict(self._stored.sources) else "true"
 
         # normalize the new datasource relation data
         data = {
-            field: value for field, value in source.data.items() if value is not None
+            field: value for field, value in validated_source.items() if value is not None
         }
 
         return data
 
-    check_required_fields(source.data)
-    return set_defaults()
+    validated_source = check_required_fields(source.data)
+    return set_defaults(validated_source)
 
 
 class GrafanaSourceConsumer(ConsumerBase):
@@ -271,22 +273,21 @@ class GrafanaSourceConsumer(ConsumerBase):
         rel = event.relation
         rel_type = event.unit if event.unit else event.app
 
-        data = json.loads(event.relation.data[rel_type].get("sources", {}))
+        data = (
+            json.loads(event.relation.data[rel_type].get("sources", {}))
+            if event.relation.data[rel_type].get("sources", {})
+            else None
+        )
         if not data:
             return
 
         self._stored.sources[rel.id] = _validate(
-            self,
-            SourceData(
-                self.name,
-                self.charm.unit,
-                rel.app,
-                rel.id,
-                event.relation.data[rel_type].get("sources")
-            )
+            self, SourceData(self.name, self.charm.unit, rel.app, rel.id, data)
         )
 
-        event.relation.data[self.charm.unit]["sources"] = json.dumps(self._stored.sources[rel.id])
+        event.relation.data[self.charm.unit]["sources"] = json.dumps(
+            self._stored.sources[rel.id]
+        )
 
         self.on.available.emit()
 

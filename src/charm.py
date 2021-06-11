@@ -492,7 +492,7 @@ class GrafanaCharm(CharmBase):
                 "name": source_info["source-name"],
                 "type": source_info["source-type"],
                 "url": "http://{}:{}".format(
-                    source_info["private-address"], source_info["port"]
+                    source_info["address"], source_info["port"]
                 ),
             }
             datasources_dict["datasources"].append(source)
