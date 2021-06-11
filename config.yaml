@@ -1,6 +1,6 @@
 options:
     port:
-        description: The port grafana will be listening on
+        description: The port grafana-k8s will be listening on
         type: int
         default: 3000
     log_level:
@@ -14,7 +14,7 @@ options:
         type: string
         default: admin
     admin_password:
-        description: The password for the grafana administrative user
+        description: The password for the grafana-k8s administrative user
         type: string
         default: admin
     web_external_url:

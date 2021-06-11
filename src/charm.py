@@ -21,11 +21,11 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import Layer
 
-from charms.grafana.v0.consumer import (
+from charms.grafana_k8s.v0.consumer import (
     GrafanaSourceEvents,
     SourceFieldsMissingError,
 )
-from charms.grafana.v0.provider import GrafanaSourceProvider
+from charms.grafana_k8s.v0.provider import GrafanaSourceProvider
 from charms.ingress.v0.ingress import IngressRequires
 from charms.mysql.v0.mysql import MySQLConsumer
 

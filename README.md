@@ -25,7 +25,7 @@ View the dashboard in a browser:
 Add Prometheus as a datasource:
 ```bash
 juju deploy prometheus-k8s
-juju add-relation grafana prometheus
+juju add-relation grafana-k8s prometheus-k8s
 watch -c juju status --color  # wait for things to settle down
 ```
 > Once the deployed charm and relation settles, you should be able to see Prometheus data propagating to the Grafana dashboard.

@@ -17,5 +17,5 @@ add-ingress:
       type: string
       description: >
         External hostname this grafana app should respond to (required).
-      default: 'grafana.internal'
+      default: 'grafana-k8s.internal'
   required: [external_hostname]

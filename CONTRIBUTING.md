@@ -10,13 +10,13 @@ juju create-storage-pool operator-storage kubernetes storage-class=microk8s-host
 
 Deploy Grafana on its own:
 ```bash
-git clone git@github.com:canonical/grafana-operator.git
-cd grafana-operator
+git clone git@github.com:canonical/grafana-k8s.git
+cd grafana-k8s
 virtualenv -p python3 venv
 source venv/bin/activate
 pip install -r requirements-dev.txt
 charmcraft build
-juju deploy ./grafana.charm --resource grafana-image=grafana/grafana:7.2.1
+juju deploy ./grafana-k8s.charm --resource grafana-image=grafana/grafana:7.2.1
 ```
 
 View the dashboard in a browser:
@@ -26,14 +26,8 @@ View the dashboard in a browser:
 
 Add Prometheus as a datasource:
 ```bash
-git clone git@github.com:canonical/prometheus-operator.git
-cd prometheus-operator
-virtualenv -p python3 venv
-source venv/bin/activate
-pip install -r requirements-dev.txt
-charmcraft build
-juju deploy ./prometheus.charm
-juju add-relation grafana prometheus
+juju deploy ./prometheus-k8s
+juju add-relation grafana-k8s prometheus-k8s
 watch -c juju status --color  # wait for things to settle down
 ```
 > Once the deployed charm and relation settles, you should be able to see Prometheus data propagating to the Grafana dashboard.
