@@ -270,25 +270,6 @@ class GrafanaSourceConsumer(ConsumerBase):
         :class:`RelationBrokenEvent` and :class:`GrafanaConsumer`
         has previously seen this relation and has stored sources
         """
-        rel = event.relation
-        rel_type = event.unit if event.unit else event.app
-
-        data = (
-            json.loads(event.relation.data[rel_type].get("sources", {}))
-            if event.relation.data[rel_type].get("sources", {})
-            else None
-        )
-        if not data:
-            return
-
-        self._stored.sources[rel.id] = _validate(
-            self, SourceData(self.name, self.charm.unit, rel.app, rel.id, data)
-        )
-
-        event.relation.data[self.charm.unit]["sources"] = json.dumps(
-            self._stored.sources[rel.id]
-        )
-
         self.on.available.emit()
 
     def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
