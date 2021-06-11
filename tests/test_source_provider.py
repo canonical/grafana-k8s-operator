@@ -40,7 +40,7 @@ class GrafanaCharm(CharmBase):
 
     @property
     def version(self):
-        return "1.v0.v0"
+        return "2.0.0"
 
 
 class TestProvider(unittest.TestCase):

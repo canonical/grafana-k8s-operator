@@ -4,6 +4,7 @@ import logging
 from ops.charm import CharmBase, RelationBrokenEvent, RelationChangedEvent
 from ops.framework import StoredState
 from ops.relation import ProviderBase
+from typing import List
 
 from .consumer import GrafanaSourceEvents, SourceData, SourceFieldsMissingError, _validate
 
@@ -61,7 +62,8 @@ class GrafanaSourceProvider(ProviderBase):
         rel = event.relation
         rel_type = event.unit if event.unit else event.app
 
-        data = json.loads(event.relation.data[rel_type].get("sources", {}))
+        data = json.loads(event.relation.data[rel_type].get("sources", {})) if \
+            event.relation.data[rel_type].get("sources", {}) else None
         if not data:
             return
 
@@ -102,14 +104,15 @@ class GrafanaSourceProvider(ProviderBase):
 
         try:
             removed_source = self._stored.sources.pop(rel_id, None)
-            self._stored.sources_to_delete.add(removed_source["source-name"])
-            self.on.sources_to_delete_changed.emit()
+            if removed_source:
+                self._stored.sources_to_delete.add(removed_source["source-name"])
+                self.on.sources_to_delete_changed.emit()
         except KeyError:
             logger.warning("Could not remove source for relation: {}".format(rel_id))
 
     @property
-    def sources(self) -> []:
-        """Returns an array of sources the provider knows about"""
+    def sources(self) -> List[dict]:
+        """Returns an array of sources the source_provider knows about"""
         sources = []
         for source in self._stored.sources.values():
             sources.append(source)
@@ -124,7 +127,7 @@ class GrafanaSourceProvider(ProviderBase):
                     relation.data[self.charm.app]["port"] = str(port)
 
     @property
-    def sources_to_delete(self) -> []:
+    def sources_to_delete(self) -> List[str]:
         """Returns an array of source names which have been removed"""
         sources_to_delete = []
         for source in self._stored.sources_to_delete:

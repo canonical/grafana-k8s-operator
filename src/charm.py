@@ -21,13 +21,13 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import Layer
 
-from lib.charms.grafana.v0.consumer import (
+from charms.grafana.v0.consumer import (
     GrafanaSourceEvents,
     SourceFieldsMissingError,
 )
-from lib.charms.grafana.v0.provider import GrafanaSourceProvider
-from lib.charms.ingress.v0.ingress import IngressRequires
-from lib.charms.mysql.v0.mysql import MySQLConsumer
+from charms.grafana.v0.provider import GrafanaSourceProvider
+from charms.ingress.v0.ingress import IngressRequires
+from charms.mysql.v0.mysql import MySQLConsumer
 
 from grafana_server import Grafana
 
@@ -36,7 +36,7 @@ logger = logging.getLogger()
 
 REQUIRED_DATABASE_FIELDS = {
     "type",  # mysql, postgres or sqlite3 (sqlite3 doesn't work for HA)
-    "host",  # in the form '<url_or_ip>:<port>', e.g. 127.v0.v0.1:3306
+    "host",  # in the form '<url_or_ip>:<port>', e.g. 127.0.0.1:3306
     "name",
     "user",
     "password",
@@ -46,7 +46,7 @@ VALID_DATABASE_TYPES = {"mysql", "postgres", "sqlite3"}
 
 CONFIG_PATH = "/etc/grafana/grafana-config.ini"
 DATASOURCE_PATH = "/etc/grafana/provisioning"
-VERSION = "1.v0.v0"
+VERSION = "2.0.0"
 PEER = "grafana-peers"
 
 
@@ -71,10 +71,7 @@ class GrafanaCharm(CharmBase):
         self.grafana_service = Grafana("localhost", self.model.config["port"])
         self.grafana_config_ini_hash = None
         self.grafana_datasources_hash = None
-        self._stored.set_default(
-            database=dict(),
-            pebble_ready=False
-        )
+        self._stored.set_default(database=dict(), pebble_ready=False)
 
         # -- consumers --
         self.ingress = None
@@ -86,15 +83,15 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.stop, self.on_stop)
 
         # -- grafana-source relation observations
-        self.provider = GrafanaSourceProvider(
+        self.source_provider = GrafanaSourceProvider(
             self, "grafana-source", "grafana", VERSION
         )
         self.framework.observe(
-            self.provider.on.sources_changed,
+            self.source_provider.on.sources_changed,
             self.on_grafana_source_changed,
         )
         self.framework.observe(
-            self.provider.on.sources_to_delete_changed,
+            self.source_provider.on.sources_to_delete_changed,
             self.on_grafana_source_changed,
         )
 
@@ -116,7 +113,7 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
-        self.provider.update_port(self.name, self.model.config["port"])
+        self.source_provider.update_port(self.name, self.model.config["port"])
         self._configure(event)
 
     def on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
@@ -459,8 +456,10 @@ class GrafanaCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Related MySQL not yet ready")
 
         self.container.add_layer("grafana", layer, combine=True)
-        self.container.autostart()
-        self.provider.ready()
+        if not self.container.get_service(self.name).is_running:
+            self.container.autostart()
+
+        self.source_provider.ready()
         self.unit.status = ActiveStatus()
 
     @property
@@ -485,7 +484,7 @@ class GrafanaCharm(CharmBase):
         datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
 
         #
-        for source_info in self.provider.sources:
+        for source_info in self.source_provider.sources:
             source = {
                 "orgId": "1",
                 "access": "proxy",
@@ -499,7 +498,7 @@ class GrafanaCharm(CharmBase):
             datasources_dict["datasources"].append(source)
 
         # Also get a list of all the sources which have previously been purged and add them
-        for name in self.provider.sources_to_delete:
+        for name in self.source_provider.sources_to_delete:
             source = {"orgId": 1, "name": name}
             datasources_dict["deleteDatasources"].append(source)
 

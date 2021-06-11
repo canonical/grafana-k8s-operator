@@ -5,6 +5,7 @@ from collections import namedtuple
 from ops.charm import CharmBase, CharmEvents, RelationBrokenEvent, RelationChangedEvent
 from ops.framework import EventBase, EventSource, StoredState
 from ops.relation import ConsumerBase
+from typing import List
 
 
 LIBID = "987654321"
@@ -148,7 +149,7 @@ class GrafanaSourceConsumer(ConsumerBase):
         by instantiating a :class:`GrafanaConsumer` object and
         adding its datasources as follows:
 
-            self.grafana = GrafanaConsumer(self, "grafana-source", {"grafana-source"}: ">=1.v0"})
+            self.grafana = GrafanaConsumer(self, "grafana-source", {"grafana-source"}: ">=2.0"})
             self.grafana.add_source({
                 "source-type": <source-type>,
                 "address": <address>,
@@ -244,7 +245,7 @@ class GrafanaSourceConsumer(ConsumerBase):
             self._stored.sources_to_delete.add(source["source-name"])
         self.on.available.emit()
 
-    def list_sources(self) -> []:
+    def list_sources(self) -> List[dict]:
         """Returns an array of currently valid sources"""
         sources = []
         for source in self._stored.sources.values():
@@ -253,7 +254,7 @@ class GrafanaSourceConsumer(ConsumerBase):
         return sources
 
     @property
-    def removed_source_names(self) -> []:
+    def removed_source_names(self) -> List[str]:
         """Returns an array of source names which have been removed"""
         sources = []
         for source in self._stored.sources_to_delete:
