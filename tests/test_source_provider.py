@@ -8,7 +8,7 @@ import unittest
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana_k8s.v0.provider import (
+from lib.charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceProvider,
 )
 
@@ -68,7 +68,7 @@ class TestProvider(unittest.TestCase):
         )
 
         completed_data = {
-            "private-address": "1.1.1.1",
+            "address": "1.1.1.1",
             "port": 1234,
             "source-type": "prometheus",
             "source-name": f"prometheus_{rel_id}",
@@ -96,7 +96,7 @@ class TestProvider(unittest.TestCase):
         )
 
         completed_data = {
-            "private-address": "1.1.1.1",
+            "address": "1.1.1.1",
             "port": 1234,
             "source-type": "prometheus",
             "source-name": f"prometheus_{rel_id}",
@@ -163,7 +163,7 @@ class TestProvider(unittest.TestCase):
         )
 
         completed_data = {
-            "private-address": "1.1.1.1",
+            "address": "1.1.1.1",
             "port": 1234,
             "source-type": "tester",
             "source-name": "test-source",
@@ -212,7 +212,7 @@ class TestProvider(unittest.TestCase):
         )
 
         completed_data = {
-            "private-address": "1.1.1.1",
+            "address": "1.1.1.1",
             "port": 1234,
             "source-type": "prometheus",
             "source-name": f"prometheus_{rel_id}",
@@ -235,7 +235,7 @@ class TestProvider(unittest.TestCase):
         )
 
         completed_data = {
-            "private-address": "2.2.2.2",
+            "address": "2.2.2.2",
             "port": 1234,
             "source-type": "other-source",
             "source-name": f"other-source_{rel_id}",
@@ -262,7 +262,7 @@ class TestProvider(unittest.TestCase):
         )
 
         completed_data = {
-            "private-address": "1.1.1.1",
+            "address": "1.1.1.1",
             "port": 1234,
             "source-type": "prometheus",
             "source-name": f"prometheus_{rel_id}",
@@ -285,7 +285,7 @@ class TestProvider(unittest.TestCase):
         )
 
         completed_data = {
-            "private-address": "2.2.2.2",
+            "address": "2.2.2.2",
             "port": 1234,
             "source-type": "other-source",
             "source-name": f"other-source_{rel_id}",

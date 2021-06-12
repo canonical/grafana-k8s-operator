@@ -7,21 +7,21 @@ import unittest
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana_k8s.v0.consumer import GrafanaSourceConsumer
+from lib.charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
 
 SOURCE_DATA = {
-    "isDefault": True,
+    "isDefault": "true",
     "source-name": "test-source",
     "source-type": "test-type",
-    "private-address": "1.2.3.4",
+    "address": "1.2.3.4",
     "port": 1234,
 }
 
 EXTRA_SOURCE_DATA = {
-    "isDefault": False,
+    "isDefault": "false",
     "source-name": "extra-source",
     "source-type": "test-type",
-    "private-address": "4.3.2.1",
+    "address": "4.3.2.1",
     "port": 4321,
 }
 
