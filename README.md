@@ -2,33 +2,45 @@
 
 ## Description
 
-This is the Grafana K8S charm for Kubernetes using the Operator Framework.
+The Grafana Operator provides a data visualization solution using [Grafana](https://grafana.com/), an open-source
+observability toolkit.
 
 Grafana allows you to query, visualize, alert on, and visualize metrics from mixed datasources in configurable
-dashboards for observability.
+dashboards for observability. This repository contains a [Juju](https://jaas.ai/) Charm for deploying the visualization
+component of Grafana in a Kuberenetes cluster. 
 
 The grafana-k8s charm provides an interface which can ingest data from a wide array of data sources, with Prometheus
 as a common input, then presents that data on configurable dashboards.
 
-## Deployment
+## Usage
 
-Initial setup (ensure microk8s is a clean slate with `microk8s.reset` or a fresh install with `snap install microk8s --classic`:
+The Grafana Operator may be deployed using the Juju command line via:
 ```bash
-juju deploy ./grafana-k8s.charm --resource grafana-image=grafana/grafana:7.2.1
+juju deploy grafana-k8s
 ```
+
+By default, Grafana does not contain any data sources or dashboards, but may [Prometheus](https://charmhub.io/prometheus-k8s)
+is commonly used, and is deployable with Juju. The Grafana Operator may also accept additional datasources over Juju
+relations with charms which support the `grafana-datasource` interface.
+
+For example:
+```bash
+juju deploy prometheus-k8s
+juju relate prometheus-k8s grafana-k8s
+```
+
+The Grafana Operator includes a Charm library which may be used by other Charms to easily provide datasources with a
+`add_source` method.
 
 View the dashboard in a browser:
 1. `juju status` to check the IP of the of the running Grafana application
 2. Navigate to `http://IP_ADDRESS:3000`
-3. Log in with the default credentials username=admin, password=admin.
+3. Log in with the default credentials username=admin, password=admin (these credentials are configurable at deplohy time)
 
-Add Prometheus as a datasource:
-```bash
-juju deploy prometheus-k8s
-juju add-relation grafana-k8s prometheus-k8s
-watch -c juju status --color  # wait for things to settle down
-```
-> Once the deployed charm and relation settles, you should be able to see Prometheus data propagating to the Grafana dashboard.
+## Web Interface
+
+The Grafana dashboard may be accessed at a selectable port (default `3000`) on the IP address of the Grafana unit. This
+unit and its IP address can be retrieved using the `juju status` command.
 
 ### High Availability Grafana
 
@@ -38,11 +50,17 @@ If HA is not required, there is no need to add a database relation.
 
 > NOTE: HA should not be considered for production use.
 
-...
-
-## Provides Relations
+## Relations
 
 ```
 grafana-source - An input for grafana-k8s datasources
 grafana-dash - an input for base64 encoded dashboard data
 ```
+
+## OCI Images
+
+This charm defaults to the latest version of the [ubuntu/grafana](https://hub.docker.com/r/ubuntu/grafana) image.
+
+## Contributing
+
+See the Juju SDK docs for guidelines on configuring a development environment and best practices for authoring.
