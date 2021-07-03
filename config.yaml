@@ -13,10 +13,6 @@ options:
         description: The Grafana administrative user
         type: string
         default: admin
-    admin_password:
-        description: The password for the grafana-k8s administrative user
-        type: string
-        default: admin
     web_external_url:
         description: |
             The URL under which Grafana is externally reachable (for example,

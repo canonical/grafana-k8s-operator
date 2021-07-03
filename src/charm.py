@@ -35,13 +35,12 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import Layer
 
-from charms.grafana_k8s.v0.grafana_source import (
+from charms.grafana_k8s.v1.grafana_source import (
     GrafanaSourceEvents,
     GrafanaSourceProvider,
     SourceFieldsMissingError,
 )
 from charms.ingress.v0.ingress import IngressRequires
-from charms.mysql.v0.mysql import MySQLConsumer
 
 from grafana_server import Grafana
 
@@ -89,7 +88,6 @@ class GrafanaCharm(CharmBase):
 
         # -- consumers --
         self.ingress = None
-        self.mysql = MySQLConsumer(self, self.name, {"mysql": ">=2.v0"})
 
         # -- standard events
         self.framework.observe(self.on.grafana_pebble_ready, self.on_pebble_ready)
@@ -412,13 +410,8 @@ class GrafanaCharm(CharmBase):
 
     def _build_layer(self) -> Layer:
         """Construct the pebble layer information"""
-        if self.has_peers:
-            # mysql_uri = self.mysql.get_cluster_info()
-            mysql_uri = "fake data for now"
-            # Populate for a MySQL relation
-            dbinfo = {"GF_DATABASE_TYPE": "mysql", "GF_DATABASE_URL": mysql_uri}
-        else:
-            dbinfo = {"GF_DATABASE_TYPE": "sqlite3"}
+        # Placeholder for when we add "proper" mysql support for HA
+        dbinfo = {"GF_DATABASE_TYPE": "sqlite3"}
 
         layer = Layer(
             {
@@ -435,9 +428,6 @@ class GrafanaCharm(CharmBase):
                             "GF_LOG_LEVEL": self.model.config["log_level"],
                             "GF_PATHS_PROVISIONING": DATASOURCE_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
-                            "GF_SECURITY_ADMIN_PASSWORD": self.model.config[
-                                "admin_password"
-                            ],
                             **dbinfo,
                         },
                     }
@@ -451,7 +441,6 @@ class GrafanaCharm(CharmBase):
         """Configure the Pebble layer for grafana-k8s."""
 
         if self.has_peers:
-            # if not self.mysql.is_valid():
             if True:
                 logger.warning(
                     "A MySQL relation is needed for Grafana to "

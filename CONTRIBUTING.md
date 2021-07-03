@@ -2,7 +2,7 @@
 
 Initial setup (ensure microk8s is a clean slate with `microk8s.reset` or a fresh install with `snap install microk8s --classic`:
 ```bash
-microk8s.enable dns storage registry dashboard
+microk8s.enable dns storage
 juju bootstrap microk8s mk8s
 juju add-model lma
 juju create-storage-pool operator-storage kubernetes storage-class=microk8s-hostpath
@@ -14,7 +14,7 @@ git clone git@github.com:canonical/grafana-k8s.git
 cd grafana-k8s
 virtualenv -p python3 venv
 source venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 charmcraft build
 juju deploy ./grafana-k8s.charm --resource grafana-image=grafana/grafana:7.2.1
 ```
@@ -24,9 +24,9 @@ View the dashboard in a browser:
 2. Navigate to `http://IP_ADDRESS:3000`
 3. Log in with the default credentials username=admin, password=admin.
 
-Add Prometheus as a datasource:
+Add Prometheus as a datasource. See the [contributing guide](https://github.com/canonical/prometheus-operator/blob/main/CONTRIBUTING.md)
+for Prometheus to build and deploy, then:
 ```bash
-juju deploy ./prometheus-k8s
 juju add-relation grafana-k8s prometheus-k8s
 watch -c juju status --color  # wait for things to settle down
 ```

@@ -19,7 +19,7 @@ The Grafana Operator may be deployed using the Juju command line via:
 juju deploy grafana-k8s
 ```
 
-By default, Grafana does not contain any data sources or dashboards, but may [Prometheus](https://charmhub.io/prometheus-k8s)
+By default, Grafana does not contain any data sources or dashboards, but [Prometheus](https://charmhub.io/prometheus-k8s)
 is commonly used, and is deployable with Juju. The Grafana Operator may also accept additional datasources over Juju
 relations with charms which support the `grafana-datasource` interface.
 
@@ -53,8 +53,8 @@ If HA is not required, there is no need to add a database relation.
 ## Relations
 
 ```
-grafana-source - An input for grafana-k8s datasources
-grafana-dash - an input for base64 encoded dashboard data
+grafana_datasource - An input for grafana-k8s datasources
+grafana_dashboard - an input for zlib compressed base64 encoded dashboard data
 ```
 
 ## OCI Images

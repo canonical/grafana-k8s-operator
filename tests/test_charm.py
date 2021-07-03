@@ -72,7 +72,7 @@ class TestCharm(unittest.TestCase):
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
         self.harness.add_relation_unit(rel_id, "prometheus/v0")
         source_data = {
-            "private-address": "1.1.1.1",
+            "address": "1.1.1.1",
             "port": 1234,
             "source-type": "prometheus",
             "source-name": "prometheus_0",
@@ -93,7 +93,7 @@ class TestCharm(unittest.TestCase):
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
         self.harness.add_relation_unit(rel_id, "prometheus/v0")
         source_data = {
-            "private-address": "1.1.1.1",
+            "address": "1.1.1.1",
             "port": 1234,
             "source-type": "prometheus",
             "source-name": "prometheus_0",
