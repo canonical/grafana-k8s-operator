@@ -229,13 +229,13 @@ class GrafanaSourceProvider(ProviderBase):
         self._stored.set_default(sources_to_delete=set())
 
         self.framework.observe(
-            events.relation_changed, self.on_grafana_source_relation_changed
+            events.relation_changed, self._on_grafana_source_relation_changed
         )
         self.framework.observe(
-            events.relation_broken, self.on_grafana_source_relation_broken
+            events.relation_broken, self._on_grafana_source_relation_broken
         )
 
-    def on_grafana_source_relation_changed(self, event: RelationChangedEvent) -> None:
+    def _on_grafana_source_relation_changed(self, event: RelationChangedEvent) -> None:
         """Handle relation changes in related consumers.
 
         If there are changes in relations between Grafana source providers
@@ -279,7 +279,7 @@ class GrafanaSourceProvider(ProviderBase):
         self._stored.sources[rel.id] = data
         self.on.sources_changed.emit()
 
-    def on_grafana_source_relation_broken(self, event: RelationBrokenEvent) -> None:
+    def _on_grafana_source_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Update job config when consumers depart.
 
         When a Grafana source consumer departs, the configuration

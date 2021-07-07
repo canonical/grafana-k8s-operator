@@ -33,7 +33,7 @@ from ops.charm import (
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import Layer
+from ops.pebble import ConnectionError, Layer
 
 from charms.grafana_k8s.v1.grafana_source import (
     GrafanaSourceEvents,
@@ -85,9 +85,9 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(database=dict(), pebble_ready=False)
 
         # -- standard events
-        self.framework.observe(self.on.grafana_pebble_ready, self.on_pebble_ready)
-        self.framework.observe(self.on.config_changed, self.on_config_changed)
-        self.framework.observe(self.on.stop, self.on_stop)
+        self.framework.observe(self.on.grafana_pebble_ready, self._on_pebble_ready)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.stop, self._on_stop)
 
         # -- grafana-source relation observations
         self.source_provider = GrafanaSourceProvider(
@@ -95,22 +95,22 @@ class GrafanaCharm(CharmBase):
         )
         self.framework.observe(
             self.source_provider.on.sources_changed,
-            self.on_grafana_source_changed,
+            self._on_grafana_source_changed,
         )
         self.framework.observe(
             self.source_provider.on.sources_to_delete_changed,
-            self.on_grafana_source_changed,
+            self._on_grafana_source_changed,
         )
 
         # -- database relation observations
         self.framework.observe(
-            self.on["database"].relation_changed, self.on_database_changed
+            self.on["database"].relation_changed, self._on_database_changed
         )
         self.framework.observe(
-            self.on["database"].relation_broken, self.on_database_broken
+            self.on["database"].relation_broken, self._on_database_broken
         )
 
-    def on_config_changed(self, event: ConfigChangedEvent) -> None:
+    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """
         If the configuration is changed, update the variables we know about and
         restart the services. We don't know specifically whether it's a new install,
@@ -123,7 +123,7 @@ class GrafanaCharm(CharmBase):
         self.source_provider.update_port(self.name, self.model.config["port"])
         self._configure(event)
 
-    def on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
+    def _on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
         """
         When a grafana-source is added or modified, update the config
 
@@ -132,7 +132,7 @@ class GrafanaCharm(CharmBase):
         """
         self._configure(event)
 
-    def on_stop(self, _) -> None:
+    def _on_stop(self, _) -> None:
         """Go into maintenance state if the unit is stopped."""
         self.unit.status = MaintenanceStatus("Application is terminating.")
 
@@ -187,7 +187,12 @@ class GrafanaCharm(CharmBase):
         datasources_path = os.path.join(
             DATASOURCE_PATH, "datasources", "datasources.yaml"
         )
-        container.push(datasources_path, config)
+        try:
+            container.push(datasources_path, config)
+        except ConnectionError:
+            logger.warning(
+                "Could not push new datasources config. Pebble shutting down?"
+            )
 
     def update_grafana_config_ini(self, config: str) -> None:
         """
@@ -197,7 +202,10 @@ class GrafanaCharm(CharmBase):
         Args:
             config: A :str: containing the datasource configuraiton
         """
-        self.container.push(CONFIG_PATH, config)
+        try:
+            self.container.push(CONFIG_PATH, config)
+        except ConnectionError:
+            logger.warning("Could not push new Grafana config. Pebble shutting down?")
 
     @property
     def has_peers(self) -> bool:
@@ -229,7 +237,7 @@ class GrafanaCharm(CharmBase):
             logger.info("Creating the initial Dashboards config")
             container.push(default_config, default_config_string, make_dirs=True)
 
-    def on_import_dashboard_action(self, event):
+    def _on_import_dashboard_action(self, event):
         container = self.unit.get_container(self.name)
         dashboard_path = os.path.join(DATASOURCE_PATH, "dashboards")
 
@@ -262,7 +270,7 @@ class GrafanaCharm(CharmBase):
         """Only consider a DB connection if we have config info."""
         return len(self._stored.database) > 0
 
-    def on_database_changed(self, event: RelationChangedEvent) -> None:
+    def _on_database_changed(self, event: RelationChangedEvent) -> None:
         """Sets configuration information for database connection.
 
         Args:
@@ -303,7 +311,7 @@ class GrafanaCharm(CharmBase):
 
         self._configure(event)
 
-    def on_database_broken(self, event: RelationBrokenEvent) -> None:
+    def _on_database_broken(self, event: RelationBrokenEvent) -> None:
         """Removes database connection info from datastore.
         We are guaranteed to only have one DB connection, so clearing
         datastore.database is all we need for the change to be propagated
@@ -370,7 +378,7 @@ class GrafanaCharm(CharmBase):
 
     #####################################
 
-    def on_pebble_ready(self, _) -> None:
+    def _on_pebble_ready(self, _) -> None:
         """
         When Pebble is ready, start everything up
         """
@@ -381,17 +389,20 @@ class GrafanaCharm(CharmBase):
         """Restart the pebble container"""
         layer = self._build_layer()
 
-        plan = self.container.get_plan()
-        if plan.services != layer.services:
-            self.container.add_layer(self.name, layer, combine=True)
+        try:
+            plan = self.container.get_plan()
+            if plan.services != layer.services:
+                self.container.add_layer(self.name, layer, combine=True)
 
-            if self.container.get_service(self.name).is_running():
-                self.container.stop(self.name)
+                if self.container.get_service(self.name).is_running():
+                    self.container.stop(self.name)
 
-            self.container.start(self.name)
-            logger.info("Restarted grafana-k8s")
+                self.container.start(self.name)
+                logger.info("Restarted grafana-k8s")
 
-        self.unit.status = ActiveStatus()
+            self.unit.status = ActiveStatus()
+        except ConnectionError:
+            self.unit.status = BlockedStatus("Pebble is not reachable")
 
     def _build_layer(self) -> Layer:
         """Construct the pebble layer information"""
