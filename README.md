@@ -35,14 +35,14 @@ The Grafana Operator includes a Charm library which may be used by other Charms 
 View the dashboard in a browser:
 1. `juju status` to check the IP of the of the running Grafana application
 2. Navigate to `http://IP_ADDRESS:3000`
-3. Log in with the default credentials username=admin, password=admin (these credentials are configurable at deplohy time)
+3. Log in with the default credentials username=admin, password=admin (these credentials are configurable at deploy time)
 
 ## Web Interface
 
 The Grafana dashboard may be accessed at a selectable port (default `3000`) on the IP address of the Grafana unit. This
 unit and its IP address can be retrieved using the `juju status` command.
 
-### High Availability Grafana
+## High Availability Grafana
 
 This charm is written to support a high-availability Grafana cluster, but a database relation is required (MySQL or Postgresql).
 
