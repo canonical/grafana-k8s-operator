@@ -20,6 +20,8 @@ containers:
             - storage: database
               location: /var/lib/grafana
 provides:
+    grafana:
+        interface: grafana
     grafana-source:
         interface: grafana_datasource
     grafana-dashboard:
