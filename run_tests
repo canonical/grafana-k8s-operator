@@ -1,5 +1,5 @@
-#!/bin/sh -e
-# Copyright 2020 Justin
+#!/bin/bash
+# Copyright 2020 Ryan Barry
 # See LICENSE file for licensing details.
 
 if [ -z "$VIRTUAL_ENV" -a -d venv/ ]; then
@@ -7,10 +7,14 @@ if [ -z "$VIRTUAL_ENV" -a -d venv/ ]; then
 fi
 
 if [ -z "$PYTHONPATH" ]; then
-    export PYTHONPATH=src
+    export PYTHONPATH="lib:src"
 else
-    export PYTHONPATH="src:$PYTHONPATH"
+    export PYTHONPATH="lib:src:$PYTHONPATH"
 fi
 
 flake8
-python3 -m unittest -v "$@"
+black --diff --check src tests
+
+#coverage run --source=src,lib -m pytest -rP -v "$@"
+coverage run --source=src,lib -m pytest -v "$@"
+coverage report -m
