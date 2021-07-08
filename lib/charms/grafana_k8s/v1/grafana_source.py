@@ -40,7 +40,7 @@ class GrafanaSourcesChanged(EventBase):
         self.data = snapshot["data"]
 
 
-class GrafanaSourceEvents(CharmEvents):
+class GrafanaSourceEvents(ObjectEvents):
     """Events raised by :class:`GrafanaSourceEvents`"""
 
     # We are emitting multiple events for the same thing due to the way Grafana provisions
@@ -223,6 +223,8 @@ class GrafanaSourceProvider(ProviderBase):
         """
         super().__init__(charm, name, service, version)
         self.charm = charm
+        self.charm.unit.prov_network = self.model.get_binding(self.name).network.bind_address
+        self.charm.app.prov_network = self.model.get_binding(self.name).network.bind_address
         events = self.charm.on[name]
 
         self._stored.set_default(sources=dict())  # available data sources
@@ -247,6 +249,13 @@ class GrafanaSourceProvider(ProviderBase):
         """
         if not self.charm.unit.is_leader():
             return
+
+        logger.info("RELATION APP: {}".format(event.relation.app))
+        logger.info("RELATION APP: {}".format(dir(event.relation.app)))
+
+        for u in event.relation.units:
+            logger.info("UNIT: {}".format(u))
+            logger.info("UNIT: {}".format(dir(u)))
 
         rel = event.relation
         data = (

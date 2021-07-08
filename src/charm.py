@@ -448,11 +448,11 @@ class GrafanaCharm(CharmBase):
                 return False
 
         if not self._stored.pebble_ready:
-            self.unit.status = WaitingStatus("Waiting for Pebble startup to complete")
+            self.unit.status = MaintenanceStatus("Waiting for Pebble startup to complete")
 
         layer = self._build_layer()
         if self.has_peers and not layer.services.grafana.environment.GF_DATABASE_URL:
-            self.unit.status = MaintenanceStatus("Related MySQL not yet ready")
+            self.unit.status = WaitingStatus("Related MySQL not yet ready")
 
         self.container.add_layer("grafana", layer, combine=True)
         if not self.container.get_service(self.name).is_running:
