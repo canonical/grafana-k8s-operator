@@ -448,7 +448,9 @@ class GrafanaCharm(CharmBase):
                 return False
 
         if not self._stored.pebble_ready:
-            self.unit.status = MaintenanceStatus("Waiting for Pebble startup to complete")
+            self.unit.status = MaintenanceStatus(
+                "Waiting for Pebble startup to complete"
+            )
 
         layer = self._build_layer()
         if self.has_peers and not layer.services.grafana.environment.GF_DATABASE_URL:

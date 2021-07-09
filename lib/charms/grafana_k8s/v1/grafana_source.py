@@ -3,12 +3,11 @@ import logging
 
 from ops.charm import (
     CharmBase,
-    CharmEvents,
     RelationBrokenEvent,
     RelationChangedEvent,
     RelationJoinedEvent,
 )
-from ops.framework import EventBase, EventSource, StoredState
+from ops.framework import EventBase, EventSource, ObjectEvents, StoredState
 from ops.relation import ConsumerBase, ProviderBase
 from typing import Dict, List, Optional
 
@@ -223,8 +222,6 @@ class GrafanaSourceProvider(ProviderBase):
         """
         super().__init__(charm, name, service, version)
         self.charm = charm
-        self.charm.unit.prov_network = self.model.get_binding(self.name).network.bind_address
-        self.charm.app.prov_network = self.model.get_binding(self.name).network.bind_address
         events = self.charm.on[name]
 
         self._stored.set_default(sources=dict())  # available data sources
