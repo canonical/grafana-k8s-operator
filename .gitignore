@@ -2,3 +2,6 @@ build
 *.charm
 .idea
 __pycache__
+.venv
+.coverage
+venv

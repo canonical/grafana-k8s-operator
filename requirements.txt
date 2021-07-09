@@ -1,2 +1,4 @@
-ops
-git+https://github.com/juju-solutions/resource-oci-image/@c5778285d332edf3d9a538f9d0c06154b7ec1b0b#egg=oci-image
+git+https://github.com/canonical/operator/#egg=ops
+semantic_version
+pyyaml
+urllib3
