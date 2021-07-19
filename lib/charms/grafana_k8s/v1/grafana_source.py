@@ -247,13 +247,6 @@ class GrafanaSourceProvider(ProviderBase):
         if not self.charm.unit.is_leader():
             return
 
-        logger.info("RELATION APP: {}".format(event.relation.app))
-        logger.info("RELATION APP: {}".format(dir(event.relation.app)))
-
-        for u in event.relation.units:
-            logger.info("UNIT: {}".format(u))
-            logger.info("UNIT: {}".format(dir(u)))
-
         rel = event.relation
         data = (
             json.loads(event.relation.data[event.app].get("sources", {}))
