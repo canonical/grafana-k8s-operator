@@ -191,7 +191,7 @@ class GrafanaCharm(CharmBase):
             container.push(datasources_path, config)
         except ConnectionError:
             logger.warning(
-                "Could not push new datasources config. Pebble shutting down?"
+                "Could not push new datasources config. Pebble refused connection. Shutting down?"
             )
 
     def update_grafana_config_ini(self, config: str) -> None:
@@ -205,7 +205,9 @@ class GrafanaCharm(CharmBase):
         try:
             self.container.push(CONFIG_PATH, config)
         except ConnectionError:
-            logger.warning("Could not push new Grafana config. Pebble shutting down?")
+            logger.warning(
+                "Could not push new datasources config. Pebble refused connection. Shutting down?"
+            )
 
     @property
     def has_peers(self) -> bool:
@@ -489,12 +491,10 @@ class GrafanaCharm(CharmBase):
             source = {
                 "orgId": "1",
                 "access": "proxy",
-                "isDefault": source_info["isDefault"],
+                "isDefault": "false",
                 "name": source_info["source-name"],
                 "type": source_info["source-type"],
-                "url": "http://{}:{}".format(
-                    source_info["address"], source_info["port"]
-                ),
+                "url": source_info["url"],
             }
             datasources_dict["datasources"].append(source)
 
