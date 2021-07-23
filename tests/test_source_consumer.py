@@ -1,8 +1,7 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
-
-import json
 import unittest
+from unittest.mock import patch
 
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -10,18 +9,20 @@ from ops.testing import Harness
 from lib.charms.grafana_k8s.v1.grafana_source import GrafanaSourceConsumer
 
 SOURCE_DATA = {
-    "source-name": "test-source",
-    "source-type": "test-type",
-    "address": "1.2.3.4",
-    "port": 1234,
+    "model": "test-model",
+    "model_uuid": "abcdef",
+    "application": "prometheus",
+    "type": "prometheus",
 }
 
-EXTRA_SOURCE_DATA = {
-    "source-name": "extra-source",
-    "source-type": "test-type",
-    "address": "4.3.2.1",
-    "port": 4321,
-}
+CONSUMER_META = """
+name: consumer-tester
+containers:
+  grafana-tester:
+requires:
+  grafana-source:
+    interface: grafana_datasource
+"""
 
 
 class ConsumerCharm(CharmBase):
@@ -30,89 +31,68 @@ class ConsumerCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self.consumer = GrafanaSourceConsumer(
-            self, "grafana-source", {"grafana": ">=1.v0"}
+            self,
+            "grafana-source",
+            {"grafana": ">=1.v0"},
+            refresh_event=self.on.grafana_tester_pebble_ready,
         )
-
-    def add_source(self, data, rel_id=None):
-        self.consumer.add_source(
-            data["address"],
-            data["port"],
-            source_type=data["source-type"],
-            source_name=data["source-name"],
-            rel_id=rel_id,
-        )
-
-    def list_sources(self):
-        return self.consumer.list_sources()
-
-    @property
-    def removed_source_names(self):
-        return self.consumer.removed_source_names
-
-    def remove_source(self, rel_id=None):
-        self.consumer.remove_source(rel_id)
 
 
 class TestConsumer(unittest.TestCase):
     def setUp(self):
-        self.harness = Harness(ConsumerCharm)
+        self.harness = Harness(ConsumerCharm, meta=CONSUMER_META)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
 
-    def test_consumer_can_add_source(self):
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test_consumer_sets_scrape_data(self, _):
         rel_id = self.harness.add_relation("grafana-source", "consumer")
+        self.harness.add_relation_unit(rel_id, "consumer/0")
         data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
-        self.assertFalse(data)
-        self.harness.charm.add_source(SOURCE_DATA)
+        self.assertIn("grafana_source_data", data)
+        scrape_data = data["grafana_source_data"]
+        self.assertIn("model", scrape_data)
+        self.assertIn("model_uuid", scrape_data)
+        self.assertIn("application", scrape_data)
 
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
-        self.assertIn("sources", data)
-        source = json.loads(data["sources"])
-        self.assertEqual(source, SOURCE_DATA)
-
-    def test_consumer_can_add_source_with_relid(self):
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test_consumer_unit_sets_bind_address_on_pebble_ready(self, mock_net_get):
+        bind_address = "1.2.3.4"
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [
+                        {"hostname": "grafana-tester-0", "value": bind_address}
+                    ],
+                }
+            ]
+        }
+        mock_net_get.return_value = fake_network
         rel_id = self.harness.add_relation("grafana-source", "consumer")
-        self.harness.charm.add_source(SOURCE_DATA, rel_id)
+        self.harness.container_pebble_ready("grafana-tester")
+        self.harness.add_relation_unit(rel_id, "consumer/0")
+        data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
+        self.assertIn("grafana_source_host", data)
+        self.assertEqual(data["grafana_source_host"], f"{bind_address}:9090")
 
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
-        source = json.loads(data["sources"])
-        self.assertEqual(source, SOURCE_DATA)
-
-    def test_consumer_can_list_sources(self):
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test_consumer_unit_sets_bind_address_on_relation_joined(self, mock_net_get):
+        bind_address = "1.2.3.4"
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [
+                        {"hostname": "grafana-tester-0", "value": bind_address}
+                    ],
+                }
+            ]
+        }
+        mock_net_get.return_value = fake_network
         rel_id = self.harness.add_relation("grafana-source", "consumer")
-        self.harness.charm.add_source(SOURCE_DATA, rel_id)
-
-        other_rel = self.harness.add_relation("grafana-source", "consumer")
-        self.harness.charm.add_source(EXTRA_SOURCE_DATA, other_rel)
-
-        sources = self.harness.charm.list_sources()
-        self.assertEqual(sources, [SOURCE_DATA, EXTRA_SOURCE_DATA])
-
-    def test_consumer_can_remove_source(self):
-        rel_id = self.harness.add_relation("grafana-source", "consumer")
-        self.harness.charm.add_source(SOURCE_DATA, rel_id)
-
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
-        source = json.loads(data["sources"])
-        self.assertEqual(source, SOURCE_DATA)
-
-        self.harness.charm.remove_source()
-
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
-        source = json.loads(data["sources"])
-        self.assertFalse(source)
-
-    def test_consumer_can_remove_source_with_id(self):
-        rel_id = self.harness.add_relation("grafana-source", "consumer")
-        self.harness.charm.add_source(SOURCE_DATA, rel_id)
-
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
-        source = json.loads(data["sources"])
-        self.assertEqual(source, SOURCE_DATA)
-
-        self.harness.charm.remove_source(rel_id)
-
-        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
-        source = json.loads(data["sources"])
-        self.assertFalse(source)
+        self.harness.add_relation_unit(rel_id, "consumer/0")
+        data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
+        self.assertIn("grafana_source_host", data)
+        self.assertEqual(data["grafana_source_host"], f"{bind_address}:9090")
