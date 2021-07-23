@@ -297,14 +297,11 @@ class GrafanaSourceProvider(ProviderBase):
         """
         logger.debug("Removing all data for relation: {}".format(rel_id))
 
-        try:
-            removed_source = self._stored.sources.pop(rel_id, None)
-            if removed_source:
-                for host in removed_source:
-                    self._remove_source(host["source-name"])
-                self.on.sources_to_delete_changed.emit()
-        except KeyError:
-            logger.warning("Could not remove source for relation: {}".format(rel_id))
+        removed_source = self._stored.sources.pop(rel_id, None)
+        if removed_source:
+            for host in removed_source:
+                self._remove_source(host["source-name"])
+            self.on.sources_to_delete_changed.emit()
 
     def _remove_source(self, source_name: str) -> None:
         """Remove a datasource by name"""
