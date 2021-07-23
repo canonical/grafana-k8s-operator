@@ -124,13 +124,7 @@ class GrafanaSourceConsumer(ConsumerBase):
         On a relation_joined event, inform the provider about the source
         configuration
         """
-        if not self.charm.unit.is_leader():
-            return
-
-        event.relation.data[self.charm.unit]["grafana_source_host"] = "{}:{}".format(
-            str(self.charm.model.get_binding(event.relation).network.bind_address),
-            self._source_port,
-        )
+        self._set_unit_ip(event)
 
         if not self.charm.unit.is_leader():
             return
