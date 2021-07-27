@@ -20,8 +20,8 @@ import configparser
 import logging
 import hashlib
 import os
-import uuid
 import yaml
+import zlib
 
 from io import StringIO
 from ops.charm import (
@@ -40,6 +40,8 @@ from charms.grafana_k8s.v1.grafana_source import (
     GrafanaSourceProvider,
     SourceFieldsMissingError,
 )
+from charms.grafana_k8s.v1.grafana_dashboard import GrafanaDashboardProvider
+
 from grafana_server import Grafana
 
 
@@ -89,7 +91,7 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
 
-        # -- grafana-source relation observations
+        # -- grafana_source relation observations
         self.source_provider = GrafanaSourceProvider(
             self, "grafana-source", "grafana", VERSION
         )
@@ -100,6 +102,14 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(
             self.source_provider.on.sources_to_delete_changed,
             self._on_grafana_source_changed,
+        )
+
+        # -- grafana_dashboard relation observations
+        self.dashboard_provider = GrafanaDashboardProvider(
+            self, "grafana-dashboard", "grafana", VERSION
+        )
+        self.framework.observe(
+            self.dashboard_provider.on.dashboards_changed, self._on_dashboards_changed
         )
 
         # -- database relation observations
@@ -130,6 +140,7 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`GrafanaSourceEvents` instance sent from the consumer
         """
+        self.dashboard_provider.renew_dashboards(self.source_provider.sources)
         self._configure(event)
 
     def _on_stop(self, _) -> None:
@@ -148,33 +159,33 @@ class GrafanaCharm(CharmBase):
 
         # Generate a new base config and see if it differs from what we have.
         # If it does, store it and signal that we should restart Grafana
-        grafana_config_ini = self.generate_grafana_config()
+        grafana_config_ini = self._generate_grafana_config()
         config_ini_hash = hashlib.sha256(
             str(grafana_config_ini).encode("utf-8")
         ).hexdigest()
         if not self.grafana_config_ini_hash == config_ini_hash:
             self.grafana_config_ini_hash = config_ini_hash
-            self.update_grafana_config_ini(grafana_config_ini)
-            logger.debug("Pushed new grafana-k8s base configuration")
+            self._update_grafana_config_ini(grafana_config_ini)
+            logger.info("Pushed new grafana-k8s base configuration")
 
             restart = True
 
         # Do the same thing for datasources
-        grafana_datasources = self.generate_datasource_config()
+        grafana_datasources = self._generate_datasource_config()
         datasources_hash = hashlib.sha256(
             str(grafana_datasources).encode("utf-8")
         ).hexdigest()
         if not self.grafana_datasources_hash == datasources_hash:
             self.grafana_datasources_hash = datasources_hash
-            self.update_datasource_config(grafana_datasources)
-            logger.debug("Pushed new grafana-k8s datasource configuration")
+            self._update_datasource_config(grafana_datasources)
+            logger.info("Pushed new grafana-k8s datasource configuration")
 
             restart = True
 
         if restart:
             self.restart_grafana()
 
-    def update_datasource_config(self, config: str) -> None:
+    def _update_datasource_config(self, config: str) -> None:
         """
         Write an updated datasource configuration file to the
         Pebble container if necessary.
@@ -190,11 +201,11 @@ class GrafanaCharm(CharmBase):
         try:
             container.push(datasources_path, config)
         except ConnectionError:
-            logger.warning(
-                "Could not push new datasources config. Pebble refused connection. Shutting down?"
+            logger.error(
+                "Could not push datasource config. Pebble refused connection. Shutting down?"
             )
 
-    def update_grafana_config_ini(self, config: str) -> None:
+    def _update_grafana_config_ini(self, config: str) -> None:
         """
         Write an updated Grafana configuration file to the
         Pebble container if necessary
@@ -205,8 +216,8 @@ class GrafanaCharm(CharmBase):
         try:
             self.container.push(CONFIG_PATH, config)
         except ConnectionError:
-            logger.warning(
-                "Could not push new datasources config. Pebble refused connection. Shutting down?"
+            logger.error(
+                "Could not push datasource config. Pebble refused connection. Shutting down?"
             )
 
     @property
@@ -219,6 +230,7 @@ class GrafanaCharm(CharmBase):
     # DASHBOARD IMPORT
     ###########################
     def init_dashboard_provisioning(self, dashboard_path: str):
+        logger.info("Initializing dashboard provisioning path")
         container = self.unit.get_container(self.name)
 
         dashboard_config = {
@@ -236,28 +248,46 @@ class GrafanaCharm(CharmBase):
         default_config_string = yaml.dump(dashboard_config)
 
         if not os.path.exists(dashboard_path):
-            logger.info("Creating the initial Dashboards config")
-            container.push(default_config, default_config_string, make_dirs=True)
+            try:
+                container.push(default_config, default_config_string, make_dirs=True)
+            except ConnectionError:
+                logger.warning(
+                    "Could not push default dashboard configuration. Pebble shutting down?"
+                )
 
-    def _on_import_dashboard_action(self, event):
+    def _on_dashboards_changed(self, _) -> None:
+        """Handle dashboard events"""
         container = self.unit.get_container(self.name)
         dashboard_path = os.path.join(DATASOURCE_PATH, "dashboards")
 
         self.init_dashboard_provisioning(dashboard_path)
-        dashboard_base64_string = event.params["dashboard"]
 
-        name = "{}.json".format(uuid.uuid4())
-        imported_dashboard_path = os.path.join(dashboard_path, name)
-        imported_dashboard_string = base64.b64decode(dashboard_base64_string).decode(
-            "ascii"
-        )
+        existing_dashboards = {}
+        try:
+            for f in container.list_files(dashboard_path, pattern="*_juju.json"):
+                existing_dashboards[f.path] = False
+        except ConnectionError:
+            logger.warning("Could not list dashboards. Pebble shutting down?")
 
-        logger.info(
-            "Newly created dashboard will be saved at: {}".format(dashboard_path)
-        )
-        container.push(
-            imported_dashboard_path, imported_dashboard_string, make_dirs=True
-        )
+        for dashboard in self.dashboard_provider.dashboards:
+            dash = zlib.decompress(
+                base64.b64decode(dashboard["dashboard"].encode())
+            ).decode()
+            name = "{}_juju.json".format(dashboard["target"])
+
+            dashboard_path = os.path.join(dashboard_path, name)
+            existing_dashboards[dashboard_path] = True
+
+            logger.info(
+                "Newly created dashboard will be saved at: {}".format(dashboard_path)
+            )
+            container.push(dashboard_path, dash, make_dirs=True)
+
+        for f, known in existing_dashboards.items():
+            logger.debug("Checking for dashboard {}".format(f))
+            if not known:
+                logger.info("Removing unknown dashboard {}".format(f))
+                container.remove_path(f)
 
         self.restart_grafana()
 
@@ -281,12 +311,9 @@ class GrafanaCharm(CharmBase):
         if not self.unit.is_leader():
             return
 
-        if event.unit is None:
-            return
-
         # Get required information
         database_fields = {
-            field: event.relation.data[event.unit].get(field)
+            field: event.relation.data[event.app].get(field)
             for field in REQUIRED_DATABASE_FIELDS
         }
 
@@ -332,15 +359,15 @@ class GrafanaCharm(CharmBase):
         # Cleanup the config file
         self._configure(event)
 
-    def generate_grafana_config(self) -> str:
+    def _generate_grafana_config(self) -> str:
         """
         For now, this only creates database information, since everything else
         can be set in ENV variables, but leave for expansion later so we can
         hide auth secrets
         """
-        return self.generate_database_config() if self.has_db else ""
+        return self._generate_database_config() if self.has_db else ""
 
-    def generate_database_config(self) -> str:
+    def _generate_database_config(self) -> str:
         """
         Returns a :str: containing the required database information to
         be stubbed into the config file
@@ -349,17 +376,17 @@ class GrafanaCharm(CharmBase):
         config_ini = configparser.ConfigParser()
         db_type = "mysql"
 
-        db_url = "{0}://{3}:{4}@{1}/{2}".format(
+        db_url = "{0}://{1}:{2}@{3}/{4}".format(
             db_type,
-            db_config.get("host"),
-            db_config.get("database"),
             db_config.get("user"),
             db_config.get("password"),
+            db_config.get("host"),
+            db_config.get("name"),
         )
         config_ini["database"] = {
             "type": db_type,
-            "host": self._stored.database.get("host"),
-            "name": db_config.get("database", ""),
+            "host": db_config.get("host"),
+            "name": db_config.get("name", ""),
             "user": db_config.get("user", ""),
             "password": db_config.get("password", ""),
             "url": db_url,
@@ -404,7 +431,10 @@ class GrafanaCharm(CharmBase):
 
             self.unit.status = ActiveStatus()
         except ConnectionError:
-            self.unit.status = BlockedStatus("Pebble is not reachable")
+            logger.error(
+                "Could not restart grafana-k8s -- Pebble socket does "
+                "not exist or is not responsive"
+            )
 
     def _build_layer(self) -> Layer:
         """Construct the pebble layer information"""
@@ -478,7 +508,7 @@ class GrafanaCharm(CharmBase):
         """Returns information about the running Grafana service"""
         return self.grafana_service.build_info
 
-    def generate_datasource_config(self) -> str:
+    def _generate_datasource_config(self) -> str:
         """
         Template out a Grafana datasource config from the sources (and
         removed sources) the consumer knows about, and dump it to YAML
@@ -486,7 +516,6 @@ class GrafanaCharm(CharmBase):
         # Boilerplate for the config file
         datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
 
-        #
         for source_info in self.source_provider.sources:
             source = {
                 "orgId": "1",

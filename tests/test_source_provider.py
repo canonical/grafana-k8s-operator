@@ -63,7 +63,7 @@ class GrafanaCharm(CharmBase):
         return "2.0.0"
 
 
-class TestProvider(unittest.TestCase):
+class TestSourceProvider(unittest.TestCase):
     @pytest.fixture(autouse=True)
     def inject_fixtures(self, caplog):
         self._caplog = caplog

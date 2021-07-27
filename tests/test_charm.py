@@ -36,8 +36,45 @@ SOURCE_DATA = {
     "type": "prometheus",
 }
 
+DASHBOARD_CONFIG = {
+    "apiVersion": 1,
+    "providers": [
+        {
+            "name": "Default",
+            "type": "file",
+            "options": {"path": "dashboards"},
+        }
+    ],
+}
+
+
+DB_CONFIG = {
+    "type": "mysql",
+    "host": "1.1.1.1:3306",
+    "name": "mysqldb",
+    "user": "grafana",
+    "password": "grafana",
+}
+
+
+DATABASE_CONFIG_INI = """[database]
+type = mysql
+host = 1.1.1.1:3306
+name = mysqldb
+user = grafana
+password = grafana
+url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
+
+"""
+
 
 def datasource_config(config):
+    config_yaml = config[1]
+    config_dict = yaml.safe_load(config_yaml)
+    return config_dict
+
+
+def dashboard_config(config):
     config_yaml = config[1]
     config_dict = yaml.safe_load(config_yaml)
     return config_dict
@@ -117,3 +154,27 @@ class TestCharm(unittest.TestCase):
             datasource_config(config).get("deleteDatasources"),
             [{"name": "juju_test-model_abcdef_prometheus_0", "orgId": 1}],
         )
+
+    @patch("ops.testing._TestingPebbleClient.push")
+    def test_config_is_updated_with_database_relation(self, push):
+        self.harness.set_leader(True)
+
+        rel_id = self.harness.add_relation("database", "mysql")
+        self.harness.add_relation_unit(rel_id, "mysql/0")
+        self.harness.update_relation_data(
+            rel_id,
+            "mysql",
+            DB_CONFIG,
+        )
+
+        config = push.call_args_list[0][0][1]
+        self.assertEqual(config, DATABASE_CONFIG_INI)
+
+    @patch("ops.testing._TestingPebbleClient.push")
+    def test_dashboard_path_is_initialized(self, push):
+        self.harness.set_leader(True)
+
+        self.harness.charm.init_dashboard_provisioning("dashboards")
+
+        config = push.call_args[0]
+        self.assertEqual(dashboard_config(config), DASHBOARD_CONFIG)

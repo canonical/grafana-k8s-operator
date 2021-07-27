@@ -38,7 +38,7 @@ class ConsumerCharm(CharmBase):
         )
 
 
-class TestConsumer(unittest.TestCase):
+class TestSourceConsumer(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(ConsumerCharm, meta=CONSUMER_META)
         self.addCleanup(self.harness.cleanup)
