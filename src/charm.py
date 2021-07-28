@@ -157,6 +157,7 @@ class GrafanaCharm(CharmBase):
         if not self._stored.pebble_ready:
             logger.warning("Pebble is not ready yet. Deferring event.")
             event.defer()
+            return
 
         logger.debug("Handling grafana-k8a configuration change")
         restart = False
