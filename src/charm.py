@@ -20,6 +20,7 @@ import configparser
 import logging
 import hashlib
 import os
+import time
 import yaml
 import zlib
 
@@ -34,7 +35,7 @@ from ops.charm import (
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import ConnectionError, Layer
+from ops.pebble import ChangeError, ConnectionError, Layer
 
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceEvents,
@@ -154,11 +155,6 @@ class GrafanaCharm(CharmBase):
         already stored in the charm. If either the base Grafana config
         or the datasource config differs, restart Grafana.
         """
-        if not self._stored.pebble_ready:
-            logger.warning("Pebble is not ready yet. Deferring event.")
-            event.defer()
-            return
-
         logger.debug("Handling grafana-k8a configuration change")
         restart = False
 
@@ -433,6 +429,8 @@ class GrafanaCharm(CharmBase):
 
                 self.container.start(self.name)
                 logger.info("Restarted grafana-k8s")
+                # Wait a few seconds for startup time
+                time.sleep(6)
 
             if self.build_info:
                 # Grafana started successfully
@@ -504,7 +502,10 @@ class GrafanaCharm(CharmBase):
 
         self.container.add_layer(self.name, layer, combine=True)
         if not self.container.get_service(self.name).is_running():
-            self.container.autostart()
+            try:
+                self.container.autostart()
+            except ChangeError:
+                logger.debug("Pebble could not autostart. No configuration in base image?")
 
         self.source_provider.ready()
         self.unit.status = ActiveStatus()
