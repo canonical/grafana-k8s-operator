@@ -26,6 +26,7 @@ import zlib
 from io import StringIO
 from ops.charm import (
     CharmBase,
+    CharmEvents,
     ConfigChangedEvent,
     RelationBrokenEvent,
     RelationChangedEvent,
@@ -147,12 +148,15 @@ class GrafanaCharm(CharmBase):
         """Go into maintenance state if the unit is stopped."""
         self.unit.status = MaintenanceStatus("Application is terminating.")
 
-    def _configure(self, _) -> None:
+    def _configure(self, event: CharmEvents) -> None:
         """
         Generate configuration files and check the sums against what is
         already stored in the charm. If either the base Grafana config
         or the datasource config differs, restart Grafana.
         """
+        if not self._stored.pebble_ready:
+            logger.warning("Pebble is not ready yet. Deferring event.")
+            event.defer()
 
         logger.debug("Handling grafana-k8a configuration change")
         restart = False
