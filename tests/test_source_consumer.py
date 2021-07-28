@@ -6,7 +6,7 @@ from unittest.mock import patch
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana_k8s.v1.grafana_source import GrafanaSourceConsumer
+from lib.charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
 
 SOURCE_DATA = {
     "model": "test-model",

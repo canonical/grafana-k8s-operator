@@ -11,7 +11,7 @@ from unittest.mock import patch
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana_k8s.v1.grafana_dashboard import GrafanaDashboardProvider
+from lib.charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 
 if "unittest.util" in __import__("sys").modules:
     # Show full diff in self.assertEqual.

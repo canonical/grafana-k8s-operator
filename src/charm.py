@@ -35,12 +35,12 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ConnectionError, Layer
 
-from charms.grafana_k8s.v1.grafana_source import (
+from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceEvents,
     GrafanaSourceProvider,
     SourceFieldsMissingError,
 )
-from charms.grafana_k8s.v1.grafana_dashboard import GrafanaDashboardProvider
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 
 from grafana_server import Grafana
 
@@ -429,7 +429,16 @@ class GrafanaCharm(CharmBase):
                 self.container.start(self.name)
                 logger.info("Restarted grafana-k8s")
 
-            self.unit.status = ActiveStatus()
+            if self.build_info:
+                # Grafana started successfully
+                self.unit.status = ActiveStatus()
+            else:
+                # Is not running. Kick it again
+                logger.warning(
+                    "Unit restarted but Grafana is not responding over API. Restarting"
+                )
+                self.container.stop(self.name)
+                self.container.start(self.name)
         except ConnectionError:
             logger.error(
                 "Could not restart grafana-k8s -- Pebble socket does "
@@ -488,8 +497,8 @@ class GrafanaCharm(CharmBase):
         if self.has_peers and not layer.services.grafana.environment.GF_DATABASE_URL:
             self.unit.status = WaitingStatus("Related MySQL not yet ready")
 
-        self.container.add_layer("grafana", layer, combine=True)
-        if not self.container.get_service(self.name).is_running:
+        self.container.add_layer(self.name, layer, combine=True)
+        if not self.container.get_service(self.name).is_running():
             self.container.autostart()
 
         self.source_provider.ready()
