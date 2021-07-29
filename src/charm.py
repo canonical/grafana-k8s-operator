@@ -20,7 +20,6 @@ import configparser
 import logging
 import hashlib
 import os
-import time
 import yaml
 import zlib
 
@@ -34,8 +33,8 @@ from ops.charm import (
 )
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import ChangeError, ConnectionError, Layer
+from ops.model import ActiveStatus, MaintenanceStatus
+from ops.pebble import ConnectionError, Layer
 
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceEvents,
@@ -408,12 +407,12 @@ class GrafanaCharm(CharmBase):
 
     #####################################
 
-    def _on_pebble_ready(self, _) -> None:
+    def _on_pebble_ready(self, event) -> None:
         """
         When Pebble is ready, start everything up
         """
         self._stored.pebble_ready = True
-        self._configure_container()
+        self._configure(event)
 
     def restart_grafana(self) -> None:
         """Restart the pebble container"""
@@ -429,19 +428,9 @@ class GrafanaCharm(CharmBase):
 
                 self.container.start(self.name)
                 logger.info("Restarted grafana-k8s")
-                # Wait a few seconds for startup time
-                time.sleep(6)
 
-            if self.build_info:
-                # Grafana started successfully
-                self.unit.status = ActiveStatus()
-            else:
-                # Is not running. Kick it again
-                logger.warning(
-                    "Unit restarted but Grafana is not responding over API. Restarting"
-                )
-                self.container.stop(self.name)
-                self.container.start(self.name)
+            self.source_provider.ready()
+            self.unit.status = ActiveStatus()
         except ConnectionError:
             logger.error(
                 "Could not restart grafana-k8s -- Pebble socket does "
@@ -476,39 +465,6 @@ class GrafanaCharm(CharmBase):
         )
 
         return layer
-
-    def _configure_container(self) -> bool:
-        """Configure the Pebble layer for grafana-k8s."""
-
-        if self.has_peers:
-            if True:
-                logger.warning(
-                    "A MySQL relation is needed for Grafana to "
-                    "function in HA mode. Blocking until a "
-                    "relation is added or the application "
-                    "is scaled down"
-                )
-                self.unit.status = BlockedStatus("Missing MySQL relation")
-                return False
-
-        if not self._stored.pebble_ready:
-            self.unit.status = MaintenanceStatus(
-                "Waiting for Pebble startup to complete"
-            )
-
-        layer = self._build_layer()
-        if self.has_peers and not layer.services.grafana.environment.GF_DATABASE_URL:
-            self.unit.status = WaitingStatus("Related MySQL not yet ready")
-
-        self.container.add_layer(self.name, layer, combine=True)
-        if not self.container.get_service(self.name).is_running():
-            try:
-                self.container.autostart()
-            except ChangeError:
-                logger.debug("Pebble could not autostart. No configuration in base image?")
-
-        self.source_provider.ready()
-        self.unit.status = ActiveStatus()
 
     @property
     def grafana_version(self):

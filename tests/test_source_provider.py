@@ -137,6 +137,7 @@ class TestSourceProvider(unittest.TestCase):
             "source-name": "{}_0".format(generate_source_name(SOURCE_DATA)),
             "source-type": "prometheus",
             "url": "http://1.2.3.4:9090",
+            "unit": "prometheus/0",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id][0]
 
@@ -188,6 +189,7 @@ class TestSourceProvider(unittest.TestCase):
             "source-name": "{}_0".format(generate_source_name(SOURCE_DATA)),
             "source-type": "prometheus",
             "url": "http://1.2.3.4:9090",
+            "unit": "prometheus/0",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id][0]
 
@@ -209,6 +211,7 @@ class TestSourceProvider(unittest.TestCase):
             "source-name": "{}_0".format(generate_source_name(OTHER_SOURCE_DATA)),
             "source-type": "prometheus",
             "url": "http://2.3.4.5:9090",
+            "unit": "other-source/0",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[other_rel_id][0]
 
@@ -234,6 +237,7 @@ class TestSourceProvider(unittest.TestCase):
             "source-name": "{}_0".format(generate_source_name(SOURCE_DATA)),
             "source-type": "prometheus",
             "url": "http://1.2.3.4:9090",
+            "unit": "prometheus/0",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[rel_id][0]
 
@@ -255,6 +259,7 @@ class TestSourceProvider(unittest.TestCase):
             "source-name": "{}_0".format(generate_source_name(OTHER_SOURCE_DATA)),
             "source-type": "prometheus",
             "url": "http://2.3.4.5:9090",
+            "unit": "other-source/0",
         }
         sources = self.harness.charm.grafana_provider._stored.sources[other_rel_id][0]
 
@@ -266,7 +271,7 @@ class TestSourceProvider(unittest.TestCase):
 
         rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)
 
-        self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
+        self.harness.charm.on["grafana-source"].relation_departed.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 1)
         self.assertEqual(len(self.harness.charm.grafana_provider.sources_to_delete), 1)
 

@@ -4,8 +4,7 @@ import logging
 from ops.charm import (
     CharmBase,
     CharmEvents,
-    RelationBrokenEvent,
-    RelationChangedEvent,
+    RelationDepartedEvent,
     RelationJoinedEvent,
 )
 from ops.framework import EventBase, EventSource, ObjectEvents, StoredState
@@ -205,10 +204,10 @@ class GrafanaSourceProvider(ProviderBase):
             events.relation_changed, self._on_grafana_source_relation_changed
         )
         self.framework.observe(
-            events.relation_broken, self._on_grafana_source_relation_broken
+            events.relation_departed, self._on_grafana_source_relation_departed
         )
 
-    def _on_grafana_source_relation_changed(self, event: RelationChangedEvent) -> None:
+    def _on_grafana_source_relation_changed(self, event: CharmEvents) -> None:
         """Handle relation changes in related consumers.
 
         If there are changes in relations between Grafana source providers
@@ -256,10 +255,14 @@ class GrafanaSourceProvider(ProviderBase):
             )
 
             host_data = {
+                "unit": unit_name,
                 "source-name": unique_source_name,
                 "source-type": source_data["type"],
                 "url": "http://{}".format(host_addr),
             }
+
+            if host_data["source-name"] in self._stored.sources_to_delete:
+                self._stored.sources_to_delete.remove(host_data["source-name"])
 
             data.append(host_data)
         return data
@@ -282,7 +285,7 @@ class GrafanaSourceProvider(ProviderBase):
             hosts[unit.name] = host_address
         return hosts
 
-    def _on_grafana_source_relation_broken(self, event: RelationBrokenEvent) -> None:
+    def _on_grafana_source_relation_departed(self, event: RelationDepartedEvent) -> None:
         """Update job config when consumers depart.
 
         When a Grafana source consumer departs, the configuration
@@ -293,20 +296,29 @@ class GrafanaSourceProvider(ProviderBase):
         if not self.charm.unit.is_leader():
             return
 
-        rel_id = event.relation.id
-        self._remove_source_from_datastore(rel_id)
+        self._remove_source_from_datastore(event)
 
-    def _remove_source_from_datastore(self, rel_id: int) -> None:
+    def _remove_source_from_datastore(self, event: RelationDepartedEvent) -> None:
         """Remove the grafana-source from the datastore. and add the
         name to the list of sources to remove when a relation is
         broken.
         """
+        rel_id = event.relation.id
         logger.debug("Removing all data for relation: {}".format(rel_id))
 
         removed_source = self._stored.sources.pop(rel_id, None)
         if removed_source:
-            for host in removed_source:
-                self._remove_source(host["source-name"])
+            if event.unit:
+                # Remove one unit only
+                dead_unit = [s for s in removed_source if s["unit"] == event.unit.name][0]
+                self._remove_source(dead_unit["source-name"])
+
+                # Re-update the list of stored sources
+                self._stored.sources[rel_id] = [dict(s) for s in removed_source if s["unit"] != event.unit.name]
+            else:
+                for host in removed_source:
+                    self._remove_source(host["source-name"])
+
             self.on.sources_to_delete_changed.emit()
 
     def _remove_source(self, source_name: str) -> None:
