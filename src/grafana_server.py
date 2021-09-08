@@ -16,7 +16,7 @@
 
 import json
 
-import urllib3
+import urllib3  # type: ignore
 
 
 class Grafana:

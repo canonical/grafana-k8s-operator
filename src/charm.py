@@ -481,12 +481,12 @@ class GrafanaCharm(CharmBase):
                 "type": source_info["source-type"],
                 "url": source_info["url"],
             }
-            datasources_dict["datasources"].append(source)
+            datasources_dict["datasources"].append(source)  # type: ignore[attr-defined]
 
         # Also get a list of all the sources which have previously been purged and add them
         for name in self.source_provider.sources_to_delete:
             source = {"orgId": 1, "name": name}
-            datasources_dict["deleteDatasources"].append(source)
+            datasources_dict["deleteDatasources"].append(source)  # type: ignore[attr-defined]
 
         datasources_string = yaml.dump(datasources_dict)
         return datasources_string

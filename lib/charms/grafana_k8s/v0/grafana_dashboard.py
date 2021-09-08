@@ -430,12 +430,12 @@ class GrafanaDashboardProvider(ProviderBase):
             tm = Template(zlib.decompress(base64.b64decode(data["template"].encode())).decode())
         except TemplateSyntaxError:
             self._purge_dead_dashboard(rel.id)
-            msg = "Cannot add Grafana dashboard. Template is not valid Jinja"
-            logger.warning(msg)
-            rel.data[self.charm.app]["event"] = json.dumps({"errors": msg, "valid": False})
+            errmsg = "Cannot add Grafana dashboard. Template is not valid Jinja"
+            logger.warning(errmsg)
+            rel.data[self.charm.app]["event"] = json.dumps({"errors": errmsg, "valid": False})
             return
 
-        msg = tm.render(
+        tmpl = tm.render(
             grafana_datasource=grafana_datasource,
             prometheus_target=data["monitoring_target"],
             prometheus_query=data["monitoring_query"],
@@ -443,7 +443,7 @@ class GrafanaDashboardProvider(ProviderBase):
 
         msg = {
             "target": data["monitoring_identifier"],
-            "dashboard": base64.b64encode(zlib.compress(msg.encode(), 9)).decode(),
+            "dashboard": base64.b64encode(zlib.compress(tmpl.encode(), 9)).decode(),
             "data": data,
         }
 
