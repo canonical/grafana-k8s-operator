@@ -12,13 +12,18 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+"""A module used for interacting with a running Grafana instance."""
+
 import json
+
 import urllib3
 
 
 class Grafana:
+    """A class that represents a running Grafana instance."""
+
     def __init__(self, host: str, port: int) -> None:
-        """A class to bring up and check a Grafana serverr
+        """A class to bring up and check a Grafana server.
 
         Args:
             host: a :str: which indicates the hostname
@@ -31,18 +36,16 @@ class Grafana:
 
     @property
     def is_ready(self) -> bool:
-        """Checks whether the Grafana server is up and running yet
+        """Checks whether the Grafana server is up and running yet.
 
         Returns:
             :bool: indicating whether or not the server is ready
         """
-
         return True if self.build_info.get("database", None) == "ok" else False
 
     @property
     def build_info(self) -> dict:
-        """
-        A convenience method which queries the API to see whether Grafana is really ready
+        """A convenience method which queries the API to see whether Grafana is really ready.
 
         Returns:
             Empty :dict: if it is not up, otherwise a dict containing basic API health
