@@ -2,15 +2,14 @@
 # See LICENSE file for licensing details.
 
 import json
-import pytest
 import unittest
 
+import pytest
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana_k8s.v0.grafana_source import (
-    GrafanaSourceProvider,
-)
+
+from lib.charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 
 SOURCE_DATA = {
     "model": "test-model",
@@ -44,9 +43,7 @@ class GrafanaCharm(CharmBase):
         self.grafana_provider = GrafanaSourceProvider(
             self, "grafana-source", "grafana", self.version
         )
-        self.framework.observe(
-            self.grafana_provider.on.sources_changed, self.source_events
-        )
+        self.framework.observe(self.grafana_provider.on.sources_changed, self.source_events)
         self.framework.observe(
             self.grafana_provider.on.sources_to_delete_changed,
             self.source_delete_events,
@@ -76,6 +73,7 @@ class TestSourceProvider(unittest.TestCase):
 
     def setup_charm_relations(self, multi=False):
         """Create relations used by test cases.
+
         Args:
             multi: a boolean indicating if multiple relations must be
             created.
