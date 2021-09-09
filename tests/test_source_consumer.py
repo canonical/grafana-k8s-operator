@@ -1,12 +1,13 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 import unittest
 from unittest.mock import patch
 
+from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
 
 SOURCE_DATA = {
     "model": "test-model",
@@ -63,9 +64,7 @@ class TestSourceConsumer(unittest.TestCase):
             "bind-addresses": [
                 {
                     "interface-name": "eth0",
-                    "addresses": [
-                        {"hostname": "grafana-tester-0", "value": bind_address}
-                    ],
+                    "addresses": [{"hostname": "grafana-tester-0", "value": bind_address}],
                 }
             ]
         }
@@ -84,9 +83,7 @@ class TestSourceConsumer(unittest.TestCase):
             "bind-addresses": [
                 {
                     "interface-name": "eth0",
-                    "addresses": [
-                        {"hostname": "grafana-tester-0", "value": bind_address}
-                    ],
+                    "addresses": [{"hostname": "grafana-tester-0", "value": bind_address}],
                 }
             ]
         }

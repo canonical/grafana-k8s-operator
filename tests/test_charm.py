@@ -1,13 +1,14 @@
-# Copyright 2020 Ryan Barry
+# Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import hashlib
-import unittest
-import yaml
 import json
-
+import unittest
 from unittest.mock import patch
+
+import yaml
 from ops.testing import Harness
+
 from charm import GrafanaCharm
 
 MINIMAL_CONFIG = {"grafana-image-path": "grafana/grafana", "port": 3000}
@@ -123,9 +124,7 @@ class TestCharm(unittest.TestCase):
         )
 
         config = push.call_args[0]
-        self.assertEqual(
-            datasource_config(config).get("datasources"), BASIC_DATASOURCES
-        )
+        self.assertEqual(datasource_config(config).get("datasources"), BASIC_DATASOURCES)
 
     @patch("ops.testing._TestingPebbleClient.push")
     def test_datasource_config_is_updated_by_grafana_source_removal(self, push):
@@ -141,9 +140,7 @@ class TestCharm(unittest.TestCase):
         )
 
         config = push.call_args[0]
-        self.assertEqual(
-            datasource_config(config).get("datasources"), BASIC_DATASOURCES
-        )
+        self.assertEqual(datasource_config(config).get("datasources"), BASIC_DATASOURCES)
 
         rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)
         self.harness.charm.on["grafana-source"].relation_departed.emit(rel)

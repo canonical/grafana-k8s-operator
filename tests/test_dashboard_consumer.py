@@ -1,5 +1,6 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 import base64
 import json
 import unittest
@@ -7,10 +8,10 @@ import uuid
 import zlib
 from unittest.mock import patch
 
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 
 if "unittest.util" in __import__("sys").modules:
     # Show full diff in self.assertEqual.
@@ -84,9 +85,7 @@ class TestDashboardConsumer(unittest.TestCase):
         self.harness.add_relation_unit(mon_rel_id, "monitoring/0")
         self.harness.charm.consumer.add_dashboard(DASHBOARD_TMPL)
         data = json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)[
-                "dashboards"
-            ]
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
         return_data = {
             "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
@@ -107,9 +106,7 @@ class TestDashboardConsumer(unittest.TestCase):
         self.harness.add_relation_unit(mon_rel_id, "monitoring/0")
         self.harness.charm.consumer.add_dashboard(DASHBOARD_TMPL)
         data = json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)[
-                "dashboards"
-            ]
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
         return_data = {
             "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
@@ -143,9 +140,7 @@ class TestDashboardConsumer(unittest.TestCase):
         mon_rel_id = self.harness.add_relation("monitoring", "consumer")
         self.harness.add_relation_unit(mon_rel_id, "monitoring/0")
         data = json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)[
-                "dashboards"
-            ]
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
         return_data = {
             "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
@@ -171,9 +166,7 @@ class TestDashboardConsumer(unittest.TestCase):
         self.harness.add_relation_unit(mon_rel_id, "monitoring/0")
         self.harness.remove_relation(mon_rel_id)
         data = json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)[
-                "dashboards"
-            ]
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
         return_data = {
             "monitoring_identifier": "testing_abcdefgh-1234_monitoring",

@@ -1,5 +1,6 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 import base64
 import copy
 import json
@@ -8,10 +9,10 @@ import uuid
 import zlib
 from unittest.mock import patch
 
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from lib.charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 
 if "unittest.util" in __import__("sys").modules:
     # Show full diff in self.assertEqual.
@@ -62,9 +63,7 @@ class ProviderCharm(CharmBase):
         self.grafana_provider = GrafanaDashboardProvider(
             self, "grafana-dashboard", "grafana", self.version
         )
-        self.framework.observe(
-            self.grafana_provider.on.dashboards_changed, self.dashboard_events
-        )
+        self.framework.observe(self.grafana_provider.on.dashboards_changed, self.dashboard_events)
 
     def dashboard_events(self, _):
         self._stored.dashboard_events += 1
@@ -88,6 +87,7 @@ class TestDashboardProvider(unittest.TestCase):
 
     def setup_charm_relations(self, multi=False):
         """Create relations used by test cases.
+
         Args:
             multi: a boolean indicating if multiple relations must be
             created.
@@ -169,14 +169,10 @@ class TestDashboardProvider(unittest.TestCase):
         )
 
         data = json.loads(
-            self.harness.get_relation_data(rels[0], self.harness.model.app.name)[
-                "event"
-            ]
+            self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
         )
         self.assertEqual(data["valid"], False)
-        self.assertIn(
-            "Cannot add Grafana dashboard. Template is not valid Jinja", data["errors"]
-        )
+        self.assertIn("Cannot add Grafana dashboard. Template is not valid Jinja", data["errors"])
 
     def test_provider_error_on_invalidation(self):
         self.assertEqual(len(self.harness.charm.grafana_provider._stored.dashboards), 0)
@@ -197,9 +193,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
 
         data = json.loads(
-            self.harness.get_relation_data(rels[0], self.harness.model.app.name)[
-                "event"
-            ]
+            self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
         )
         self.assertEqual(data["valid"], False)
         self.assertIn("Doesn't matter", data["errors"])
@@ -220,9 +214,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
 
         data = json.loads(
-            self.harness.get_relation_data(rels[0], self.harness.model.app.name)[
-                "event"
-            ]
+            self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
         )
         self.assertEqual(data["valid"], False)
         self.assertIn("No configured datasources", data["errors"])

@@ -1,43 +1,44 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
 name: grafana-k8s
 display-name: Grafana
 summary: Data visualization and observability with Grafana
 maintainers:
-    - Ryan Barry <ryan.barry@canonical.com>
+  - Ryan Barry <ryan.barry@canonical.com>
 description: |
-    Grafana provides dashboards for monitoring data and this
-    charm is written to allow for HA on Kubernetes and can take
-    multiple data sources (for example, Prometheus).
+  Grafana provides dashboards for monitoring data and this
+  charm is written to allow for HA on Kubernetes and can take
+  multiple data sources (for example, Prometheus).
 tags:
-    - observability
-    - lma
-    - monitoring
-    - grafana
-    - prometheus
+  - observability
+  - lma
+  - monitoring
+  - grafana
+  - prometheus
 containers:
-    grafana:
-        resource: grafana-image
-        mounts:
-            - storage: database
-              location: /var/lib/grafana
+  grafana:
+    resource: grafana-image
+    mounts:
+      - storage: database
+        location: /var/lib/grafana
 provides:
-    grafana:
-        interface: grafana
-    grafana-source:
-        interface: grafana_datasource
-    grafana-dashboard:
-        interface: grafana_dashboard
+  grafana:
+    interface: grafana
+  grafana-source:
+    interface: grafana_datasource
+  grafana-dashboard:
+    interface: grafana_dashboard
 storage:
-    database:
-        type: filesystem
+  database:
+    type: filesystem
 requires:
-    database:
-        interface: db
-        limit: 1
+  database:
+    interface: db
+    limit: 1
 peers:
-    grafana-peers:
-        interface: grafana_peers
+  grafana-peers:
+    interface: grafana_peers
 resources:
-    grafana-image:
-        type: oci-image
-        description: upstream docker image for Grafana
-
+  grafana-image:
+    type: oci-image
+    description: upstream docker image for Grafana

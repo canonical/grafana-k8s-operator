@@ -3,16 +3,16 @@
 
 import json
 import unittest
-import urllib3
-
 from unittest.mock import patch
 
-from src.grafana_server import Grafana
+import urllib3
+
+from grafana_server import Grafana
 
 
 class TestServer(unittest.TestCase):
     def setUp(self):
-        self.grafana = Grafana("localhost", "9090")
+        self.grafana = Grafana("localhost", 9090)
 
     @patch("src.grafana_server.urllib3.PoolManager.request")
     def test_grafana_server_returns_valid_data(self, request):
@@ -34,9 +34,7 @@ class TestServer(unittest.TestCase):
 
     @patch("src.grafana_server.urllib3.PoolManager.request")
     def test_grafana_server_max_retry_test(self, request):
-        request.side_effect = urllib3.exceptions.MaxRetryError(
-            None, "/", "We shouldn't get here"
-        )
+        request.side_effect = urllib3.exceptions.MaxRetryError(None, "/", "We shouldn't get here")
         build_info = self.grafana.build_info
         self.assertEqual(build_info, {})
 

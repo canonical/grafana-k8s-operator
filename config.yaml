@@ -1,27 +1,29 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
 options:
-    port:
-        description: The port grafana-k8s will be listening on
-        type: int
-        default: 3000
-    log_level:
-        type: string
-        description: |
-            Logging level for Grafana. Options are “debug”, “info”,
-            “warn”, “error”, and “critical”.
-        default: info
-    admin_user:
-        description: The Grafana administrative user
-        type: string
-        default: admin
-    web_external_url:
-        description: |
-            The URL under which Grafana is externally reachable (for example,
-            if Grafana is served via a reverse proxy).
+  port:
+    description: The port grafana-k8s will be listening on
+    type: int
+    default: 3000
+  log_level:
+    type: string
+    description: |
+      Logging level for Grafana. Options are “debug”, “info”,
+      “warn”, “error”, and “critical”.
+    default: info
+  admin_user:
+    description: The Grafana administrative user
+    type: string
+    default: admin
+  web_external_url:
+    description: |
+      The URL under which Grafana is externally reachable (for example,
+      if Grafana is served via a reverse proxy).
 
-            Used for generating relative and absolute links back to
-            Grafana itself. If the URL has a path portion, it will be used to
-            prefix all HTTP endpoints served by Grafana.
+      Used for generating relative and absolute links back to
+      Grafana itself. If the URL has a path portion, it will be used to
+      prefix all HTTP endpoints served by Grafana.
 
-            If omitted, relevant URL components will be derived automatically.
-        type: string
-        default: ""
+      If omitted, relevant URL components will be derived automatically.
+    type: string
+    default: ""
