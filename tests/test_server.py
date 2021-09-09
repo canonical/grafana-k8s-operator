@@ -7,12 +7,12 @@ from unittest.mock import patch
 
 import urllib3
 
-from src.grafana_server import Grafana
+from grafana_server import Grafana
 
 
 class TestServer(unittest.TestCase):
     def setUp(self):
-        self.grafana = Grafana("localhost", "9090")
+        self.grafana = Grafana("localhost", 9090)
 
     @patch("src.grafana_server.urllib3.PoolManager.request")
     def test_grafana_server_returns_valid_data(self, request):

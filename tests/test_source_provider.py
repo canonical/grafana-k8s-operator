@@ -5,11 +5,10 @@ import json
 import unittest
 
 import pytest
+from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-
-from lib.charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 
 SOURCE_DATA = {
     "model": "test-model",
