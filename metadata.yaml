@@ -24,14 +24,14 @@ containers:
 provides:
   grafana:
     interface: grafana
-  grafana-source:
-    interface: grafana_datasource
-  grafana-dashboard:
-    interface: grafana_dashboard
 storage:
   database:
     type: filesystem
 requires:
+  grafana-source:
+    interface: grafana_datasource
+  grafana-dashboard:
+    interface: grafana_dashboard
   database:
     interface: db
     limit: 1

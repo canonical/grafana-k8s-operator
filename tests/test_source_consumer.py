@@ -34,7 +34,6 @@ class ConsumerCharm(CharmBase):
         self.consumer = GrafanaSourceConsumer(
             self,
             "grafana-source",
-            {"grafana": ">=1.v0"},
             refresh_event=self.on.grafana_tester_pebble_ready,
         )
 

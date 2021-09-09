@@ -39,9 +39,7 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(source_events=0)  # available data sources
         self._stored.set_default(source_delete_events=0)
 
-        self.grafana_provider = GrafanaSourceProvider(
-            self, "grafana-source", "grafana", self.version
-        )
+        self.grafana_provider = GrafanaSourceProvider(self, "grafana-source")
         self.framework.observe(self.grafana_provider.on.sources_changed, self.source_events)
         self.framework.observe(
             self.grafana_provider.on.sources_to_delete_changed,

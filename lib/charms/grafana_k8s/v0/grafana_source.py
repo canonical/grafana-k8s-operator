@@ -8,9 +8,8 @@ import logging
 from typing import Dict, List, Optional
 
 from ops.charm import CharmBase, CharmEvents, RelationDepartedEvent, RelationJoinedEvent
-from ops.framework import EventBase, EventSource, ObjectEvents, StoredState
+from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.model import Relation
-from ops.relation import ConsumerBase, ProviderBase
 
 # The unique Charmhub library identifier, never change it
 LIBID = "974705adb86f40228298156e34b460dc"
@@ -59,7 +58,7 @@ class GrafanaSourceEvents(ObjectEvents):
     sources_to_delete_changed = EventSource(GrafanaSourcesChanged)
 
 
-class GrafanaSourceConsumer(ConsumerBase):
+class GrafanaSourceConsumer(Object):
     """A consumer object for Grafana datasources."""
 
     _stored = StoredState()
@@ -68,11 +67,9 @@ class GrafanaSourceConsumer(ConsumerBase):
         self,
         charm: CharmBase,
         name: str,
-        consumes: dict,
         refresh_event: CharmEvents,
         source_type: Optional[str] = "prometheus",
         source_port: Optional[str] = "9090",
-        multi: Optional[bool] = False,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -115,9 +112,9 @@ class GrafanaSourceConsumer(ConsumerBase):
                 this object should support interacting with multiple
                 service providers.
         """
-        super().__init__(charm, name, consumes, multi)
-
+        super().__init__(charm, name)
         self.charm = charm
+        self.name = name
         events = self.charm.on[name]
 
         self._source_type = source_type
@@ -164,15 +161,13 @@ class GrafanaSourceConsumer(ConsumerBase):
             )
 
 
-class GrafanaSourceProvider(ProviderBase):
+class GrafanaSourceProvider(Object):
     """A provider object for working with Grafana datasources."""
 
     on = GrafanaSourceEvents()
     _stored = StoredState()
 
-    def __init__(
-        self, charm: CharmBase, name: str, service: str, version: Optional[str] = None
-    ) -> None:
+    def __init__(self, charm: CharmBase, name: str) -> None:
         """A Grafana based Monitoring service consumer.
 
         Args:
@@ -188,7 +183,8 @@ class GrafanaSourceProvider(ProviderBase):
             version: a string providing the semantic version of the Grafana
                 source being provided.
         """
-        super().__init__(charm, name, service, version)
+        super().__init__(charm, name)
+        self.name = name
         self.charm = charm
         events = self.charm.on[name]
 

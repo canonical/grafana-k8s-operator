@@ -1,5 +1,4 @@
 git+https://github.com/canonical/operator/#egg=ops
-semantic_version
 pyyaml
 urllib3
 jinja2

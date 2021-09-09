@@ -39,7 +39,7 @@ class ConsumerCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self.consumer = GrafanaDashboardConsumer(
-            self, "grafana-dashboard", {"grafana": ">=1.0"}, event_relation="monitoring"
+            self, "grafana-dashboard", event_relation="monitoring"
         )
 
         self._stored.set_default(valid_events=0)  # available data sources
