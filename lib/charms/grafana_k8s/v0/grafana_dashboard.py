@@ -101,7 +101,7 @@ class GrafanaDashboardConsumer(Object):
         by instantiating a :class:`GrafanaDashboardConsumer` object and
         adding its datasources as follows:
 
-            self.grafana = GrafanaConsumer(self, "grafana-source", {"grafana-source"}: ">=2.0"})
+            self.grafana = GrafanaConsumer(self, "grafana-source")
             self.grafana.add_dashboard(data: str)
 
         Args:
@@ -110,20 +110,11 @@ class GrafanaDashboardConsumer(Object):
                 `self` in the instantiating class.
             name: a :string: name of the relation between `charm`
                 the Grafana charmed service.
-            consumes: a :dict: of acceptable monitoring service
-                providers. The keys of the dictionary are :string:
-                names of grafana source service providers. Typically,
-                this is `grafana-source`. The values of the dictionary
-                are corresponding minimal acceptable semantic versions
-                for the service.
             event_relation: a :string: name of the relation between
                 the charmed service and some provider which is required
                 for dashboard validity. When events on `event_relation`
                 occur, this consumer library will invalidate or
                 restore the dashboard
-            multi: an optional (default `False`) flag to indicate if
-                this object should support interacting with multiple
-                service providers.
         """
         super().__init__(charm, name)
         self.charm = charm
@@ -330,14 +321,6 @@ class GrafanaDashboardProvider(Object):
                 instance of the Grafana dashboard service.
             name: string name of the relation that is provides the
                 Grafana dashboard service.
-            service: string name of service provided. This is used by
-                :class:`GrafanaDashboardProvider` to validate this service as
-                acceptable. Hence the string name must match one of the
-                acceptable service names in the :class:`GrafanaDashboardProvider`s
-                `consumes` argument. Typically this string is just "grafana".
-            version: a string providing the semantic version of the Grafana
-                dashboard being provided.
-
         """
         super().__init__(charm, name)
         self.charm = charm
@@ -361,7 +344,7 @@ class GrafanaDashboardProvider(Object):
         If there are changes in relations between Grafana dashboard providers
         and consumers, this event handler (if the unit is the leader) will
         get data for an incoming grafana-dashboard relation through a
-        :class:`GrafanaDashboardssChanged` event, and make the relation data
+        :class:`GrafanaDashboardsChanged` event, and make the relation data
         is available in the app's datastore object. The Grafana charm can
         then respond to the event to update its configuration
         """

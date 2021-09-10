@@ -95,12 +95,6 @@ class GrafanaSourceConsumer(Object):
                 `self` in the instantiating class.
             name: a :string: name of the relation between `charm`
                 the Grafana charmed service.
-            consumes: a :dict: of acceptable monitoring service
-                providers. The keys of the dictionary are :string:
-                names of grafana source service providers. Typically,
-                this is `grafana-source`. The values of the dictionary
-                are corresponding minimal acceptable semantic versions
-                for the service.
             refresh_event: a :class:`CharmEvents` event on which the IP
                 address should be refreshed in case of pod or
                 machine/VM restart.
@@ -108,9 +102,6 @@ class GrafanaSourceConsumer(Object):
                 required for Grafana configuration
             source_port: an optional (default `9090`) source port
                 required for Grafana configuration
-            multi: an optional (default `False`) flag to indicate if
-                this object should support interacting with multiple
-                service providers.
         """
         super().__init__(charm, name)
         self.charm = charm
@@ -175,13 +166,6 @@ class GrafanaSourceProvider(Object):
                 instance of the Grafana source service.
             name: string name of the relation that is provides the
                 Grafana source service.
-            service: string name of service provided. This is used by
-                :class:`GrafanaSourceProvider` to validate this service as
-                acceptable. Hence the string name must match one of the
-                acceptable service names in the :class:`GrafanaSourceProvider`s
-                `consumes` argument. Typically this string is just "grafana".
-            version: a string providing the semantic version of the Grafana
-                source being provided.
         """
         super().__init__(charm, name)
         self.name = name
