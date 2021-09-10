@@ -60,7 +60,6 @@ VALID_DATABASE_TYPES = {"mysql", "postgres", "sqlite3"}
 
 CONFIG_PATH = "/etc/grafana/grafana-config.ini"
 DATASOURCE_PATH = "/etc/grafana/provisioning"
-VERSION = "2.0.0"
 PEER = "grafana-peers"
 
 
