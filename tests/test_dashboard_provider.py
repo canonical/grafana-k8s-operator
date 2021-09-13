@@ -60,9 +60,7 @@ class ProviderCharm(CharmBase):
         super().__init__(*args)
         self._stored.set_default(dashboard_events=0)
 
-        self.grafana_provider = GrafanaDashboardProvider(
-            self, "grafana-dashboard", "grafana", self.version
-        )
+        self.grafana_provider = GrafanaDashboardProvider(self, "grafana-dashboard")
         self.framework.observe(self.grafana_provider.on.dashboards_changed, self.dashboard_events)
 
     def dashboard_events(self, _):

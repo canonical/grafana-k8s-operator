@@ -13,10 +13,9 @@ from typing import Dict, List, Union
 
 from jinja2 import Template
 from jinja2.exceptions import TemplateSyntaxError
-from ops.charm import CharmBase, CharmEvents, RelationBrokenEvent, RelationChangedEvent
-from ops.framework import EventBase, EventSource, StoredState
+from ops.charm import CharmBase, RelationBrokenEvent, RelationChangedEvent
+from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.model import Relation, Unit
-from ops.relation import ConsumerBase, ConsumerEvents, ProviderBase
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -47,7 +46,7 @@ class GrafanaDashboardsChanged(EventBase):
         self.data = snapshot["data"]
 
 
-class GrafanaDashboardEvents(CharmEvents):
+class GrafanaDashboardEvents(ObjectEvents):
     """Events raised by :class:`GrafanaSourceEvents`."""
 
     dashboards_changed = EventSource(GrafanaDashboardsChanged)
@@ -74,13 +73,13 @@ class GrafanaDashboardEvent(EventBase):
         self.valid = snapshot["valid"]
 
 
-class GrafanaConsumerEvents(ConsumerEvents):
+class GrafanaConsumerEvents(ObjectEvents):
     """Events raised by :class:`GrafanaSourceEvents`."""
 
     dashboard_status_changed = EventSource(GrafanaDashboardEvent)
 
 
-class GrafanaDashboardConsumer(ConsumerBase):
+class GrafanaDashboardConsumer(Object):
     """A consumer object for Grafana dashboards."""
 
     _stored = StoredState()
@@ -90,9 +89,7 @@ class GrafanaDashboardConsumer(ConsumerBase):
         self,
         charm: CharmBase,
         name: str,
-        consumes: dict,
         event_relation: str = "monitoring",
-        multi: bool = False,
     ) -> None:
         """Construct a Grafana dashboard charm client.
 
@@ -104,7 +101,7 @@ class GrafanaDashboardConsumer(ConsumerBase):
         by instantiating a :class:`GrafanaDashboardConsumer` object and
         adding its datasources as follows:
 
-            self.grafana = GrafanaConsumer(self, "grafana-source", {"grafana-source"}: ">=2.0"})
+            self.grafana = GrafanaConsumer(self, "grafana-source")
             self.grafana.add_dashboard(data: str)
 
         Args:
@@ -113,24 +110,15 @@ class GrafanaDashboardConsumer(ConsumerBase):
                 `self` in the instantiating class.
             name: a :string: name of the relation between `charm`
                 the Grafana charmed service.
-            consumes: a :dict: of acceptable monitoring service
-                providers. The keys of the dictionary are :string:
-                names of grafana source service providers. Typically,
-                this is `grafana-source`. The values of the dictionary
-                are corresponding minimal acceptable semantic versions
-                for the service.
             event_relation: a :string: name of the relation between
                 the charmed service and some provider which is required
                 for dashboard validity. When events on `event_relation`
                 occur, this consumer library will invalidate or
                 restore the dashboard
-            multi: an optional (default `False`) flag to indicate if
-                this object should support interacting with multiple
-                service providers.
         """
-        super().__init__(charm, name, consumes, multi)
-
+        super().__init__(charm, name)
         self.charm = charm
+        self.name = name
         self._stored.set_default(dashboards={}, dashboard_templates={}, event_relation=None)
         self._stored.event_relation = event_relation
 
@@ -319,13 +307,13 @@ class GrafanaDashboardConsumer(ConsumerBase):
         return [v for v in self._stored.dashboards.values()]
 
 
-class GrafanaDashboardProvider(ProviderBase):
+class GrafanaDashboardProvider(Object):
     """A provider object for working with Grafana Dashboards."""
 
     on = GrafanaDashboardEvents()
     _stored = StoredState()
 
-    def __init__(self, charm: CharmBase, name: str, service: str, version=None) -> None:
+    def __init__(self, charm: CharmBase, name: str) -> None:
         """A Grafana based Monitoring service consumer.
 
         Args:
@@ -333,18 +321,10 @@ class GrafanaDashboardProvider(ProviderBase):
                 instance of the Grafana dashboard service.
             name: string name of the relation that is provides the
                 Grafana dashboard service.
-            service: string name of service provided. This is used by
-                :class:`GrafanaDashboardProvider` to validate this service as
-                acceptable. Hence the string name must match one of the
-                acceptable service names in the :class:`GrafanaDashboardProvider`s
-                `consumes` argument. Typically this string is just "grafana".
-            version: a string providing the semantic version of the Grafana
-                dashboard being provided.
-
         """
-        super().__init__(charm, name, service, version)
-
+        super().__init__(charm, name)
         self.charm = charm
+        self.name = name
         events = self.charm.on[name]
 
         self._stored.set_default(
@@ -364,7 +344,7 @@ class GrafanaDashboardProvider(ProviderBase):
         If there are changes in relations between Grafana dashboard providers
         and consumers, this event handler (if the unit is the leader) will
         get data for an incoming grafana-dashboard relation through a
-        :class:`GrafanaDashboardssChanged` event, and make the relation data
+        :class:`GrafanaDashboardsChanged` event, and make the relation data
         is available in the app's datastore object. The Grafana charm can
         then respond to the event to update its configuration
         """

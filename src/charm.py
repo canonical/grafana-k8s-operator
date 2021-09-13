@@ -60,7 +60,6 @@ VALID_DATABASE_TYPES = {"mysql", "postgres", "sqlite3"}
 
 CONFIG_PATH = "/etc/grafana/grafana-config.ini"
 DATASOURCE_PATH = "/etc/grafana/provisioning"
-VERSION = "2.0.0"
 PEER = "grafana-peers"
 
 
@@ -93,7 +92,7 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.stop, self._on_stop)
 
         # -- grafana_source relation observations
-        self.source_provider = GrafanaSourceProvider(self, "grafana-source", "grafana", VERSION)
+        self.source_provider = GrafanaSourceProvider(self, "grafana-source")
         self.framework.observe(
             self.source_provider.on.sources_changed,
             self._on_grafana_source_changed,
@@ -104,9 +103,7 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- grafana_dashboard relation observations
-        self.dashboard_provider = GrafanaDashboardProvider(
-            self, "grafana-dashboard", "grafana", VERSION
-        )
+        self.dashboard_provider = GrafanaDashboardProvider(self, "grafana-dashboard")
         self.framework.observe(
             self.dashboard_provider.on.dashboards_changed, self._on_dashboards_changed
         )
@@ -410,7 +407,6 @@ class GrafanaCharm(CharmBase):
                 self.container.start(self.name)
                 logger.info("Restarted grafana-k8s")
 
-            self.source_provider.ready()
             self.unit.status = ActiveStatus()
         except ConnectionError:
             logger.error(

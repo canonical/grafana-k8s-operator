@@ -8,9 +8,8 @@ import logging
 from typing import Dict, List, Optional
 
 from ops.charm import CharmBase, CharmEvents, RelationDepartedEvent, RelationJoinedEvent
-from ops.framework import EventBase, EventSource, ObjectEvents, StoredState
+from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.model import Relation
-from ops.relation import ConsumerBase, ProviderBase
 
 # The unique Charmhub library identifier, never change it
 LIBID = "974705adb86f40228298156e34b460dc"
@@ -59,7 +58,7 @@ class GrafanaSourceEvents(ObjectEvents):
     sources_to_delete_changed = EventSource(GrafanaSourcesChanged)
 
 
-class GrafanaSourceConsumer(ConsumerBase):
+class GrafanaSourceConsumer(Object):
     """A consumer object for Grafana datasources."""
 
     _stored = StoredState()
@@ -68,11 +67,9 @@ class GrafanaSourceConsumer(ConsumerBase):
         self,
         charm: CharmBase,
         name: str,
-        consumes: dict,
         refresh_event: CharmEvents,
         source_type: Optional[str] = "prometheus",
         source_port: Optional[str] = "9090",
-        multi: Optional[bool] = False,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -98,12 +95,6 @@ class GrafanaSourceConsumer(ConsumerBase):
                 `self` in the instantiating class.
             name: a :string: name of the relation between `charm`
                 the Grafana charmed service.
-            consumes: a :dict: of acceptable monitoring service
-                providers. The keys of the dictionary are :string:
-                names of grafana source service providers. Typically,
-                this is `grafana-source`. The values of the dictionary
-                are corresponding minimal acceptable semantic versions
-                for the service.
             refresh_event: a :class:`CharmEvents` event on which the IP
                 address should be refreshed in case of pod or
                 machine/VM restart.
@@ -111,13 +102,10 @@ class GrafanaSourceConsumer(ConsumerBase):
                 required for Grafana configuration
             source_port: an optional (default `9090`) source port
                 required for Grafana configuration
-            multi: an optional (default `False`) flag to indicate if
-                this object should support interacting with multiple
-                service providers.
         """
-        super().__init__(charm, name, consumes, multi)
-
+        super().__init__(charm, name)
         self.charm = charm
+        self.name = name
         events = self.charm.on[name]
 
         self._source_type = source_type
@@ -164,15 +152,13 @@ class GrafanaSourceConsumer(ConsumerBase):
             )
 
 
-class GrafanaSourceProvider(ProviderBase):
+class GrafanaSourceProvider(Object):
     """A provider object for working with Grafana datasources."""
 
     on = GrafanaSourceEvents()
     _stored = StoredState()
 
-    def __init__(
-        self, charm: CharmBase, name: str, service: str, version: Optional[str] = None
-    ) -> None:
+    def __init__(self, charm: CharmBase, name: str) -> None:
         """A Grafana based Monitoring service consumer.
 
         Args:
@@ -180,15 +166,9 @@ class GrafanaSourceProvider(ProviderBase):
                 instance of the Grafana source service.
             name: string name of the relation that is provides the
                 Grafana source service.
-            service: string name of service provided. This is used by
-                :class:`GrafanaSourceProvider` to validate this service as
-                acceptable. Hence the string name must match one of the
-                acceptable service names in the :class:`GrafanaSourceProvider`s
-                `consumes` argument. Typically this string is just "grafana".
-            version: a string providing the semantic version of the Grafana
-                source being provided.
         """
-        super().__init__(charm, name, service, version)
+        super().__init__(charm, name)
+        self.name = name
         self.charm = charm
         events = self.charm.on[name]
 
