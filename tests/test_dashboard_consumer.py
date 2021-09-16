@@ -92,6 +92,29 @@ class TestDashboardConsumer(unittest.TestCase):
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",
+            "template_name": "consumer-tester",
+            "removed": False,
+            "invalidated": False,
+            "invalidated_reason": "",
+            "uuid": "12345678",
+        }
+        self.assertEqual(return_data, data)
+
+    def test_consumer_sets_dashboard_data_with_name(self):
+        rel_id = self.harness.add_relation("grafana-dashboard", "consumer")
+        self.harness.add_relation_unit(rel_id, "consumer/0")
+        mon_rel_id = self.harness.add_relation("monitoring", "consumer")
+        self.harness.add_relation_unit(mon_rel_id, "monitoring/0")
+        self.harness.charm.consumer.add_dashboard(DASHBOARD_TMPL, "tester-filename")
+        data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+        return_data = {
+            "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
+            "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
+            "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
+            "template": "\n\n",
+            "template_name": "tester-filename",
             "removed": False,
             "invalidated": False,
             "invalidated_reason": "",
@@ -113,6 +136,7 @@ class TestDashboardConsumer(unittest.TestCase):
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",
+            "template_name": "consumer-tester",
             "removed": False,
             "invalidated": False,
             "invalidated_reason": "",
@@ -125,6 +149,7 @@ class TestDashboardConsumer(unittest.TestCase):
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",
+            "template_name": "consumer-tester",
             "removed": True,
             "invalidated": False,
             "invalidated_reason": "",
@@ -147,6 +172,7 @@ class TestDashboardConsumer(unittest.TestCase):
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",
+            "template_name": "consumer-tester",
             "removed": False,
             "invalidated": False,
             "invalidated_reason": "",
@@ -173,6 +199,7 @@ class TestDashboardConsumer(unittest.TestCase):
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",
+            "template_name": "consumer-tester",
             "removed": False,
             "invalidated": True,
             "invalidated_reason": "Waiting for a monitoring relation to send dashboard data",

@@ -16,7 +16,7 @@ virtualenv -p python3 venv
 source venv/bin/activate
 pip install -r requirements.txt
 charmcraft build
-juju deploy ./grafana-k8s.charm --resource grafana-image=ubuntu/grafana:latest
+juju deploy ./grafana-k8s_ubuntu-20.04-amd64.charm --resource grafana-image=ubuntu/grafana:latest
 ```
 
 View the dashboard in a browser:

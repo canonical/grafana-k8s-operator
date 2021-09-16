@@ -258,7 +258,7 @@ class GrafanaCharm(CharmBase):
 
         for dashboard in self.dashboard_provider.dashboards:
             dash = zlib.decompress(base64.b64decode(dashboard["dashboard"].encode())).decode()
-            name = "{}_juju.json".format(dashboard["target"])
+            name = "{}_{}_juju.json".format(dashboard["target"], dashboard["name"])
 
             dashboard_path = os.path.join(dashboard_path, name)
             existing_dashboards[dashboard_path] = True

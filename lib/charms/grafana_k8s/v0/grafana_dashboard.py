@@ -9,7 +9,7 @@ import json
 import logging
 import uuid
 import zlib
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 from jinja2 import Template
 from jinja2.exceptions import TemplateSyntaxError
@@ -25,7 +25,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,9 @@ class GrafanaDashboardConsumer(Object):
             self._on_monitoring_relation_broken,
         )
 
-    def add_dashboard(self, data: str, rel_id=None) -> None:
+    def add_dashboard(
+        self, data: str, name: Optional[str] = None, rel_id: Optional[int] = None
+    ) -> None:
         """Add a dashboard to Grafana.
 
         `data` should be a string representing a jinja template which can be templated with the
@@ -160,7 +162,9 @@ class GrafanaDashboardConsumer(Object):
             self.on.dashboard_status_changed.emit(error_message=error_message, valid=False)
             return
 
-        self._update_dashboards(data, rel_id, prom_unit)
+        name = name if name else self.charm.unit.name.split("/")[0]
+
+        self._update_dashboards(data, name, rel_id, prom_unit)
 
     def _on_grafana_dashboard_relation_changed(self, event: RelationChangedEvent) -> None:
         """Watch for changes so we know if there's an error to signal back to the parent charm.
@@ -194,7 +198,7 @@ class GrafanaDashboardConsumer(Object):
                     )
                 )
 
-    def _update_dashboards(self, data: str, rel_id: int, prom_unit: Unit) -> None:
+    def _update_dashboards(self, data: str, name: str, rel_id: int, prom_unit: Unit) -> None:
         """Update the dashboards in the relation data bucket."""
         if not self.charm.unit.is_leader():
             return
@@ -221,6 +225,7 @@ class GrafanaDashboardConsumer(Object):
             "monitoring_identifier": prom_identifier,
             "monitoring_target": prom_target,
             "monitoring_query": prom_query,
+            "template_name": name,
             "template": base64.b64encode(zlib.compress(data.encode(), 9)).decode(),
             "removed": False,
             "invalidated": False,
@@ -424,6 +429,7 @@ class GrafanaDashboardProvider(Object):
         msg = {
             "target": data["monitoring_identifier"],
             "dashboard": base64.b64encode(zlib.compress(tmpl.encode(), 9)).decode(),
+            "name": data["name"],
             "data": data,
         }
 
