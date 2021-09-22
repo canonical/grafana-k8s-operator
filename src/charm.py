@@ -79,10 +79,12 @@ class GrafanaCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
+        self._port = 3000
+
         # -- initialize states --
         self.name = "grafana"
         self.container = self.unit.get_container(self.name)
-        self.grafana_service = Grafana("localhost", self.model.config["port"])
+        self.grafana_service = Grafana("localhost", self._port)
         self.grafana_config_ini_hash = None
         self.grafana_datasources_hash = None
         self._stored.set_default(database=dict(), pebble_ready=False, k8s_service_patched=False)
@@ -129,8 +131,7 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
-        self.source_provider.update_port(self.name, self.model.config["port"])
-        self._patch_k8s_service()
+        self.source_provider.update_port(self.name, self._port)
 
         self._configure(event)
 
@@ -291,7 +292,7 @@ class GrafanaCharm(CharmBase):
     def _patch_k8s_service(self):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
         if self.unit.is_leader() and not self._stored.k8s_service_patched:
-            port = self.model.config["port"]
+            port = self._port
             service_ports = [
                 (f"{self.app.name}", port, port),
             ]
@@ -459,7 +460,7 @@ class GrafanaCharm(CharmBase):
                         "command": "grafana-server -config {}".format(CONFIG_PATH),
                         "startup": "enabled",
                         "environment": {
-                            "GF_SERVER_HTTP_PORT": self.model.config["port"],
+                            "GF_SERVER_HTTP_PORT": self._port,
                             "GF_LOG_LEVEL": self.model.config["log_level"],
                             "GF_PATHS_PROVISIONING": DATASOURCE_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
