@@ -15,7 +15,7 @@ from jinja2 import Template
 from jinja2.exceptions import TemplateSyntaxError
 from ops.charm import CharmBase, RelationBrokenEvent, RelationChangedEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-from ops.model import Relation, Unit
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -149,10 +149,15 @@ class GrafanaDashboardConsumer(Object):
         self._stored.dashboard_templates[rel_id] = base64.b64encode(
             zlib.compress(data.encode(), 9)
         ).decode()
+
+        # After moving to the assumption that model_identifier will be set from
+        # the other side of the relation for Prometheus, this is here only to
+        # ensure that there is actually a monitoring relationship before we
+        # send dashboard data
         prom_rel = self.framework.model.get_relation(self._stored.event_relation)
 
         try:
-            prom_unit = prom_rel.units.pop()
+            prom_rel.units.pop()
         except (IndexError, AttributeError):
             error_message = ("Waiting for a {} relation to send dashboard data").format(
                 self._stored.event_relation
@@ -160,7 +165,7 @@ class GrafanaDashboardConsumer(Object):
             self.on.dashboard_status_changed.emit(error_message=error_message, valid=False)
             return
 
-        self._update_dashboards(data, rel_id, prom_unit)
+        self._update_dashboards(data, rel_id)
 
     def _on_grafana_dashboard_relation_changed(self, event: RelationChangedEvent) -> None:
         """Watch for changes so we know if there's an error to signal back to the parent charm.
@@ -171,7 +176,8 @@ class GrafanaDashboardConsumer(Object):
         if not self.charm.unit.is_leader():
             return
 
-        data = json.loads(event.relation.data[event.app].get("event", "{}"))
+        rel = self.framework.model.get_relation(self.name, event.relation.id)
+        data = json.loads(rel.data[event.app].get("event", "{}"))
 
         if not data:
             return
@@ -194,16 +200,10 @@ class GrafanaDashboardConsumer(Object):
                     )
                 )
 
-    def _update_dashboards(self, data: str, rel_id: int, prom_unit: Unit) -> None:
+    def _update_dashboards(self, data: str, rel_id: int) -> None:
         """Update the dashboards in the relation data bucket."""
         if not self.charm.unit.is_leader():
             return
-
-        prom_identifier = "{}_{}_{}".format(
-            prom_unit._backend.model_name,
-            prom_unit._backend.model_uuid,
-            prom_unit.app.name,
-        )
 
         prom_target = "{} [ {} / {} ]".format(
             self.charm.app.name.capitalize(),
@@ -218,7 +218,6 @@ class GrafanaDashboardConsumer(Object):
         # It's completely ridiculous to add a UUID, but if we don't have some
         # pseudo-random value, this never makes it across 'juju set-state'
         stored_data = {
-            "monitoring_identifier": prom_identifier,
             "monitoring_target": prom_target,
             "monitoring_query": prom_query,
             "template": base64.b64encode(zlib.compress(data.encode(), 9)).decode(),
@@ -325,6 +324,7 @@ class GrafanaDashboardProvider(Object):
         super().__init__(charm, name)
         self.charm = charm
         self.name = name
+        self.source_relation = "grafana-source"
         events = self.charm.on[name]
 
         self._stored.set_default(
@@ -351,16 +351,28 @@ class GrafanaDashboardProvider(Object):
         if not self.charm.unit.is_leader():
             return
 
-        rel = event.relation
+        rel = self.framework.model.get_relation(self.name, event.relation.id)
 
         data = (
-            json.loads(event.relation.data[event.app].get("dashboards", {}))
-            if event.relation.data[event.app].get("dashboards", {})
+            json.loads(rel.data[event.app].get("dashboards", {}))
+            if rel.data[event.app].get("dashboards", {})
             else None
         )
         if not data:
             logger.info("No dashboard data found in relation")
             return
+
+        # Figure out our Prometheus relation and template the query
+
+        prom_rel = self.framework.model.get_relation(self.source_relation)
+        prom_unit = next(iter(prom_rel.units))
+        prom_identifier = "{}_{}_{}".format(
+            self.charm.model.name,
+            self.charm.model.uuid,
+            prom_unit.app.name,
+        )
+
+        data["monitoring_identifier"] = prom_identifier
 
         # Get rid of this now that we passed through to the other side
         data.pop("uuid", None)

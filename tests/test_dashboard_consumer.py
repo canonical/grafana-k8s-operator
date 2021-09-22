@@ -88,7 +88,6 @@ class TestDashboardConsumer(unittest.TestCase):
             self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
         return_data = {
-            "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",
@@ -109,7 +108,6 @@ class TestDashboardConsumer(unittest.TestCase):
             self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
         return_data = {
-            "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",
@@ -121,7 +119,6 @@ class TestDashboardConsumer(unittest.TestCase):
         self.assertEqual(return_data, data)
         self.harness.charm.consumer.remove_dashboard()
         return_data = {
-            "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",
@@ -143,7 +140,6 @@ class TestDashboardConsumer(unittest.TestCase):
             self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
         return_data = {
-            "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",
@@ -169,7 +165,6 @@ class TestDashboardConsumer(unittest.TestCase):
             self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
         return_data = {
-            "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
             "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
             "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
             "template": "\n\n",

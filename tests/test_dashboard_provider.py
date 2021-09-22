@@ -25,13 +25,14 @@ DASHBOARD_TMPL = """
 """
 
 DASHBOARD_RENDERED = """
-"name": "testing_abcdefgh-1234_monitoring"
+"name": "testing_abcdefgh-1234_source"
 "label": "Consumer-tester [ testing / abcdefgh-1234 ]"
 "query": "label_values(up{ juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester' }, juju_unit)"
 """
 
+MODEL_INFO = {"name": "testing", "uuid": "abcdefgh-1234"}
+
 SOURCE_DATA = {
-    "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
     "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
     "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
     "template": DASHBOARD_TMPL,
@@ -42,7 +43,6 @@ SOURCE_DATA = {
 }
 
 OTHER_SOURCE_DATA = {
-    "monitoring_identifier": "testing_abcdefgh-2345_monitoring",
     "monitoring_target": "Consumer-tester [ testing / abcdefgh-2345 ]",
     "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-2345',juju_application='consumer-tester'",
     "template": DASHBOARD_TMPL,
@@ -79,6 +79,7 @@ class ProviderCharm(CharmBase):
 class TestDashboardProvider(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(ProviderCharm)
+        self.harness.set_model_info(name=MODEL_INFO["name"], uuid=MODEL_INFO["uuid"])
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
@@ -91,15 +92,17 @@ class TestDashboardProvider(unittest.TestCase):
             created.
         """
         self.harness.charm.grafana_provider._stored.active_sources = [
-            {"source-name": "testing_abcdefgh-1234_monitoring"},
-            {"source-name": "testing_abcdefgh-2345_monitoring"},
+            {"source-name": "testing_abcdefgh-1234_source"},
+            {"source-name": "testing_abcdefgh-2345_source"},
         ]
 
         rel_ids = []
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        source_rel_id = self.harness.add_relation("grafana-source", "source")
+        self.harness.add_relation_unit(source_rel_id, "source/0")
         rel_id = self.harness.add_relation("grafana-dashboard", "consumer")
-        rel_ids.append(rel_id)
         self.harness.add_relation_unit(rel_id, "consumer/0")
+        rel_ids.append(rel_id)
         self.harness.update_relation_data(
             rel_id,
             "consumer",
@@ -135,9 +138,9 @@ class TestDashboardProvider(unittest.TestCase):
         self.assertEqual(
             stored,
             {
-                "target": "testing_abcdefgh-1234_monitoring",
+                "target": "testing_abcdefgh-1234_source",
                 "data": {
-                    "monitoring_identifier": "testing_abcdefgh-1234_monitoring",
+                    "monitoring_identifier": "testing_abcdefgh-1234_source",
                     "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
                     "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
                     "template": DASHBOARD_TMPL,
