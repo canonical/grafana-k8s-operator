@@ -2,3 +2,4 @@ git+https://github.com/canonical/operator/#egg=ops
 pyyaml
 urllib3
 jinja2
+kubernetes
