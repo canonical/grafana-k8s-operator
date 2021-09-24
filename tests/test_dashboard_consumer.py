@@ -150,6 +150,30 @@ class TestDashboardConsumer(unittest.TestCase):
         }
         self.assertEqual(return_data, data)
 
+    def test_consumer_resends_dashboard_after_monitoring_established_with_multiple_sources(self):
+        rel_id = self.harness.add_relation("grafana-dashboard", "consumer")
+        self.harness.add_relation_unit(rel_id, "consumer/0")
+        self.harness.charm.consumer.add_dashboard(DASHBOARD_TMPL)
+        self.assertEqual(self.harness.charm._stored.invalid_events, 1)
+
+        mon_rel_id_1 = self.harness.add_relation("monitoring", "consumer")
+        mon_rel_id_2 = self.harness.add_relation("monitoring", "consumer2")
+        self.harness.add_relation_unit(mon_rel_id_1, "monitoring-test/0")
+        self.harness.add_relation_unit(mon_rel_id_2, "monitoring-test2/0")
+        data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+        return_data = {
+            "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
+            "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
+            "template": "\n\n",
+            "removed": False,
+            "invalidated": False,
+            "invalidated_reason": "",
+            "uuid": "12345678",
+        }
+        self.assertEqual(return_data, data)
+
     def test_consumer_invalidates_dashboard_after_monitoring_established_then_broken(
         self,
     ):
