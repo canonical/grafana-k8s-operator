@@ -11,8 +11,6 @@ import uuid
 import zlib
 from typing import Dict, List, Union
 
-from jinja2 import Template
-from jinja2.exceptions import TemplateSyntaxError
 from ops.charm import CharmBase, RelationBrokenEvent, RelationChangedEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.model import Relation
@@ -409,6 +407,11 @@ class GrafanaDashboardProvider(Object):
         grafana_datasource = self._find_grafana_datasource(data, rel)
         if not grafana_datasource:
             return
+
+
+        # Import at runtime so we don't get client dependencies
+        from jinja2 import Template
+        from jinja2.exceptions import TemplateSyntaxError
 
         # The dashboards are WAY too big since this ultimately calls out to Juju to
         # set the relation data, and it overflows the maximum argument length for
