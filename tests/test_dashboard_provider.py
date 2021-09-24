@@ -7,9 +7,10 @@ import json
 import unittest
 import uuid
 import zlib
+from typing import Dict, Any
 from unittest.mock import patch
 
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider, type_convert_stored
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -35,7 +36,7 @@ MODEL_INFO = {"name": "testing", "uuid": "abcdefgh-1234"}
 SOURCE_DATA = {
     "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
     "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
-    "template": DASHBOARD_TMPL,
+    "templates": {"tester": DASHBOARD_TMPL},
     "removed": False,
     "invalidated": False,
     "invalidated_reason": "",
@@ -45,7 +46,7 @@ SOURCE_DATA = {
 OTHER_SOURCE_DATA = {
     "monitoring_target": "Consumer-tester [ testing / abcdefgh-2345 ]",
     "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-2345',juju_application='consumer-tester'",
-    "template": DASHBOARD_TMPL,
+    "templates": {"tester": DASHBOARD_TMPL},
     "removed": False,
     "invalidated": False,
     "invalidated_reason": "",
@@ -132,8 +133,8 @@ class TestDashboardProvider(unittest.TestCase):
 
         # Terrible type conversions again
         stored = self.harness.charm.grafana_provider.dashboards[0]
-        stored = dict(stored)
-        stored["data"] = dict(stored["data"])
+        stored = type_convert_stored(stored)
+        # stored["data"] = dict(stored["data"])
         self.maxDiff = None
         self.assertEqual(
             stored,
@@ -143,12 +144,12 @@ class TestDashboardProvider(unittest.TestCase):
                     "monitoring_identifier": "testing_abcdefgh-1234_source",
                     "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
                     "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
-                    "template": DASHBOARD_TMPL,
+                    "templates": {"tester": DASHBOARD_TMPL},
                     "removed": False,
                     "invalidated": False,
                     "invalidated_reason": "",
                 },
-                "dashboard": DASHBOARD_RENDERED.rstrip(),
+                "dashboards": {"tester": DASHBOARD_RENDERED.rstrip()},
             },
         )
 
@@ -158,15 +159,13 @@ class TestDashboardProvider(unittest.TestCase):
         rels = self.setup_charm_relations()
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
-        bad_data = copy.deepcopy(SOURCE_DATA)
-        bad_data["template"] = "JUNK! {{{novar}}}"
+        bad_data = copy.deepcopy(SOURCE_DATA)  # type: Dict[str, Any]
+        bad_data["templates"]["tester"] = "JUNK! {{{novar}}}"
 
         self.harness.update_relation_data(
             rels[0],
             "consumer",
-            {
-                "dashboards": json.dumps(bad_data),
-            },
+            {"dashboards": json.dumps(bad_data)},
         )
 
         data = json.loads(
