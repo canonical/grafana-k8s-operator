@@ -408,7 +408,6 @@ class GrafanaDashboardProvider(Object):
         if not grafana_datasource:
             return
 
-
         # Import at runtime so we don't get client dependencies
         from jinja2 import Template
         from jinja2.exceptions import TemplateSyntaxError
@@ -416,7 +415,6 @@ class GrafanaDashboardProvider(Object):
         # The dashboards are WAY too big since this ultimately calls out to Juju to
         # set the relation data, and it overflows the maximum argument length for
         # subprocess, so we have to use b64, annoyingly.
-
         # Worse, Python3 expects absolutely everything to be a byte, and a plain
         # `base64.b64encode()` is still too large, so we have to go through hoops
         # of encoding to byte, compressing with zlib, converting to base64 so it
