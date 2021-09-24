@@ -152,16 +152,22 @@ class GrafanaDashboardConsumer(Object):
         # the other side of the relation for Prometheus, this is here only to
         # ensure that there is actually a monitoring relationship before we
         # send dashboard data
-        prom_rel = self.framework.model.get_relation(self._stored.event_relation)
-
+        found_relation = False
         try:
-            prom_rel.units.pop()
+            for prom_rel in self.charm.model.relations[self._stored.event_relation]:
+                prom_rel.units.pop()
+                found_relation = True
         except (IndexError, AttributeError):
-            error_message = ("Waiting for a {} relation to send dashboard data").format(
-                self._stored.event_relation
+            logger.debug(
+                f"Encountered a monitored relation {self._stored.event_relation} with no units"
             )
-            self.on.dashboard_status_changed.emit(error_message=error_message, valid=False)
-            return
+        finally:
+            if not found_relation:
+                error_message = ("Waiting for a {} relation to send dashboard data").format(
+                    self._stored.event_relation
+                )
+                self.on.dashboard_status_changed.emit(error_message=error_message, valid=False)
+                return
 
         self._update_dashboards(data, rel_id)
 
@@ -267,24 +273,32 @@ class GrafanaDashboardConsumer(Object):
         if not self.charm.unit.is_leader():
             return
 
-        rel = self.framework.model.get_relation(self.name)
+        rel = self.framework.model.get_relation(self.name, event.relation.id)
 
         if not rel:
             return
 
-        if len(self.model.get_relation(self._stored.event_relation).units) == 0:
-            event.defer()
-            return
+        for relation in self.charm.model.relations[self._stored.event_relation]:
+            if len(relation.units) == 0:
+                event.defer()
+                return
 
-        dash = self._stored.dashboard_templates.get(rel.id, None)
-        if dash:
-            dash_tmpl = zlib.decompress(base64.b64decode(dash.encode())).decode()
+        for dash_relation in self.charm.model.relations[self.name]:
+            dash = self._stored.dashboard_templates.get(dash_relation.id, None)
+            if dash:
+                dash_tmpl = zlib.decompress(base64.b64decode(dash.encode())).decode()
 
-            self.add_dashboard(dash_tmpl)
+                self.add_dashboard(dash_tmpl)
 
     def _on_monitoring_relation_broken(self, _) -> None:
         """Invalidate the dashboard if there are no more relations."""
-        if len(self.model.get_relation(self._stored.event_relation).units) == 0:
+        valid = False
+        for relation in self.charm.model.relations[self._stored.event_relation]:
+            # Force an actual lookup to update `RelationMapping`
+            if len(relation.units) > 0:
+                valid = True
+
+        if not valid:
             if self.charm.unit.is_leader():
                 self.invalidate_dashboard(
                     "Waiting for a {} relation to send dashboard data".format(
@@ -294,8 +308,11 @@ class GrafanaDashboardConsumer(Object):
 
     def _check_monitoring_relation(self) -> bool:
         """Check whether an existing monitoring relation exists."""
-        return (
-            True if len(self.model.get_relation(self._stored.event_relation).units) == 0 else False
+        return any(
+            [
+                relation.units > 0
+                for relation in self.charm.model.relations[self._stored.event_relation]
+            ]
         )
 
     @property
@@ -362,7 +379,7 @@ class GrafanaDashboardProvider(Object):
 
         # Figure out our Prometheus relation and template the query
 
-        prom_rel = self.framework.model.get_relation(self.source_relation)
+        prom_rel = self.charm.model.relations[self.source_relation][0]
         prom_unit = next(iter(prom_rel.units))
         prom_identifier = "{}_{}_{}".format(
             self.charm.model.name,
