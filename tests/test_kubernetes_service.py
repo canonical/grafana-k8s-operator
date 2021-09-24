@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import patch
 
-import kubernetes
+import kubernetes  # type: ignore
 
 from kubernetes_service import K8sServicePatch, PatchFailed
 

@@ -5,7 +5,7 @@
 
 from typing import List, Tuple
 
-import kubernetes
+import kubernetes  # type: ignore
 
 
 class PatchFailed(RuntimeError):
