@@ -417,6 +417,10 @@ class GrafanaDashboardProvider(Object):
         # Figure out our Prometheus relation and template the query
 
         prom_rel = self.charm.model.relations[self.source_relation][0]
+        if len(prom_rel.units) == 0:
+            logger.error("No %s related to %s!", self.source_relation, self.name)
+            return
+
         prom_unit = next(iter(prom_rel.units))
         prom_identifier = "{}_{}_{}".format(
             self.charm.model.name,
