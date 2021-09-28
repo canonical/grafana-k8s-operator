@@ -45,6 +45,7 @@ from ops.model import ActiveStatus, MaintenanceStatus
 from ops.pebble import ConnectionError, Layer
 
 from grafana_server import Grafana
+from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger()
 
@@ -78,15 +79,18 @@ class GrafanaCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
+        self._port = 3000
+
         # -- initialize states --
         self.name = "grafana"
         self.container = self.unit.get_container(self.name)
-        self.grafana_service = Grafana("localhost", self.model.config["port"])
+        self.grafana_service = Grafana("localhost", self._port)
         self.grafana_config_ini_hash = None
         self.grafana_datasources_hash = None
-        self._stored.set_default(database=dict(), pebble_ready=False)
+        self._stored.set_default(database=dict(), pebble_ready=False, k8s_service_patched=False)
 
         # -- standard events
+        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.grafana_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
@@ -112,6 +116,10 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on["database"].relation_changed, self._on_database_changed)
         self.framework.observe(self.on["database"].relation_broken, self._on_database_broken)
 
+    def _on_install(self, _):
+        """Handler for the install event during which we will update the K8s service."""
+        self._patch_k8s_service()
+
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Event handler for the config-changed event.
 
@@ -123,7 +131,8 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
-        self.source_provider.update_port(self.name, self.model.config["port"])
+        self.source_provider.update_port(self.name, self._port)
+
         self._configure(event)
 
     def _on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
@@ -273,6 +282,27 @@ class GrafanaCharm(CharmBase):
                 container.remove_path(f)
 
         self.restart_grafana()
+
+    #####################################
+
+    # K8S WRANGLING
+
+    #####################################
+
+    def _patch_k8s_service(self):
+        """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
+        if self.unit.is_leader() and not self._stored.k8s_service_patched:
+            port = self._port
+            service_ports = [
+                (f"{self.app.name}", port, port),
+            ]
+            try:
+                K8sServicePatch.set_ports(self.app.name, service_ports)
+            except PatchFailed as e:
+                logger.error("Unable to patch the Kubernetes service: %s", str(e))
+            else:
+                self._stored.k8s_service_patched = True
+                logger.info("Successfully patched the Kubernetes service!")
 
     #####################################
 
@@ -430,7 +460,7 @@ class GrafanaCharm(CharmBase):
                         "command": "grafana-server -config {}".format(CONFIG_PATH),
                         "startup": "enabled",
                         "environment": {
-                            "GF_SERVER_HTTP_PORT": self.model.config["port"],
+                            "GF_SERVER_HTTP_PORT": self._port,
                             "GF_LOG_LEVEL": self.model.config["log_level"],
                             "GF_PATHS_PROVISIONING": DATASOURCE_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
