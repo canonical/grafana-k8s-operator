@@ -7,10 +7,13 @@ import json
 import unittest
 import uuid
 import zlib
-from typing import Dict, Any
+from typing import Any, Dict
 from unittest.mock import patch
 
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider, type_convert_stored
+from charms.grafana_k8s.v0.grafana_dashboard import (
+    GrafanaDashboardProvider,
+    type_convert_stored,
+)
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness

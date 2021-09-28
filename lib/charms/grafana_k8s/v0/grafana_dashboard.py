@@ -12,7 +12,12 @@ import zlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from ops.charm import CharmBase, RelationBrokenEvent, RelationChangedEvent, RelationJoinedEvent
+from ops.charm import (
+    CharmBase,
+    RelationBrokenEvent,
+    RelationChangedEvent,
+    RelationJoinedEvent,
+)
 from ops.framework import (
     EventBase,
     EventSource,
@@ -151,7 +156,9 @@ class GrafanaDashboardConsumer(Object):
 
         events = self.charm.on[name]
 
-        self.framework.observe(events.relation_joined, self._on_grafana_dashboard_relation_joined)
+        self.framework.observe(self.charm.on.upgrade_charm, self._set_dashboard_data)
+
+        self.framework.observe(events.relation_joined, self._set_dashboard_data)
 
         self.framework.observe(
             events.relation_changed, self._on_grafana_dashboard_relation_changed
@@ -166,7 +173,7 @@ class GrafanaDashboardConsumer(Object):
             self._on_monitoring_relation_broken,
         )
 
-    def _on_grafana_dashboard_relation_joined(self, event: RelationJoinedEvent) -> None:
+    def _set_dashboard_data(self, event: RelationJoinedEvent) -> None:
         """Watch for a relation being joined and automatically send dashboards.
 
         Args:
