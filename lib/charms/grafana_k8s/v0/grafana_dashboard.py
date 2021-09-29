@@ -17,6 +17,7 @@ from ops.charm import (
     RelationBrokenEvent,
     RelationChangedEvent,
     RelationJoinedEvent,
+    UpgradeCharmEvent,
 )
 from ops.framework import (
     EventBase,
@@ -156,9 +157,9 @@ class GrafanaDashboardConsumer(Object):
 
         events = self.charm.on[name]
 
-        self.framework.observe(self.charm.on.upgrade_charm, self._set_dashboard_data)
+        self.framework.observe(self.charm.on.upgrade_charm, self._on_upgrade_charm)
 
-        self.framework.observe(events.relation_joined, self._set_dashboard_data)
+        self.framework.observe(events.relation_joined, self._on_relation_joined)
 
         self.framework.observe(
             events.relation_changed, self._on_grafana_dashboard_relation_changed
@@ -173,7 +174,16 @@ class GrafanaDashboardConsumer(Object):
             self._on_monitoring_relation_broken,
         )
 
-    def _set_dashboard_data(self, event: RelationJoinedEvent) -> None:
+    def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
+        """Refresh the dashboards when the charm is upgraded.
+
+        Args:
+            event: A :class:`UpgradeCharmEvent` which triggers the event
+        """
+        for dashboard_rel in self.charm.model.relations[self.name]:
+            self._set_dashboard_data(dashboard_rel)
+
+    def _on_relation_joined(self, event: RelationJoinedEvent) -> None:
         """Watch for a relation being joined and automatically send dashboards.
 
         Args:
@@ -181,7 +191,14 @@ class GrafanaDashboardConsumer(Object):
                 `grafana_dashboaard` relationship is joined
         """
         rel = event.relation
+        self._set_dashboard_data(rel)
 
+    def _set_dashboard_data(self, rel: Relation) -> None:
+        """Watch for a relation being joined and automatically send dashboards.
+
+        Args:
+            rel: The :class:`Relation` to set grafana_dashboard data for
+        """
         data = {}
 
         for path in Path(self._DASHBOARDS_PATH).glob("*.tmpl"):
@@ -423,8 +440,12 @@ class GrafanaDashboardProvider(Object):
 
         # Figure out our Prometheus relation and template the query
 
-        prom_rel = self.charm.model.relations[self.source_relation][0]
-        if len(prom_rel.units) == 0:
+        try:
+            prom_rel = self.charm.model.relations[self.source_relation][0]
+            if len(prom_rel.units) == 0:
+                logger.error("No %s related to %s!", self.source_relation, self.name)
+                return
+        except IndexError:
             logger.error("No %s related to %s!", self.source_relation, self.name)
             return
 
