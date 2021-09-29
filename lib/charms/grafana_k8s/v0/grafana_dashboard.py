@@ -205,7 +205,6 @@ class GrafanaDashboardConsumer(Object):
             if not path.is_file():
                 continue
 
-            logger.debug("Adding dashboard from %s", path)
             data[path.stem] = base64.b64encode(zlib.compress(path.read_bytes(), 9)).decode()
 
         self._stored.dashboard_templates[rel.id] = data
@@ -435,7 +434,7 @@ class GrafanaDashboardProvider(Object):
             else None
         )
         if not data:
-            logger.info("No dashboard data found in relation")
+            logger.warning("No dashboard data found in relation")
             return
 
         # Figure out our Prometheus relation and template the query

@@ -268,16 +268,15 @@ class GrafanaCharm(CharmBase):
             logger.warning("Could not list dashboards. Pebble shutting down?")
 
         for dashboard in self.dashboard_provider.dashboards:
-            logger.info(f"Checking dashboard {dashboard}")
             for fname, tmpl in dashboard["dashboards"].items():
                 dash = zlib.decompress(base64.b64decode(tmpl.encode())).decode()
                 name = "{}_{}_juju.json".format(dashboard["target"], fname)
 
-                dashboard_path = os.path.join(dashboard_path, name)
-                existing_dashboards[dashboard_path] = True
+                path = os.path.join(dashboard_path, name)
+                existing_dashboards[path] = True
 
-                logger.info("Newly created dashboard will be saved at: {}".format(dashboard_path))
-                container.push(dashboard_path, dash, make_dirs=True)
+                logger.info("Newly created dashboard will be saved at: {}".format(path))
+                container.push(path, dash)
 
         for f, known in existing_dashboards.items():
             logger.debug("Checking for dashboard {}".format(f))
