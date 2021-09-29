@@ -38,7 +38,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -216,19 +216,19 @@ class GrafanaDashboardConsumer(Object):
         found_relation = False
         try:
             for prom_rel in self.charm.model.relations[self._stored.event_relation]:
-                prom_rel.units.pop()
                 found_relation = True
-        except (IndexError, AttributeError):
-            logger.debug(
-                f"Encountered a monitored relation {self._stored.event_relation} with no units"
-            )
+                if not len(prom_rel.units):
+                    logger.warning(
+                        "The monitored relation %s with id '%s' has no units",
+                        self._stored.event_relation,
+                        prom_rel.id,
+                    )
         finally:
             if not found_relation:
-                error_message = ("Waiting for a {} relation to send dashboard data").format(
-                    self._stored.event_relation
+                logger.warning(
+                    "No instance of the '%s' monitored relation found",
+                    self._stored.event_relation,
                 )
-                self.on.dashboard_status_changed.emit(error_message=error_message, valid=False)
-                return
 
         self._update_dashboards(data, rel.id)
 
