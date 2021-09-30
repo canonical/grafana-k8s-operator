@@ -48,11 +48,11 @@ def type_convert_stored(obj):
     if isinstance(obj, StoredList):
         rlist = []  # type: List[Any]
         for i in obj:
-            rlist.append(type_convert_stored(obj[i]))
+            rlist.append(type_convert_stored(i))
         return rlist
     elif isinstance(obj, StoredDict):
         rdict = {}  # type: Dict[Any, Any]
-        for k, v in obj.items():
+        for k in obj.keys():
             rdict[k] = type_convert_stored(obj[k])
         return rdict
     else:
