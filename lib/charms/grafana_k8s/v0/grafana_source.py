@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 
 from ops.charm import CharmBase, CharmEvents, RelationDepartedEvent, RelationJoinedEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-from ops.model import Relation
+from ops.model import ModelError, Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "974705adb86f40228298156e34b460dc"
@@ -152,25 +152,100 @@ class GrafanaSourceConsumer(Object):
             )
 
 
+class NoRelationWithInterfaceFoundError(Exception):
+    """No relations with the given interface are found in the charm meta."""
+
+    def __init__(self, charm: CharmBase, relation_interface: str):
+        self.charm = charm
+        self.relation_interface = relation_interface
+        self.message = (
+            f"No relations with interface '{relation_interface}' found in the meta "
+            f"of the '{charm.meta.name}' charm"
+        )
+
+        super().__init__(self.message)
+
+
+class MultipleRelationsWithInterfaceFoundError(Exception):
+    """Multiple relations with the given interface are found in the charm meta."""
+
+    def __init__(self, charm: CharmBase, relation_interface: str, relations: list):
+        self.charm = charm
+        self.relation_interface = relation_interface
+        self.relations = relations
+        self.message = (
+            f"Multiple relations with interface '{relation_interface}' found in the meta "
+            f"of the '{charm.name}' charm"
+        )
+
+        super().__init__(self.message)
+
+
+def get_single_required_relation_by_interface(charm: CharmBase, relation_interface: str) -> str:
+    """Retrive the only relation in the charm meta that uses the given interface.
+
+    Args:
+        charm: a `CharmBase` object to scan for the matching relation.
+        relation_interface: the string name of the relation interface to look up.
+            If `charm` has exactly one relation with this interface, the relation's
+            name is returned. If none or multiple relations with the provided interface
+            are found, this method will raise either an exception of type
+            NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
+            respectively.
+    """
+    relations = list(
+        filter(
+            lambda relation: relation.interface_name == relation_interface,
+            charm.meta.requires.values(),
+        )
+    )
+
+    if len(relations) == 1:
+        return relations[0].name
+    elif len(relations) == 0:
+        raise NoRelationWithInterfaceFoundError(charm, relation_interface)
+    else:
+        raise MultipleRelationsWithInterfaceFoundError(charm, relation_interface, relations)
+
+
 class GrafanaSourceProvider(Object):
     """A provider object for working with Grafana datasources."""
 
     on = GrafanaSourceEvents()
     _stored = StoredState()
 
-    def __init__(self, charm: CharmBase, name: str) -> None:
+    def __init__(self, charm: CharmBase, relation_name: str = None) -> None:
         """A Grafana based Monitoring service consumer.
 
         Args:
             charm: a :class:`CharmBase` instance that manages this
                 instance of the Grafana source service.
-            name: string name of the relation that is provides the
+            relation_name: string name of the relation that is provides the
                 Grafana source service.
         """
-        super().__init__(charm, name)
-        self.name = name
+        if not relation_name:
+            relation_interface = "grafana_datasource"
+            try:
+                relation_name = get_single_required_relation_by_interface(
+                    charm, relation_interface
+                )
+            except NoRelationWithInterfaceFoundError:
+                raise ModelError(
+                    f"No required relation with the '{relation_interface}' interface found; "
+                    f"did you add a relation with the '{relation_interface}' interface in the charm's"
+                    "metadata.yaml file?"
+                )
+            except MultipleRelationsWithInterfaceFoundError as e:
+                raise ModelError(
+                    f"Multiple required relations with the '{relation_interface}' interface found: "
+                    f"{e.relations}; you must specify which relation should be managed by this "
+                    f"{type(self)} by providing the `relation_name` argument."
+                )
+
+        super().__init__(charm, relation_name)
+        self.name = relation_name
         self.charm = charm
-        events = self.charm.on[name]
+        events = self.charm.on[relation_name]
 
         self._stored.set_default(
             sources=dict(),

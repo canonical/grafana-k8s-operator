@@ -37,9 +37,7 @@ class ConsumerCharm(CharmBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
-        self.consumer = GrafanaDashboardConsumer(
-            self, "grafana-dashboard", event_relation="monitoring"
-        )
+        self.consumer = GrafanaDashboardConsumer(self)
         self.consumer._DASHBOARDS_PATH = "./tests/dashboard_templates"
 
         self._stored.set_default(valid_events=0)  # available data sources

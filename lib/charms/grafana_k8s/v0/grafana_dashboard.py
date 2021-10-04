@@ -7,6 +7,7 @@ import base64
 import copy
 import json
 import logging
+import sys
 import uuid
 import zlib
 from pathlib import Path
@@ -16,7 +17,7 @@ from ops.charm import (
     CharmBase,
     RelationBrokenEvent,
     RelationChangedEvent,
-    RelationJoinedEvent,
+    RelationCreatedEvent,
     UpgradeCharmEvent,
 )
 from ops.framework import (
@@ -28,7 +29,7 @@ from ops.framework import (
     StoredList,
     StoredState,
 )
-from ops.model import Relation
+from ops.model import ModelError, Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -38,7 +39,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,79 @@ class GrafanaConsumerEvents(ObjectEvents):
     dashboard_status_changed = EventSource(GrafanaDashboardEvent)
 
 
+class NoRelationWithInterfaceFoundError(Exception):
+    """No relations with the given interface are found in the charm meta."""
+
+    def __init__(self, charm: CharmBase, relation_interface: str):
+        self.charm = charm
+        self.relation_interface = relation_interface
+        self.message = (
+            f"No relations with interface '{relation_interface}' found in the meta "
+            f"of the '{charm.meta.name}' charm"
+        )
+
+        super().__init__(self.message)
+
+
+class MultipleRelationsWithInterfaceFoundError(Exception):
+    """Multiple relations with the given interface are found in the charm meta."""
+
+    def __init__(self, charm: CharmBase, relation_interface: str, relations: list):
+        self.charm = charm
+        self.relation_interface = relation_interface
+        self.relations = relations
+        self.message = (
+            f"Multiple relations with interface '{relation_interface}' found in the meta "
+            f"of the '{charm.name}' charm"
+        )
+
+        super().__init__(self.message)
+
+
+def get_single_required_relation_by_interface(charm: CharmBase, relation_interface: str) -> str:
+    """Retrive the only relation in the charm meta that uses the given interface.
+
+    Args:
+        charm: a `CharmBase` object to scan for the matching relation.
+        relation_interface: the string name of the relation interface to look up.
+            If `charm` has exactly one relation with this interface, the relation's
+            name is returned. If none or multiple relations with the provided interface
+            are found, this method will raise either an exception of type
+            NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
+            respectively.
+    """
+    relations = [
+        relation_name
+        for relation_name, relation_meta in charm.meta.requires.items()
+        if relation_meta.interface_name == relation_interface
+    ]
+
+    if len(relations) == 1:
+        return relations[0]
+    elif len(relations) == 0:
+        raise NoRelationWithInterfaceFoundError(charm, relation_interface)
+    else:
+        raise MultipleRelationsWithInterfaceFoundError(charm, relation_interface, relations)
+
+
+def resolve_dir_against_main_path(*path_elements: str) -> str:
+    """Resolve the provided path items against the directory of the main file.
+
+    Look up the directory of the main .py file being executed. This is normally
+    going to be the charm.py file of the charm including this library. Then, resolve
+    the provided path elements and, if the result path exists and is a directory,
+    return its absolute path; otherwise, return `None`.
+    """
+    charm_file = sys.path[0]
+
+    default_alerts_dir = Path(charm_file).joinpath(*path_elements)
+
+    if default_alerts_dir.exists() and default_alerts_dir.is_dir:
+        return str(default_alerts_dir.absolute())
+
+    return None
+
+
 class GrafanaDashboardConsumer(Object):
     """A consumer object for Grafana dashboards."""
 
@@ -117,9 +191,8 @@ class GrafanaDashboardConsumer(Object):
     def __init__(
         self,
         charm: CharmBase,
-        name: str,
-        event_relation: Optional[str] = "monitoring",
-        dashboards_path: str = "src/grafana_dashboards",
+        relation_name: Optional[str] = None,
+        dashboards_path: Optional[str] = None,
     ) -> None:
         """Construct a Grafana dashboard charm client.
 
@@ -138,7 +211,7 @@ class GrafanaDashboardConsumer(Object):
             charm: a :class:`CharmBase` object which manages this
                 :class:`GrafanaConsumer` object. Generally this is
                 `self` in the instantiating class.
-            name: a :string: name of the relation between `charm`
+            relation_name: a :string: name of the relation between `charm`
                 the Grafana charmed service.
             event_relation: a :string: name of the relation between
                 the charmed service and some provider which is required
@@ -148,30 +221,44 @@ class GrafanaDashboardConsumer(Object):
             dashboards_path: a filesystem path relative to the charm root
                 where dashboard templates can be located
         """
-        super().__init__(charm, name)
-        self.charm = charm
-        self.name = name
-        self._DASHBOARDS_PATH = dashboards_path
-        self._stored.set_default(dashboards={}, dashboard_templates={}, event_relation=None)
-        self._stored.event_relation = event_relation
+        if not relation_name:
+            relation_interface = "grafana_dashboard"
+            try:
+                # Check if there is just one relation with the right interface
+                relation_name = get_single_required_relation_by_interface(
+                    charm, relation_interface
+                )
+            except NoRelationWithInterfaceFoundError:
+                raise ModelError(
+                    f"No required relation with the '{relation_interface}' interface found; "
+                    f"did you add a relation with the '{relation_interface}' interface in the charm's "
+                    "metadata.yaml file?"
+                )
+            except MultipleRelationsWithInterfaceFoundError as e:
+                raise ModelError(
+                    f"Multiple required relations with the '{relation_interface}' interface found: "
+                    f"{e.relations}; you must specify which relation should be managed by this "
+                    f"{type(self)} by providing the `relation_name` argument."
+                )
 
-        events = self.charm.on[name]
+        if not dashboards_path:
+            dashboards_path = resolve_dir_against_main_path("grafana_dashboards")
+
+        super().__init__(charm, relation_name)
+        self.charm = charm
+        self.relation_name = relation_name
+        self._DASHBOARDS_PATH = dashboards_path
+        self._stored.set_default(dashboards={}, dashboard_templates={})
+
+        events = self.charm.on[relation_name]
 
         self.framework.observe(self.charm.on.upgrade_charm, self._on_upgrade_charm)
 
-        self.framework.observe(events.relation_joined, self._on_relation_joined)
-
+        self.framework.observe(
+            events.relation_created, self._on_grafana_dashboard_relation_created
+        )
         self.framework.observe(
             events.relation_changed, self._on_grafana_dashboard_relation_changed
-        )
-
-        self.framework.observe(
-            self.charm.on[event_relation].relation_joined,
-            self._on_monitoring_relation_joined,
-        )
-        self.framework.observe(
-            self.charm.on[event_relation].relation_broken,
-            self._on_monitoring_relation_broken,
         )
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
@@ -180,11 +267,11 @@ class GrafanaDashboardConsumer(Object):
         Args:
             event: A :class:`UpgradeCharmEvent` which triggers the event
         """
-        for dashboard_rel in self.charm.model.relations[self.name]:
+        for dashboard_rel in self.charm.model.relations[self.relation_name]:
             self._set_dashboard_data(dashboard_rel)
 
-    def _on_relation_joined(self, event: RelationJoinedEvent) -> None:
-        """Watch for a relation being joined and automatically send dashboards.
+    def _on_grafana_dashboard_relation_created(self, event: RelationCreatedEvent) -> None:
+        """Watch for a relation being created and automatically send dashboards.
 
         Args:
             event: The :class:`RelationJoinedEvent` sent when a
@@ -209,27 +296,6 @@ class GrafanaDashboardConsumer(Object):
 
         self._stored.dashboard_templates[rel.id] = data
 
-        # After moving to the assumption that model_identifier will be set from
-        # the other side of the relation for Prometheus, this is here only to
-        # ensure that there is actually a monitoring relationship before we
-        # send dashboard data
-        found_relation = False
-        try:
-            for prom_rel in self.charm.model.relations[self._stored.event_relation]:
-                found_relation = True
-                if not len(prom_rel.units):
-                    logger.warning(
-                        "The monitored relation %s with id '%s' has no units",
-                        self._stored.event_relation,
-                        prom_rel.id,
-                    )
-        finally:
-            if not found_relation:
-                logger.warning(
-                    "No instance of the '%s' monitored relation found",
-                    self._stored.event_relation,
-                )
-
         self._update_dashboards(data, rel.id)
 
     def _on_grafana_dashboard_relation_changed(self, event: RelationChangedEvent) -> None:
@@ -241,7 +307,7 @@ class GrafanaDashboardConsumer(Object):
         if not self.charm.unit.is_leader():
             return
 
-        rel = self.framework.model.get_relation(self.name, event.relation.id)
+        rel = self.framework.model.get_relation(self.relation_name, event.relation.id)
         data = json.loads(rel.data[event.app].get("event", "{}"))
 
         if not data:
@@ -255,15 +321,7 @@ class GrafanaDashboardConsumer(Object):
             return
 
         valid_message = data.get("valid", False)
-        if valid_message and self._check_monitoring_relation():
-            self.on.dashboard_status_changed.emit(valid=True)
-        else:
-            if self.charm.unit.is_leader():
-                self.invalidate_dashboard(
-                    "Waiting for a {} relation to send dashboard data".format(
-                        self._stored.event_relation
-                    )
-                )
+        self.on.dashboard_status_changed.emit(valid=bool(valid_message))
 
     def _update_dashboards(self, data: dict, rel_id: int) -> None:
         """Update the dashboards in the relation data bucket."""
@@ -291,7 +349,7 @@ class GrafanaDashboardConsumer(Object):
             "invalidated_reason": "",
             "uuid": str(uuid.uuid4()),
         }
-        rel = self.framework.model.get_relation(self.name, rel_id)
+        rel = self.framework.model.get_relation(self.relation_name, rel_id)
 
         self._stored.dashboards[rel_id] = stored_data
         rel.data[self.charm.app]["dashboards"] = json.dumps(stored_data)
@@ -301,7 +359,7 @@ class GrafanaDashboardConsumer(Object):
         if not self.charm.unit.is_leader():
             return
 
-        rel = self.framework.model.get_relation(self.name, rel_id)
+        rel = self.framework.model.get_relation(self.relation_name, rel_id)
 
         # The relation may be `None` when broken
         if not rel:
@@ -318,7 +376,7 @@ class GrafanaDashboardConsumer(Object):
         if not self.charm.unit.is_leader():
             return
 
-        rel = self.framework.model.get_relation(self.name, rel_id)
+        rel = self.framework.model.get_relation(self.relation_name, rel_id)
 
         if not rel:
             return
@@ -329,51 +387,6 @@ class GrafanaDashboardConsumer(Object):
 
         rel.data[self.charm.app]["dashboards"] = json.dumps(type_convert_stored(dash))
         self.on.dashboard_status_changed.emit(error_message=reason, valid=False)
-
-    def _on_monitoring_relation_joined(self, event: RelationBrokenEvent):
-        """Renew the dashboard if a monitoring relation is established."""
-        if not self.charm.unit.is_leader():
-            return
-
-        rel = self.framework.model.get_relation(self.name, event.relation.id)
-
-        if not rel:
-            return
-
-        for relation in self.charm.model.relations[self._stored.event_relation]:
-            if len(relation.units) == 0:
-                event.defer()
-                return
-
-        for dash_relation in self.charm.model.relations[self.name]:
-            dash = self._stored.dashboard_templates.get(dash_relation.id, None)
-            if dash:
-                self._update_dashboards(type_convert_stored(dash), dash_relation.id)
-
-    def _on_monitoring_relation_broken(self, _) -> None:
-        """Invalidate the dashboard if there are no more relations."""
-        valid = False
-        for relation in self.charm.model.relations[self._stored.event_relation]:
-            # Force an actual lookup to update `RelationMapping`
-            if len(relation.units) > 0:
-                valid = True
-
-        if not valid:
-            if self.charm.unit.is_leader():
-                self.invalidate_dashboard(
-                    "Waiting for a {} relation to send dashboard data".format(
-                        self._stored.event_relation
-                    )
-                )
-
-    def _check_monitoring_relation(self) -> bool:
-        """Check whether an existing monitoring relation exists."""
-        return any(
-            [
-                relation.units > 0
-                for relation in self.charm.model.relations[self._stored.event_relation]
-            ]
-        )
 
     @property
     def dashboards(self) -> List:
@@ -387,20 +400,20 @@ class GrafanaDashboardProvider(Object):
     on = GrafanaDashboardEvents()
     _stored = StoredState()
 
-    def __init__(self, charm: CharmBase, name: str) -> None:
+    def __init__(self, charm: CharmBase, relation_name: str) -> None:
         """A Grafana based Monitoring service consumer.
 
         Args:
             charm: a :class:`CharmBase` instance that manages this
                 instance of the Grafana dashboard service.
-            name: string name of the relation that is provides the
+            relation_name: string name of the relation that is provides the
                 Grafana dashboard service.
         """
-        super().__init__(charm, name)
+        super().__init__(charm, relation_name)
         self.charm = charm
-        self.name = name
+        self.relation_name = relation_name
         self.source_relation = "grafana-source"
-        events = self.charm.on[name]
+        events = self.charm.on[relation_name]
 
         self._stored.set_default(
             dashboards=dict(),
@@ -426,7 +439,7 @@ class GrafanaDashboardProvider(Object):
         if not self.charm.unit.is_leader():
             return
 
-        rel = self.framework.model.get_relation(self.name, event.relation.id)
+        rel = self.framework.model.get_relation(self.relation_name, event.relation.id)
 
         data = (
             json.loads(rel.data[event.app].get("dashboards", {}))
@@ -442,10 +455,10 @@ class GrafanaDashboardProvider(Object):
         try:
             prom_rel = self.charm.model.relations[self.source_relation][0]
             if len(prom_rel.units) == 0:
-                logger.error("No %s related to %s!", self.source_relation, self.name)
+                logger.error("No %s related to %s!", self.source_relation, self.relation_name)
                 return
         except IndexError:
-            logger.error("No %s related to %s!", self.source_relation, self.name)
+            logger.error("No %s related to %s!", self.source_relation, self.relation_name)
             return
 
         prom_unit = next(iter(prom_rel.units))
@@ -600,12 +613,12 @@ class GrafanaDashboardProvider(Object):
         active_dashboards = copy.deepcopy(type_convert_stored(self._stored.dashboards))
 
         for rel_id, data in invalid_dashboards.items():
-            rel = self.framework.model.get_relation(self.name, rel_id)
+            rel = self.framework.model.get_relation(self.relation_name, rel_id)
             self._validate_dashboard_data(dict(data), rel)
 
         # Check the active dashboards also in case a source was removed
         for rel_id, stored in active_dashboards.items():
-            rel = self.framework.model.get_relation(self.name, rel_id)
+            rel = self.framework.model.get_relation(self.relation_name, rel_id)
             self._validate_dashboard_data(dict(stored["data"]), rel)
 
     def _on_grafana_dashboard_relation_broken(self, event: RelationBrokenEvent) -> None:
