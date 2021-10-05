@@ -18,6 +18,8 @@ from ops.charm import (
     RelationBrokenEvent,
     RelationChangedEvent,
     RelationCreatedEvent,
+    RelationMeta,
+    RelationRole,
     UpgradeCharmEvent,
 )
 from ops.framework import (
@@ -29,7 +31,7 @@ from ops.framework import (
     StoredList,
     StoredState,
 )
-from ops.model import ModelError, Relation
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -42,6 +44,106 @@ LIBAPI = 0
 LIBPATCH = 5
 
 logger = logging.getLogger(__name__)
+
+
+DEFAULT_RELATION_NAME = "grafana-dashboard"
+RELATION_INTERFACE_NAME = "grafana_dashboard"
+
+
+class RelationNotFoundError(Exception):
+    """Raised if there is no relation with the given name."""
+
+    def __init__(self, relation_name: str):
+        self.relation_name = relation_name
+        self.message = f"No relation named '{relation_name}' found"
+
+        super().__init__(self.message)
+
+
+class RelationInterfaceMismatchError(Exception):
+    """Raised if the relation with the given name has a different interface."""
+
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_interface: str,
+        actual_relation_interface: str,
+    ):
+        self.relation_name = relation_name
+        self.expected_relation_interface = expected_relation_interface
+        self.actual_relation_interface = actual_relation_interface
+        self.message = (
+            f"The '{relation_name}' relation has '{actual_relation_interface}' as "
+            f"interface rather than the expected '{expected_relation_interface}'"
+        )
+
+        super().__init__(self.message)
+
+
+class RelationRoleMismatchError(Exception):
+    """Raised if the relation with the given name has a different direction."""
+
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_role: RelationRole,
+        actual_relation_role: RelationRole,
+    ):
+        self.relation_name = relation_name
+        self.expected_relation_interface = expected_relation_role
+        self.actual_relation_role = actual_relation_role
+        self.message = (
+            f"The '{relation_name}' relation has role '{repr(actual_relation_role)}' "
+            f"rather than the expected '{repr(expected_relation_role)}'"
+        )
+
+        super().__init__(self.message)
+
+
+def _validate_relation_by_interface_and_direction(
+    charm: CharmBase,
+    relation_name: str,
+    expected_relation_interface: str,
+    expected_relation_role: RelationRole,
+) -> str:
+    """Verifies that a relation has the necessary characteristics.
+
+    Verifies that the `relation_name` provided: (1) exists in metadata.yaml,
+    (2) declares as interface the interface name passed as `relation_interface`
+    and (3) has the right "direction", i.e., it is a relation that `charm`
+    provides or requires.
+
+    Args:
+        charm: a `CharmBase` object to scan for the matching relation.
+        relation_name: the name of the relation to be verified.
+        expected_relation_interface: the interface name to be matched by the
+            relation named `relation_name`.
+        expected_relation_role: whether the `relation_name` must be either
+            provided or required by `charm`.
+    """
+    if relation_name not in charm.meta.relations:
+        raise RelationNotFoundError(relation_name)
+
+    relation: RelationMeta = charm.meta.relations[relation_name]
+
+    actual_relation_interface = relation.interface_name
+    if actual_relation_interface != expected_relation_interface:
+        raise RelationInterfaceMismatchError(
+            relation_name, expected_relation_interface, actual_relation_interface
+        )
+
+    if expected_relation_role == RelationRole.provides:
+        if relation_name not in charm.meta.provides:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.provides, RelationRole.requires
+            )
+    elif expected_relation_role == RelationRole.requires:
+        if relation_name not in charm.meta.requires:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.requires, RelationRole.provides
+            )
+    else:
+        raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
 
 
 def type_convert_stored(obj):
@@ -109,61 +211,6 @@ class GrafanaConsumerEvents(ObjectEvents):
     dashboard_status_changed = EventSource(GrafanaDashboardEvent)
 
 
-class NoRelationWithInterfaceFoundError(Exception):
-    """No relations with the given interface are found in the charm meta."""
-
-    def __init__(self, charm: CharmBase, relation_interface: str):
-        self.charm = charm
-        self.relation_interface = relation_interface
-        self.message = (
-            f"No relations with interface '{relation_interface}' found in the meta "
-            f"of the '{charm.meta.name}' charm"
-        )
-
-        super().__init__(self.message)
-
-
-class MultipleRelationsWithInterfaceFoundError(Exception):
-    """Multiple relations with the given interface are found in the charm meta."""
-
-    def __init__(self, charm: CharmBase, relation_interface: str, relations: list):
-        self.charm = charm
-        self.relation_interface = relation_interface
-        self.relations = relations
-        self.message = (
-            f"Multiple relations with interface '{relation_interface}' found in the meta "
-            f"of the '{charm.name}' charm"
-        )
-
-        super().__init__(self.message)
-
-
-def get_single_required_relation_by_interface(charm: CharmBase, relation_interface: str) -> str:
-    """Retrive the only relation in the charm meta that uses the given interface.
-
-    Args:
-        charm: a `CharmBase` object to scan for the matching relation.
-        relation_interface: the string name of the relation interface to look up.
-            If `charm` has exactly one relation with this interface, the relation's
-            name is returned. If none or multiple relations with the provided interface
-            are found, this method will raise either an exception of type
-            NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
-            respectively.
-    """
-    relations = [
-        relation_name
-        for relation_name, relation_meta in charm.meta.requires.items()
-        if relation_meta.interface_name == relation_interface
-    ]
-
-    if len(relations) == 1:
-        return relations[0]
-    elif len(relations) == 0:
-        raise NoRelationWithInterfaceFoundError(charm, relation_interface)
-    else:
-        raise MultipleRelationsWithInterfaceFoundError(charm, relation_interface, relations)
-
-
 def resolve_dir_against_main_path(*path_elements: str) -> str:
     """Resolve the provided path items against the directory of the main file.
 
@@ -191,7 +238,7 @@ class GrafanaDashboardConsumer(Object):
     def __init__(
         self,
         charm: CharmBase,
-        relation_name: Optional[str] = None,
+        relation_name: str = DEFAULT_RELATION_NAME,
         dashboards_path: Optional[str] = None,
     ) -> None:
         """Construct a Grafana dashboard charm client.
@@ -204,42 +251,25 @@ class GrafanaDashboardConsumer(Object):
         by instantiating a :class:`GrafanaDashboardConsumer` object and
         adding its datasources as follows:
 
-            self.grafana = GrafanaConsumer(self, "grafana-source")
-            self.grafana.add_dashboard(data: str)
+            self.grafana = GrafanaDashboardConsumer(self)
 
         Args:
             charm: a :class:`CharmBase` object which manages this
                 :class:`GrafanaConsumer` object. Generally this is
                 `self` in the instantiating class.
             relation_name: a :string: name of the relation between `charm`
-                the Grafana charmed service.
-            event_relation: a :string: name of the relation between
-                the charmed service and some provider which is required
-                for dashboard validity. When events on `event_relation`
-                occur, this consumer library will invalidate or
-                restore the dashboard
+                the Grafana charmed service. The default is "grafana-dashboard".
+                It is strongly advised not to change the default, so that people
+                deploying your charm will have a consistent experience with all
+                other charms that consume Grafana dashboards.
             dashboards_path: a filesystem path relative to the charm root
-                where dashboard templates can be located
+                where dashboard templates can be located. By default, the library
+                expects dashboard files to be in the `<charm-py-directory>/grafana_dashboards`
+                directory.
         """
-        if not relation_name:
-            relation_interface = "grafana_dashboard"
-            try:
-                # Check if there is just one relation with the right interface
-                relation_name = get_single_required_relation_by_interface(
-                    charm, relation_interface
-                )
-            except NoRelationWithInterfaceFoundError:
-                raise ModelError(
-                    f"No required relation with the '{relation_interface}' interface found; "
-                    f"did you add a relation with the '{relation_interface}' interface in the charm's "
-                    "metadata.yaml file?"
-                )
-            except MultipleRelationsWithInterfaceFoundError as e:
-                raise ModelError(
-                    f"Multiple required relations with the '{relation_interface}' interface found: "
-                    f"{e.relations}; you must specify which relation should be managed by this "
-                    f"{type(self)} by providing the `relation_name` argument."
-                )
+        _validate_relation_by_interface_and_direction(
+            charm, DEFAULT_RELATION_NAME, RELATION_INTERFACE_NAME, RelationRole.requires
+        )
 
         if not dashboards_path:
             dashboards_path = resolve_dir_against_main_path("grafana_dashboards")
@@ -400,15 +430,22 @@ class GrafanaDashboardProvider(Object):
     on = GrafanaDashboardEvents()
     _stored = StoredState()
 
-    def __init__(self, charm: CharmBase, relation_name: str) -> None:
+    def __init__(self, charm: CharmBase, relation_name: str = DEFAULT_RELATION_NAME) -> None:
         """A Grafana based Monitoring service consumer.
 
         Args:
             charm: a :class:`CharmBase` instance that manages this
                 instance of the Grafana dashboard service.
-            relation_name: string name of the relation that is provides the
-                Grafana dashboard service.
+            relation_name: a :string: name of the relation between `charm`
+                the Grafana charmed service. The default is "grafana-dashboard".
+                It is strongly advised not to change the default, so that people
+                deploying your charm will have a consistent experience with all
+                other charms that provide Grafana dashboards.
         """
+        _validate_relation_by_interface_and_direction(
+            charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
+        )
+
         super().__init__(charm, relation_name)
         self.charm = charm
         self.relation_name = relation_name
