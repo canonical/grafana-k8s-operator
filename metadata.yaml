@@ -21,9 +21,6 @@ containers:
     mounts:
       - storage: database
         location: /var/lib/grafana
-provides:
-  grafana:
-    interface: grafana
 storage:
   database:
     type: filesystem

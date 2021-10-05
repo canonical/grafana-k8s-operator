@@ -1,4 +1,5 @@
 git+https://github.com/canonical/operator/#egg=ops
 pyyaml
 urllib3
-jinja2 < 3.0.0
+jinja2
+kubernetes

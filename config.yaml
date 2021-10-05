@@ -1,10 +1,6 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 options:
-  port:
-    description: The port grafana-k8s will be listening on
-    type: int
-    default: 3000
   log_level:
     type: string
     description: |
