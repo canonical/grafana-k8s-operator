@@ -9,13 +9,26 @@ import json
 import logging
 import uuid
 import zlib
-from typing import Dict, List, Union
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
-from jinja2 import Template
-from jinja2.exceptions import TemplateSyntaxError
-from ops.charm import CharmBase, RelationBrokenEvent, RelationChangedEvent
-from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-from ops.model import Relation, Unit
+from ops.charm import (
+    CharmBase,
+    RelationBrokenEvent,
+    RelationChangedEvent,
+    RelationJoinedEvent,
+    UpgradeCharmEvent,
+)
+from ops.framework import (
+    EventBase,
+    EventSource,
+    Object,
+    ObjectEvents,
+    StoredDict,
+    StoredList,
+    StoredState,
+)
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -25,9 +38,25 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 4
 
 logger = logging.getLogger(__name__)
+
+
+def type_convert_stored(obj):
+    """Convert Stored* to their appropriate types, recursively."""
+    if isinstance(obj, StoredList):
+        rlist = []  # type: List[Any]
+        for i in obj:
+            rlist.append(type_convert_stored(i))
+        return rlist
+    elif isinstance(obj, StoredDict):
+        rdict = {}  # type: Dict[Any, Any]
+        for k in obj.keys():
+            rdict[k] = type_convert_stored(obj[k])
+        return rdict
+    else:
+        return obj
 
 
 class GrafanaDashboardsChanged(EventBase):
@@ -89,7 +118,8 @@ class GrafanaDashboardConsumer(Object):
         self,
         charm: CharmBase,
         name: str,
-        event_relation: str = "monitoring",
+        event_relation: Optional[str] = "monitoring",
+        dashboards_path: str = "src/grafana_dashboards",
     ) -> None:
         """Construct a Grafana dashboard charm client.
 
@@ -115,14 +145,21 @@ class GrafanaDashboardConsumer(Object):
                 for dashboard validity. When events on `event_relation`
                 occur, this consumer library will invalidate or
                 restore the dashboard
+            dashboards_path: a filesystem path relative to the charm root
+                where dashboard templates can be located
         """
         super().__init__(charm, name)
         self.charm = charm
         self.name = name
+        self._DASHBOARDS_PATH = dashboards_path
         self._stored.set_default(dashboards={}, dashboard_templates={}, event_relation=None)
         self._stored.event_relation = event_relation
 
         events = self.charm.on[name]
+
+        self.framework.observe(self.charm.on.upgrade_charm, self._on_upgrade_charm)
+
+        self.framework.observe(events.relation_joined, self._on_relation_joined)
 
         self.framework.observe(
             events.relation_changed, self._on_grafana_dashboard_relation_changed
@@ -137,30 +174,63 @@ class GrafanaDashboardConsumer(Object):
             self._on_monitoring_relation_broken,
         )
 
-    def add_dashboard(self, data: str, rel_id=None) -> None:
-        """Add a dashboard to Grafana.
+    def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
+        """Refresh the dashboards when the charm is upgraded.
 
-        `data` should be a string representing a jinja template which can be templated with the
-        appropriate `grafana_datasource` and `prometheus_job_name`.
+        Args:
+            event: A :class:`UpgradeCharmEvent` which triggers the event
         """
-        rel = self.framework.model.get_relation(self.name, rel_id)
-        rel_id = rel_id if rel_id is not None else rel.id
+        for dashboard_rel in self.charm.model.relations[self.name]:
+            self._set_dashboard_data(dashboard_rel)
 
-        self._stored.dashboard_templates[rel_id] = base64.b64encode(
-            zlib.compress(data.encode(), 9)
-        ).decode()
-        prom_rel = self.framework.model.get_relation(self._stored.event_relation)
+    def _on_relation_joined(self, event: RelationJoinedEvent) -> None:
+        """Watch for a relation being joined and automatically send dashboards.
 
+        Args:
+            event: The :class:`RelationJoinedEvent` sent when a
+                `grafana_dashboaard` relationship is joined
+        """
+        rel = event.relation
+        self._set_dashboard_data(rel)
+
+    def _set_dashboard_data(self, rel: Relation) -> None:
+        """Watch for a relation being joined and automatically send dashboards.
+
+        Args:
+            rel: The :class:`Relation` to set grafana_dashboard data for
+        """
+        data = {}
+
+        for path in Path(self._DASHBOARDS_PATH).glob("*.tmpl"):
+            if not path.is_file():
+                continue
+
+            data[path.stem] = base64.b64encode(zlib.compress(path.read_bytes(), 9)).decode()
+
+        self._stored.dashboard_templates[rel.id] = data
+
+        # After moving to the assumption that model_identifier will be set from
+        # the other side of the relation for Prometheus, this is here only to
+        # ensure that there is actually a monitoring relationship before we
+        # send dashboard data
+        found_relation = False
         try:
-            prom_unit = prom_rel.units.pop()
-        except (IndexError, AttributeError):
-            error_message = ("Waiting for a {} relation to send dashboard data").format(
-                self._stored.event_relation
-            )
-            self.on.dashboard_status_changed.emit(error_message=error_message, valid=False)
-            return
+            for prom_rel in self.charm.model.relations[self._stored.event_relation]:
+                found_relation = True
+                if not len(prom_rel.units):
+                    logger.warning(
+                        "The monitored relation %s with id '%s' has no units",
+                        self._stored.event_relation,
+                        prom_rel.id,
+                    )
+        finally:
+            if not found_relation:
+                logger.warning(
+                    "No instance of the '%s' monitored relation found",
+                    self._stored.event_relation,
+                )
 
-        self._update_dashboards(data, rel_id, prom_unit)
+        self._update_dashboards(data, rel.id)
 
     def _on_grafana_dashboard_relation_changed(self, event: RelationChangedEvent) -> None:
         """Watch for changes so we know if there's an error to signal back to the parent charm.
@@ -171,7 +241,8 @@ class GrafanaDashboardConsumer(Object):
         if not self.charm.unit.is_leader():
             return
 
-        data = json.loads(event.relation.data[event.app].get("event", "{}"))
+        rel = self.framework.model.get_relation(self.name, event.relation.id)
+        data = json.loads(rel.data[event.app].get("event", "{}"))
 
         if not data:
             return
@@ -194,16 +265,10 @@ class GrafanaDashboardConsumer(Object):
                     )
                 )
 
-    def _update_dashboards(self, data: str, rel_id: int, prom_unit: Unit) -> None:
+    def _update_dashboards(self, data: dict, rel_id: int) -> None:
         """Update the dashboards in the relation data bucket."""
         if not self.charm.unit.is_leader():
             return
-
-        prom_identifier = "{}_{}_{}".format(
-            prom_unit._backend.model_name,
-            prom_unit._backend.model_uuid,
-            prom_unit.app.name,
-        )
 
         prom_target = "{} [ {} / {} ]".format(
             self.charm.app.name.capitalize(),
@@ -218,10 +283,9 @@ class GrafanaDashboardConsumer(Object):
         # It's completely ridiculous to add a UUID, but if we don't have some
         # pseudo-random value, this never makes it across 'juju set-state'
         stored_data = {
-            "monitoring_identifier": prom_identifier,
             "monitoring_target": prom_target,
             "monitoring_query": prom_query,
-            "template": base64.b64encode(zlib.compress(data.encode(), 9)).decode(),
+            "templates": data,
             "removed": False,
             "invalidated": False,
             "invalidated_reason": "",
@@ -247,7 +311,7 @@ class GrafanaDashboardConsumer(Object):
 
         if dash:
             dash["removed"] = True
-            rel.data[self.charm.app]["dashboards"] = json.dumps(dict(dash))
+            rel.data[self.charm.app]["dashboards"] = json.dumps(type_convert_stored(dash))
 
     def invalidate_dashboard(self, reason: str, rel_id=None) -> None:
         """Invalidate, but do not remove a dashboard until relations restore."""
@@ -263,31 +327,38 @@ class GrafanaDashboardConsumer(Object):
         dash["invalidated"] = True
         dash["invalidated_reason"] = reason
 
-        rel.data[self.charm.app]["dashboards"] = json.dumps(dict(dash))
+        rel.data[self.charm.app]["dashboards"] = json.dumps(type_convert_stored(dash))
+        self.on.dashboard_status_changed.emit(error_message=reason, valid=False)
 
     def _on_monitoring_relation_joined(self, event: RelationBrokenEvent):
         """Renew the dashboard if a monitoring relation is established."""
         if not self.charm.unit.is_leader():
             return
 
-        rel = self.framework.model.get_relation(self.name)
+        rel = self.framework.model.get_relation(self.name, event.relation.id)
 
         if not rel:
             return
 
-        if len(self.model.get_relation(self._stored.event_relation).units) == 0:
-            event.defer()
-            return
+        for relation in self.charm.model.relations[self._stored.event_relation]:
+            if len(relation.units) == 0:
+                event.defer()
+                return
 
-        dash = self._stored.dashboard_templates.get(rel.id, None)
-        if dash:
-            dash_tmpl = zlib.decompress(base64.b64decode(dash.encode())).decode()
-
-            self.add_dashboard(dash_tmpl)
+        for dash_relation in self.charm.model.relations[self.name]:
+            dash = self._stored.dashboard_templates.get(dash_relation.id, None)
+            if dash:
+                self._update_dashboards(type_convert_stored(dash), dash_relation.id)
 
     def _on_monitoring_relation_broken(self, _) -> None:
         """Invalidate the dashboard if there are no more relations."""
-        if len(self.model.get_relation(self._stored.event_relation).units) == 0:
+        valid = False
+        for relation in self.charm.model.relations[self._stored.event_relation]:
+            # Force an actual lookup to update `RelationMapping`
+            if len(relation.units) > 0:
+                valid = True
+
+        if not valid:
             if self.charm.unit.is_leader():
                 self.invalidate_dashboard(
                     "Waiting for a {} relation to send dashboard data".format(
@@ -297,8 +368,11 @@ class GrafanaDashboardConsumer(Object):
 
     def _check_monitoring_relation(self) -> bool:
         """Check whether an existing monitoring relation exists."""
-        return (
-            True if len(self.model.get_relation(self._stored.event_relation).units) == 0 else False
+        return any(
+            [
+                relation.units > 0
+                for relation in self.charm.model.relations[self._stored.event_relation]
+            ]
         )
 
     @property
@@ -325,6 +399,7 @@ class GrafanaDashboardProvider(Object):
         super().__init__(charm, name)
         self.charm = charm
         self.name = name
+        self.source_relation = "grafana-source"
         events = self.charm.on[name]
 
         self._stored.set_default(
@@ -351,16 +426,36 @@ class GrafanaDashboardProvider(Object):
         if not self.charm.unit.is_leader():
             return
 
-        rel = event.relation
+        rel = self.framework.model.get_relation(self.name, event.relation.id)
 
         data = (
-            json.loads(event.relation.data[event.app].get("dashboards", {}))
-            if event.relation.data[event.app].get("dashboards", {})
+            json.loads(rel.data[event.app].get("dashboards", {}))
+            if rel.data[event.app].get("dashboards", {})
             else None
         )
         if not data:
-            logger.info("No dashboard data found in relation")
+            logger.warning("No dashboard data found in relation")
             return
+
+        # Figure out our Prometheus relation and template the query
+
+        try:
+            prom_rel = self.charm.model.relations[self.source_relation][0]
+            if len(prom_rel.units) == 0:
+                logger.error("No %s related to %s!", self.source_relation, self.name)
+                return
+        except IndexError:
+            logger.error("No %s related to %s!", self.source_relation, self.name)
+            return
+
+        prom_unit = next(iter(prom_rel.units))
+        prom_identifier = "{}_{}_{}".format(
+            self.charm.model.name,
+            self.charm.model.uuid,
+            prom_unit.app.name,
+        )
+
+        data["monitoring_identifier"] = prom_identifier
 
         # Get rid of this now that we passed through to the other side
         data.pop("uuid", None)
@@ -398,16 +493,30 @@ class GrafanaDashboardProvider(Object):
         if not grafana_datasource:
             return
 
+        # Import at runtime so we don't get client dependencies
+        from jinja2 import Template
+        from jinja2.exceptions import TemplateSyntaxError
+
         # The dashboards are WAY too big since this ultimately calls out to Juju to
         # set the relation data, and it overflows the maximum argument length for
         # subprocess, so we have to use b64, annoyingly.
-
         # Worse, Python3 expects absolutely everything to be a byte, and a plain
         # `base64.b64encode()` is still too large, so we have to go through hoops
         # of encoding to byte, compressing with zlib, converting to base64 so it
         # can be converted to JSON, then all the way back
+
+        templates = {}
         try:
-            tm = Template(zlib.decompress(base64.b64decode(data["template"].encode())).decode())
+            for fname in data["templates"]:
+                tm = Template(
+                    zlib.decompress(base64.b64decode(data["templates"][fname].encode())).decode()
+                )
+                tmpl = tm.render(
+                    grafana_datasource=grafana_datasource,
+                    prometheus_target=data["monitoring_target"],
+                    prometheus_query=data["monitoring_query"],
+                )
+                templates[fname] = base64.b64encode(zlib.compress(tmpl.encode(), 9)).decode()
         except TemplateSyntaxError:
             self._purge_dead_dashboard(rel.id)
             errmsg = "Cannot add Grafana dashboard. Template is not valid Jinja"
@@ -415,15 +524,9 @@ class GrafanaDashboardProvider(Object):
             rel.data[self.charm.app]["event"] = json.dumps({"errors": errmsg, "valid": False})
             return
 
-        tmpl = tm.render(
-            grafana_datasource=grafana_datasource,
-            prometheus_target=data["monitoring_target"],
-            prometheus_query=data["monitoring_query"],
-        )
-
         msg = {
             "target": data["monitoring_identifier"],
-            "dashboard": base64.b64encode(zlib.compress(tmpl.encode(), 9)).decode(),
+            "dashboards": templates,
             "data": data,
         }
 
@@ -434,7 +537,7 @@ class GrafanaDashboardProvider(Object):
             rel.data[self.charm.app]["event"] = json.dumps({"errors": "", "valid": True})
 
         stored_data = self._stored.dashboards.get(rel.id, {}).get("data", {})
-        coerced_data = dict(stored_data) if stored_data else {}
+        coerced_data = type_convert_stored(stored_data) if stored_data else {}
 
         if not coerced_data == msg["data"]:
             self._stored.dashboards[rel.id] = msg
@@ -493,8 +596,8 @@ class GrafanaDashboardProvider(Object):
         self._stored.active_sources = [dict(s) for s in sources]
 
         # Make copies so we don't mutate these during iteration
-        invalid_dashboards = copy.deepcopy(dict(self._stored.invalid_dashboards))
-        active_dashboards = copy.deepcopy(dict(self._stored.dashboards))
+        invalid_dashboards = copy.deepcopy(type_convert_stored(self._stored.invalid_dashboards))
+        active_dashboards = copy.deepcopy(type_convert_stored(self._stored.dashboards))
 
         for rel_id, data in invalid_dashboards.items():
             rel = self.framework.model.get_relation(self.name, rel_id)

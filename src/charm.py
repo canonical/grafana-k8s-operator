@@ -38,6 +38,7 @@ from ops.charm import (
     ConfigChangedEvent,
     RelationBrokenEvent,
     RelationChangedEvent,
+    UpgradeCharmEvent,
 )
 from ops.framework import StoredState
 from ops.main import main
@@ -94,6 +95,7 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.grafana_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
+        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
 
         # -- grafana_source relation observations
         self.source_provider = GrafanaSourceProvider(self, "grafana-source")
@@ -143,6 +145,15 @@ class GrafanaCharm(CharmBase):
         """
         self.dashboard_provider.renew_dashboards(self.source_provider.sources)
         self._configure(event)
+
+    def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
+        """Re-provision Grafana and its datasources on upgrade.
+
+        Args:
+            event: a :class:`UpgradeCharmEvent` to signal the upgrade
+        """
+        self._configure(event)
+        self._on_dashboards_changed(event)
 
     def _on_stop(self, _) -> None:
         """Go into maintenance state if the unit is stopped."""
@@ -266,14 +277,15 @@ class GrafanaCharm(CharmBase):
             logger.warning("Could not list dashboards. Pebble shutting down?")
 
         for dashboard in self.dashboard_provider.dashboards:
-            dash = zlib.decompress(base64.b64decode(dashboard["dashboard"].encode())).decode()
-            name = "{}_juju.json".format(dashboard["target"])
+            for fname, tmpl in dashboard["dashboards"].items():
+                dash = zlib.decompress(base64.b64decode(tmpl.encode())).decode()
+                name = "{}_{}_juju.json".format(dashboard["target"], fname)
 
-            dashboard_path = os.path.join(dashboard_path, name)
-            existing_dashboards[dashboard_path] = True
+                path = os.path.join(dashboard_path, name)
+                existing_dashboards[path] = True
 
-            logger.info("Newly created dashboard will be saved at: {}".format(dashboard_path))
-            container.push(dashboard_path, dash, make_dirs=True)
+                logger.info("Newly created dashboard will be saved at: {}".format(path))
+                container.push(path, dash)
 
         for f, known in existing_dashboards.items():
             logger.debug("Checking for dashboard {}".format(f))
