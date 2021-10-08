@@ -6,7 +6,7 @@
 import base64
 import json
 import logging
-import sys
+import os
 import uuid
 import zlib
 from pathlib import Path
@@ -98,6 +98,47 @@ class RelationRoleMismatchError(Exception):
 
         super().__init__(self.message)
 
+
+class InvalidDirectoryPathError(Exception):
+    """Raised if the grafana dashboards folder cannot be found or is otherwise invalid."""
+
+    def __init__(
+        self,
+        grafana_dashboards_absolute_path: str,
+        message: str,
+    ):
+        self.grafana_dashboards_absolute_path = grafana_dashboards_absolute_path
+        self.message = message
+
+        super().__init__(self.message)
+
+
+def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> str:
+    """Resolve the provided path items against the directory of the main file.
+
+    Look up the directory of the main .py file being executed. This is normally
+    going to be the charm.py file of the charm including this library. Then, resolve
+    the provided path elements and, if the result path exists and is a directory,
+    return its absolute path; otherwise, return `None`.
+    """
+    charm_dir = Path(charm.charm_dir)
+    if not charm_dir.exists() or not charm_dir.is_dir():
+        # Operator Framework does not currently expose a robust
+        # way to determine the top level charm source directory
+        # that is consistent across deployed charms and unit tests
+        # Hence for unit tests the current working directory is used
+        # TODO: updated this logic when the following ticket is resolved
+        # https://github.com/canonical/operator/issues/643
+        charm_dir = Path(os.getcwd())
+
+    dir_path = charm_dir.absolute().joinpath(*path_elements)
+
+    if not dir_path.exists():
+        raise InvalidDirectoryPathError(dir_path, "directory does not exist")
+    if not dir_path.is_dir():
+        raise InvalidDirectoryPathError(dir_path, "is not a directory")
+
+    return str(dir_path)
 
 def _validate_relation_by_interface_and_direction(
     charm: CharmBase,
@@ -262,11 +303,20 @@ class GrafanaDashboardConsumer(Object):
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
         )
 
+        try:
+            dashboards_path = _resolve_dir_against_charm_path(charm, dashboards_path)
+        except InvalidDirectoryPathError as e:
+            logger.warning(
+                "Invalid Grafana dashboards folder at %s: %s",
+                e.dashboards_path,
+                e.message,
+            )
+
         super().__init__(charm, relation_name)
 
         self._charm = charm
         self._relation_name = relation_name
-        self._dashboards_path = self._resolve_dir_against_main_path(dashboards_path)
+        self._dashboards_path = dashboards_path
         self._stored.set_default(dashboard_templates={})
 
         self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)
@@ -401,23 +451,6 @@ class GrafanaDashboardConsumer(Object):
             content = bytes(content, "utf-8")
 
         return base64.b64encode(zlib.compress(content, 9)).decode("utf-8")
-
-    def _resolve_dir_against_main_path(self, *path_elements: str) -> Optional[str]:
-        """Resolve the provided path items against the directory of the main file.
-
-        Look up the directory of the main .py file being executed. This is normally
-        going to be the charm.py file of the charm including this library. Then, resolve
-        the provided path elements and, if the result path exists and is a directory,
-        return its absolute path; otherwise, return `None`.
-        """
-        charm_file = sys.path[0]
-
-        default_alerts_dir = Path(charm_file).joinpath(*path_elements)
-
-        if default_alerts_dir.exists() and default_alerts_dir.is_dir:
-            return str(default_alerts_dir.absolute())
-
-        return None
 
     @property
     def _juju_topology(self) -> Dict:
@@ -671,7 +704,7 @@ class GrafanaDashboardProvider(Object):
     def _to_external_object(self, relation_id, dashboard):
         print(dashboard)
         return {
-            "id": dashboard["id"],
+            "id": dashboard["original_id"],
             "relation_id": relation_id,
             "charm": dashboard["template"]["charm"],
             "content": _type_convert_stored(dashboard["content"]),
