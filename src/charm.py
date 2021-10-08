@@ -17,12 +17,10 @@
 
 """A Kubernetes charm for Grafana."""
 
-import base64
 import configparser
 import hashlib
 import logging
 import os
-import zlib
 from io import StringIO
 
 import yaml
@@ -64,6 +62,8 @@ CONFIG_PATH = "/etc/grafana/grafana-config.ini"
 DATASOURCE_PATH = "/etc/grafana/provisioning"
 PEER = "grafana-peers"
 
+PORT = 3000
+
 
 class GrafanaCharm(CharmBase):
     """Charm to run Grafana on Kubernetes.
@@ -80,12 +80,10 @@ class GrafanaCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
-        self._port = 3000
-
         # -- initialize states --
         self.name = "grafana"
         self.container = self.unit.get_container(self.name)
-        self.grafana_service = Grafana("localhost", self._port)
+        self.grafana_service = Grafana("localhost", PORT)
         self.grafana_config_ini_hash = None
         self.grafana_datasources_hash = None
         self._stored.set_default(database=dict(), pebble_ready=False, k8s_service_patched=False)
@@ -133,8 +131,6 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
-        self.source_provider.update_port(self.name, self._port)
-
         self._configure(event)
 
     def _on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
@@ -143,7 +139,6 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`GrafanaSourceEvents` instance sent from the consumer
         """
-        self.dashboard_provider.renew_dashboards(self.source_provider.sources)
         self._configure(event)
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
@@ -262,38 +257,42 @@ class GrafanaCharm(CharmBase):
                     "Could not push default dashboard configuration. Pebble shutting down?"
                 )
 
-    def _on_dashboards_changed(self, _) -> None:
+    def _on_dashboards_changed(self, event) -> None:
         """Handle dashboard events."""
         container = self.unit.get_container(self.name)
         dashboard_path = os.path.join(DATASOURCE_PATH, "dashboards")
 
         self.init_dashboard_provisioning(dashboard_path)
 
-        existing_dashboards = {}
-        try:
-            for f in container.list_files(dashboard_path, pattern="*_juju.json"):
-                existing_dashboards[f.path] = False
-        except ConnectionError:
-            logger.warning("Could not list dashboards. Pebble shutting down?")
+        if not container.can_connect():
+            logger.debug("Cannot connect to Pebble yet, deferring event")
+            event.defer()
+            return
 
-        for dashboard in self.dashboard_provider.dashboards:
-            for fname, tmpl in dashboard["dashboards"].items():
-                dash = zlib.decompress(base64.b64decode(tmpl.encode())).decode()
-                name = "{}_{}_juju.json".format(dashboard["target"], fname)
+        dashboards_file_to_be_kept = {}
+        try:
+            for dashboard_file in container.list_files(dashboard_path, pattern="juju_*.json"):
+                dashboards_file_to_be_kept[dashboard_file.path] = False
+
+            for dashboard in self.dashboard_provider.dashboards:
+                dashboard_content = dashboard["content"]
+                content_digest = hashlib.sha256(dashboard_content.encode("utf-8")).digest()
+                name = "juju_{}_{}.json".format(dashboard["charm"], content_digest[0:7])
 
                 path = os.path.join(dashboard_path, name)
-                existing_dashboards[path] = True
+                dashboards_file_to_be_kept[path] = True
 
-                logger.info("Newly created dashboard will be saved at: {}".format(path))
-                container.push(path, dash)
+                logger.debug("New dashboard created at: %s", path)
+                container.push(path, dashboard_content)
 
-        for f, known in existing_dashboards.items():
-            logger.debug("Checking for dashboard {}".format(f))
-            if not known:
-                logger.info("Removing unknown dashboard {}".format(f))
-                container.remove_path(f)
+            for dashboard_file_path, to_be_kept in dashboards_file_to_be_kept.items():
+                if not to_be_kept:
+                    container.remove_path(dashboard_file_path)
+                    logger.debug("Removed dashboard %s", dashboard_file_path)
 
-        self.restart_grafana()
+            self.restart_grafana()
+        except ConnectionError:
+            logger.exception("Could not update dashboards. Pebble shutting down?")
 
     #####################################
 
@@ -304,9 +303,8 @@ class GrafanaCharm(CharmBase):
     def _patch_k8s_service(self):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
         if self.unit.is_leader() and not self._stored.k8s_service_patched:
-            port = self._port
             service_ports = [
-                (f"{self.app.name}", port, port),
+                (f"{self.app.name}", PORT, PORT),
             ]
             try:
                 K8sServicePatch.set_ports(self.app.name, service_ports)
@@ -472,7 +470,7 @@ class GrafanaCharm(CharmBase):
                         "command": "grafana-server -config {}".format(CONFIG_PATH),
                         "startup": "enabled",
                         "environment": {
-                            "GF_SERVER_HTTP_PORT": self._port,
+                            "GF_SERVER_HTTP_PORT": PORT,
                             "GF_LOG_LEVEL": self.model.config["log_level"],
                             "GF_PATHS_PROVISIONING": DATASOURCE_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
