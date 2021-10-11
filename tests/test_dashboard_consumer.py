@@ -1,10 +1,11 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import copy
+import base64
 import json
 import unittest
 import uuid
+import zlib
 from unittest.mock import patch
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
@@ -16,38 +17,25 @@ if "unittest.util" in __import__("sys").modules:
     # Show full diff in self.assertEqual.
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
 
-RELATION_TEMPLATES_DATA = {
-    "file:first": {
-        "charm": "consumer-tester",
-        "content": "eNorSS0uiU/LLCou4QIAG8EEUg==",
-        "juju_topology": {
-            "model": "testing",
-            "model_uuid": "abcdefgh-1234",
-            "application": "consumer-tester",
-            "unit": "consumer-tester/0",
-        },
-    },
-    "file:other": {
-        "charm": "consumer-tester",
-        "content": "eNorSS0uiS9OTc7PS+ECACCnBKY=",
-        "juju_topology": {
-            "model": "testing",
-            "model_uuid": "abcdefgh-1234",
-            "application": "consumer-tester",
-            "unit": "consumer-tester/0",
-        },
+MODEL_INFO = {"name": "testing", "uuid": "abcdefgh-1234"}
+
+DASHBOARD_TMPL = {
+    "charm": "grafana-k8s",
+    "content": "label_values(up, juju_unit)",
+    "juju_topology": {
+        "model": MODEL_INFO["name"],
+        "model_uuid": MODEL_INFO["uuid"],
+        "application": "provider-tester",
+        "unit": "provider-tester/0",
     },
 }
 
+DASHBOARD_RENDERED = "label_values(up, juju_unit)"
 
-CONSUMER_META = """
-name: consumer-tester
-containers:
-  grafana-tester:
-provides:
-  grafana-dashboard:
-    interface: grafana_dashboard
-"""
+SOURCE_DATA = {
+    "templates": {"file:tester": DASHBOARD_TMPL},
+    "uuid": "12345678",
+}
 
 
 class ConsumerCharm(CharmBase):
@@ -55,109 +43,113 @@ class ConsumerCharm(CharmBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
-        self.consumer = GrafanaDashboardConsumer(self)
+        self._stored.set_default(dashboard_events=0)
 
-        self._stored.set_default(valid_events=0)  # available data sources
-        self._stored.set_default(invalid_events=0)
+        self.grafana_consumer = GrafanaDashboardConsumer(self)
+        self.framework.observe(self.grafana_consumer.on.dashboards_changed, self.dashboard_events)
 
-        self.framework.observe(
-            self.consumer.on.dashboard_status_changed,
-            self._on_dashboard_status_changed,
-        )
+    def dashboard_events(self, _):
+        self._stored.dashboard_events += 1
 
-    def _on_dashboard_status_changed(self, event):
-        if event.valid:
-            self._stored.valid_events += 1
-        elif event.error_message:
-            self._stored.invalid_events += 1
+    @property
+    def version(self):
+        return "2.0.0"
 
 
+@patch.object(zlib, "compress", new=lambda x, *args, **kwargs: x)
+@patch.object(zlib, "decompress", new=lambda x, *args, **kwargs: x)
+@patch.object(uuid, "uuid4", new=lambda: "12345678")
+@patch.object(base64, "b64encode", new=lambda x: x)
+@patch.object(base64, "b64decode", new=lambda x: x)
 class TestDashboardConsumer(unittest.TestCase):
-    @patch(
-        "charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path",
-        new=lambda x, *args, **kwargs: "./tests/dashboard_templates",
-    )
-    @patch.object(uuid, "uuid4", new=lambda: "12345678")
     def setUp(self):
-        self.harness = Harness(ConsumerCharm, meta=CONSUMER_META)
-        self.harness._backend.model_name = "testing"
-        self.harness._backend.model_uuid = "abcdefgh-1234"
+        self.harness = Harness(ConsumerCharm)
+        self.harness.set_model_info(name=MODEL_INFO["name"], uuid=MODEL_INFO["uuid"])
         self.addCleanup(self.harness.cleanup)
-        self.harness.begin()
         self.harness.set_leader(True)
+        self.harness.begin()
 
-    @patch.object(uuid, "uuid4", new=lambda: "12345678")
-    def test_consumer_sets_dashboard_data(self):
-        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
-        self.harness.add_relation_unit(rel_id, "other_app/0")
-        data = json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
-        )
+    def setup_charm_relations(self):
+        """Create relations used by test cases.
 
-        self.assertDictEqual(
+        Args:
+            multi: a boolean indicating if multiple relations must be
+            created.
+        """
+        rel_ids = []
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        source_rel_id = self.harness.add_relation("grafana-source", "source")
+        self.harness.add_relation_unit(source_rel_id, "source/0")
+        rel_id = self.harness.add_relation("grafana-dashboard", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        rel_ids.append(rel_id)
+        self.harness.update_relation_data(
+            rel_id,
+            "provider",
             {
-                "templates": RELATION_TEMPLATES_DATA,
-                "uuid": "12345678",
+                "dashboards": json.dumps(SOURCE_DATA),
             },
-            data,
         )
 
-    @patch.object(uuid, "uuid4", new=lambda: "12345678")
-    def test_consumer_can_remove_programmatically_added_dashboards(self):
-        self.harness.charm.consumer.add_dashboard("third")
+        return rel_ids
 
-        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
-        self.harness.add_relation_unit(rel_id, "other_app/0")
-        actual_data = json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+    def test_consumer_notifies_on_new_dashboards(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_charm_relations()
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": 1,
+                    "charm": "grafana-k8s",
+                    "content": DASHBOARD_RENDERED,
+                }
+            ],
         )
 
-        expected_data_builtin_dashboards = {
-            "templates": copy.deepcopy(RELATION_TEMPLATES_DATA),
+    def test_consumer_error_on_bad_template(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        rels = self.setup_charm_relations()
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        bad_data = {
+            "templates": {
+                "file:tester": {
+                    "charm": "grafana-k8s",
+                    "content": "{{ unclosed variable",
+                    "juju_topology": {
+                        "model": MODEL_INFO["name"],
+                        "model_uuid": MODEL_INFO["uuid"],
+                        "application": "provider-tester",
+                        "unit": "provider-tester/0",
+                    },
+                }
+            },
             "uuid": "12345678",
         }
 
-        expected_data = copy.deepcopy(expected_data_builtin_dashboards)
-        expected_templates = expected_data["templates"]
-        expected_templates["prog:eNorycg"] = {  # type: ignore
-            "charm": "consumer-tester",
-            "content": "eNorycgsSgEABmwCHA==",
-            "juju_topology": {
-                "model": "testing",
-                "model_uuid": "abcdefgh-1234",
-                "application": "consumer-tester",
-                "unit": "consumer-tester/0",
+        self.harness.update_relation_data(
+            rels[0],
+            "provider",
+            {
+                "dashboards": json.dumps(bad_data),
             },
-        }
-
-        self.assertDictEqual(expected_data, actual_data)
-        self.harness.charm.consumer.remove_non_builtin_dashboards()
-        self.assertEqual(
-            expected_data_builtin_dashboards,
-            json.loads(
-                self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
-            ),
         )
 
-    @patch.object(uuid, "uuid4", new=lambda: "12345678")
-    def test_consumer_cannot_remove_builtin_dashboards(self):
-        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
-        self.harness.add_relation_unit(rel_id, "other_app/0")
-        actual_data = json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        data = json.loads(
+            self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
         )
-
-        expected_data = {
-            "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "12345678",
-        }
-
-        self.assertDictEqual(expected_data, actual_data)
-
-        self.harness.charm.consumer.remove_non_builtin_dashboards()
         self.assertEqual(
-            expected_data,
-            json.loads(
-                self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
-            ),
+            data["errors"],
+            [
+                {
+                    "dashboard_id": "file:tester",
+                    "error": "expected token 'end of print statement', got 'variable'",
+                }
+            ],
         )

@@ -24,10 +24,10 @@ import os
 from io import StringIO
 
 import yaml
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_source import (
+    GrafanaSourceConsumer,
     GrafanaSourceEvents,
-    GrafanaSourceProvider,
     SourceFieldsMissingError,
 )
 from ops.charm import (
@@ -96,20 +96,20 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
 
         # -- grafana_source relation observations
-        self.source_provider = GrafanaSourceProvider(self, "grafana-source")
+        self.source_consumer = GrafanaSourceConsumer(self, "grafana-source")
         self.framework.observe(
-            self.source_provider.on.sources_changed,
+            self.source_consumer.on.sources_changed,
             self._on_grafana_source_changed,
         )
         self.framework.observe(
-            self.source_provider.on.sources_to_delete_changed,
+            self.source_consumer.on.sources_to_delete_changed,
             self._on_grafana_source_changed,
         )
 
         # -- grafana_dashboard relation observations
-        self.dashboard_provider = GrafanaDashboardProvider(self, "grafana-dashboard")
+        self.dashboard_consumer = GrafanaDashboardConsumer(self, "grafana-dashboard")
         self.framework.observe(
-            self.dashboard_provider.on.dashboards_changed, self._on_dashboards_changed
+            self.dashboard_consumer.on.dashboards_changed, self._on_dashboards_changed
         )
 
         # -- database relation observations
@@ -137,7 +137,7 @@ class GrafanaCharm(CharmBase):
         """When a grafana-source is added or modified, update the config.
 
         Args:
-            event: a :class:`GrafanaSourceEvents` instance sent from the consumer
+            event: a :class:`GrafanaSourceEvents` instance sent from the provider
         """
         self._configure(event)
 
@@ -237,7 +237,7 @@ class GrafanaCharm(CharmBase):
 
         dashboard_config = {
             "apiVersion": 1,
-            "providers": [
+            "consumers": [
                 {
                     "name": "Default",
                     "type": "file",
@@ -274,7 +274,7 @@ class GrafanaCharm(CharmBase):
             for dashboard_file in container.list_files(dashboard_path, pattern="juju_*.json"):
                 dashboards_file_to_be_kept[dashboard_file.path] = False
 
-            for dashboard in self.dashboard_provider.dashboards:
+            for dashboard in self.dashboard_consumer.dashboards:
                 dashboard_content = dashboard["content"]
                 content_digest = hashlib.sha256(dashboard_content.encode("utf-8")).digest()
                 name = "juju_{}_{}.json".format(
@@ -510,7 +510,7 @@ class GrafanaCharm(CharmBase):
         # Boilerplate for the config file
         datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
 
-        for source_info in self.source_provider.sources:
+        for source_info in self.source_consumer.sources:
             source = {
                 "orgId": "1",
                 "access": "proxy",
@@ -522,7 +522,7 @@ class GrafanaCharm(CharmBase):
             datasources_dict["datasources"].append(source)  # type: ignore[attr-defined]
 
         # Also get a list of all the sources which have previously been purged and add them
-        for name in self.source_provider.sources_to_delete:
+        for name in self.source_consumer.sources_to_delete:
             source = {"orgId": 1, "name": name}
             datasources_dict["deleteDatasources"].append(source)  # type: ignore[attr-defined]
 
