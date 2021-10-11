@@ -22,7 +22,6 @@ import hashlib
 import logging
 import os
 from io import StringIO
-from typing import Union
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
@@ -33,7 +32,6 @@ from charms.grafana_k8s.v0.grafana_source import (
 )
 from ops.charm import (
     CharmBase,
-    CharmEvents,
     ConfigChangedEvent,
     RelationBrokenEvent,
     RelationChangedEvent,
@@ -132,7 +130,7 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
-        self._configure(event)
+        self._configure()
 
     def _on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
         """When a grafana-source is added or modified, update the config.
@@ -140,7 +138,7 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`GrafanaSourceEvents` instance sent from the provider
         """
-        self._configure(event)
+        self._configure()
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
         """Re-provision Grafana and its datasources on upgrade.
@@ -148,14 +146,14 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`UpgradeCharmEvent` to signal the upgrade
         """
-        self._configure(event)
+        self._configure()
         self._on_dashboards_changed(event)
 
     def _on_stop(self, _) -> None:
         """Go into maintenance state if the unit is stopped."""
         self.unit.status = MaintenanceStatus("Application is terminating.")
 
-    def _configure(self, event: Union[CharmEvents, None]) -> None:
+    def _configure(self) -> None:
         """Configure Grafana.
 
         Generate configuration files and check the sums against what is
@@ -233,13 +231,13 @@ class GrafanaCharm(CharmBase):
         Args:
             dashboard_path: str; A file path to the dashboard to provision
         """
-        self._configure(None)
+        self._configure()
         logger.info("Initializing dashboard provisioning path")
         container = self.unit.get_container(self.name)
 
         dashboard_config = {
             "apiVersion": 1,
-            "consumers": [
+            "providers": [
                 {
                     "name": "Default",
                     "type": "file",
@@ -359,7 +357,7 @@ class GrafanaCharm(CharmBase):
             {field: value for field, value in database_fields.items() if value is not None}
         )
 
-        self._configure(event)
+        self._configure()
 
     def _on_database_broken(self, event: RelationBrokenEvent) -> None:
         """Removes database connection info from datastore.
@@ -379,7 +377,7 @@ class GrafanaCharm(CharmBase):
         logger.info("Removing the grafana-k8s database backend config")
 
         # Cleanup the config file
-        self._configure(event)
+        self._configure()
 
     def _generate_grafana_config(self) -> str:
         """Generate a database configuration for Grafana.
@@ -435,7 +433,7 @@ class GrafanaCharm(CharmBase):
     def _on_pebble_ready(self, event) -> None:
         """When Pebble is ready, start everything up."""
         self._stored.pebble_ready = True
-        self._configure(event)
+        self._configure()
 
     def restart_grafana(self) -> None:
         """Restart the pebble container."""
