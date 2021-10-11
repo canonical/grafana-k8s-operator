@@ -73,9 +73,8 @@ class ConsumerCharm(CharmBase):
 
 
 class TestDashboardConsumer(unittest.TestCase):
-    @patch.object(
-        GrafanaDashboardConsumer,
-        "_resolve_dir_against_main_path",
+    @patch(
+        "charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path",
         new=lambda x, *args, **kwargs: "./tests/dashboard_templates",
     )
     @patch.object(uuid, "uuid4", new=lambda: "12345678")
@@ -120,7 +119,7 @@ class TestDashboardConsumer(unittest.TestCase):
 
         expected_data = copy.deepcopy(expected_data_builtin_dashboards)
         expected_templates = expected_data["templates"]
-        expected_templates["prog:eNorycg"] = {
+        expected_templates["prog:eNorycg"] = {  # type: ignore
             "charm": "consumer-tester",
             "content": "eNorycgsSgEABmwCHA==",
             "juju_topology": {

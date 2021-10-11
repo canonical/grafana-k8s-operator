@@ -134,11 +134,12 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
     dir_path = charm_dir.absolute().joinpath(*path_elements)
 
     if not dir_path.exists():
-        raise InvalidDirectoryPathError(dir_path, "directory does not exist")
+        raise InvalidDirectoryPathError(str(dir_path), "directory does not exist")
     if not dir_path.is_dir():
-        raise InvalidDirectoryPathError(dir_path, "is not a directory")
+        raise InvalidDirectoryPathError(str(dir_path), "is not a directory")
 
     return str(dir_path)
+
 
 def _validate_relation_by_interface_and_direction(
     charm: CharmBase,
@@ -308,7 +309,7 @@ class GrafanaDashboardConsumer(Object):
         except InvalidDirectoryPathError as e:
             logger.warning(
                 "Invalid Grafana dashboards folder at %s: %s",
-                e.dashboards_path,
+                e.grafana_dashboards_absolute_path,
                 e.message,
             )
 

@@ -103,7 +103,7 @@ class TestDashboardProvider(unittest.TestCase):
             self.harness.charm.grafana_provider.dashboards,
             [
                 {
-                    "id": "grafana-dashboard:1/file:tester",
+                    "id": "file:tester",
                     "relation_id": 1,
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED,

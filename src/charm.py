@@ -277,7 +277,9 @@ class GrafanaCharm(CharmBase):
             for dashboard in self.dashboard_provider.dashboards:
                 dashboard_content = dashboard["content"]
                 content_digest = hashlib.sha256(dashboard_content.encode("utf-8")).digest()
-                name = "juju_{}_{}.json".format(dashboard["charm"], content_digest[0:7])
+                name = "juju_{}_{}.json".format(
+                    dashboard["charm"], content_digest.decode("utf-8")[0:7]
+                )
 
                 path = os.path.join(dashboard_path, name)
                 dashboards_file_to_be_kept[path] = True
