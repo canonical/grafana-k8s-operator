@@ -276,16 +276,17 @@ class GrafanaCharm(CharmBase):
 
             for dashboard in self.dashboard_consumer.dashboards:
                 dashboard_content = dashboard["content"]
-                content_digest = hashlib.sha256(dashboard_content.encode("utf-8")).digest()
-                name = "juju_{}_{}.json".format(
-                    dashboard["charm"], content_digest.decode("utf-8")[0:7]
+                dashboard_content_bytes = dashboard_content.encode("utf-8")
+                dashboard_content_digest = hashlib.sha256(dashboard_content_bytes).hexdigest()
+                dashboard_filename = "juju_{}_{}.json".format(
+                    dashboard["charm"], dashboard_content_digest[0:7]
                 )
 
-                path = os.path.join(dashboard_path, name)
+                path = os.path.join(dashboard_path, dashboard_filename)
                 dashboards_file_to_be_kept[path] = True
 
                 logger.debug("New dashboard created at: %s", path)
-                container.push(path, dashboard_content)
+                container.push(path, dashboard_content_bytes)
 
             for dashboard_file_path, to_be_kept in dashboards_file_to_be_kept.items():
                 if not to_be_kept:
