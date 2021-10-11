@@ -39,7 +39,7 @@ SOURCE_DATA = {
 
 DASHBOARD_CONFIG = {
     "apiVersion": 1,
-    "providers": [
+    "consumers": [
         {
             "name": "Default",
             "type": "file",
