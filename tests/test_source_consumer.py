@@ -20,7 +20,7 @@ CONSUMER_META = """
 name: consumer-tester
 containers:
   grafana-tester:
-requires:
+provides:
   grafana-source:
     interface: grafana_datasource
 """
@@ -33,7 +33,6 @@ class ConsumerCharm(CharmBase):
         super().__init__(*args)
         self.consumer = GrafanaSourceConsumer(
             self,
-            "grafana-source",
             refresh_event=self.on.grafana_tester_pebble_ready,
         )
 

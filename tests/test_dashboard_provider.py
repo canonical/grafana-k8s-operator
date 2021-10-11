@@ -2,18 +2,13 @@
 # See LICENSE file for licensing details.
 
 import base64
-import copy
 import json
 import unittest
 import uuid
 import zlib
-from typing import Any, Dict
 from unittest.mock import patch
 
-from charms.grafana_k8s.v0.grafana_dashboard import (
-    GrafanaDashboardProvider,
-    type_convert_stored,
-)
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -22,37 +17,23 @@ if "unittest.util" in __import__("sys").modules:
     # Show full diff in self.assertEqual.
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
 
-DASHBOARD_TMPL = """
-"name": "{{ grafana_datasource }}"
-"label": "{{ prometheus_target }}"
-"query": "label_values(up{ {{ prometheus_query }} }, juju_unit)"
-"""
-
-DASHBOARD_RENDERED = """
-"name": "testing_abcdefgh-1234_source"
-"label": "Consumer-tester [ testing / abcdefgh-1234 ]"
-"query": "label_values(up{ juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester' }, juju_unit)"
-"""
-
 MODEL_INFO = {"name": "testing", "uuid": "abcdefgh-1234"}
 
-SOURCE_DATA = {
-    "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
-    "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
-    "templates": {"tester": DASHBOARD_TMPL},
-    "removed": False,
-    "invalidated": False,
-    "invalidated_reason": "",
-    "uuid": "12345678",
+DASHBOARD_TMPL = {
+    "charm": "grafana-k8s",
+    "content": "label_values(up, juju_unit)",
+    "juju_topology": {
+        "model": MODEL_INFO["name"],
+        "model_uuid": MODEL_INFO["uuid"],
+        "application": "consumer-tester",
+        "unit": "consumer-tester/0",
+    },
 }
 
-OTHER_SOURCE_DATA = {
-    "monitoring_target": "Consumer-tester [ testing / abcdefgh-2345 ]",
-    "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-2345',juju_application='consumer-tester'",
-    "templates": {"tester": DASHBOARD_TMPL},
-    "removed": False,
-    "invalidated": False,
-    "invalidated_reason": "",
+DASHBOARD_RENDERED = "label_values(up, juju_unit)"
+
+SOURCE_DATA = {
+    "templates": {"file:tester": DASHBOARD_TMPL},
     "uuid": "12345678",
 }
 
@@ -64,7 +45,7 @@ class ProviderCharm(CharmBase):
         super().__init__(*args)
         self._stored.set_default(dashboard_events=0)
 
-        self.grafana_provider = GrafanaDashboardProvider(self, "grafana-dashboard")
+        self.grafana_provider = GrafanaDashboardProvider(self)
         self.framework.observe(self.grafana_provider.on.dashboards_changed, self.dashboard_events)
 
     def dashboard_events(self, _):
@@ -88,18 +69,13 @@ class TestDashboardProvider(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin()
 
-    def setup_charm_relations(self, multi=False):
+    def setup_charm_relations(self):
         """Create relations used by test cases.
 
         Args:
             multi: a boolean indicating if multiple relations must be
             created.
         """
-        self.harness.charm.grafana_provider._stored.active_sources = [
-            {"source-name": "testing_abcdefgh-1234_source"},
-            {"source-name": "testing_abcdefgh-2345_source"},
-        ]
-
         rel_ids = []
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         source_rel_id = self.harness.add_relation("grafana-source", "source")
@@ -114,17 +90,6 @@ class TestDashboardProvider(unittest.TestCase):
                 "dashboards": json.dumps(SOURCE_DATA),
             },
         )
-        if multi:
-            rel_id = self.harness.add_relation("grafana-source", "other-consumer")
-            rel_ids.append(rel_id)
-            self.harness.add_relation_unit(rel_id, "other-consumer/0")
-            self.harness.update_relation_data(
-                rel_id,
-                "other-consumer",
-                {
-                    "dashboards": json.dumps(SOURCE_DATA),
-                },
-            )
 
         return rel_ids
 
@@ -134,26 +99,16 @@ class TestDashboardProvider(unittest.TestCase):
         self.setup_charm_relations()
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
-        # Terrible type conversions again
-        stored = self.harness.charm.grafana_provider.dashboards[0]
-        stored = type_convert_stored(stored)
-        # stored["data"] = dict(stored["data"])
-        self.maxDiff = None
         self.assertEqual(
-            stored,
-            {
-                "target": "testing_abcdefgh-1234_source",
-                "data": {
-                    "monitoring_identifier": "testing_abcdefgh-1234_source",
-                    "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
-                    "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
-                    "templates": {"tester": DASHBOARD_TMPL},
-                    "removed": False,
-                    "invalidated": False,
-                    "invalidated_reason": "",
-                },
-                "dashboards": {"tester": DASHBOARD_RENDERED.rstrip()},
-            },
+            self.harness.charm.grafana_provider.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": 1,
+                    "charm": "grafana-k8s",
+                    "content": DASHBOARD_RENDERED,
+                }
+            ],
         )
 
     def test_provider_error_on_bad_template(self):
@@ -162,30 +117,21 @@ class TestDashboardProvider(unittest.TestCase):
         rels = self.setup_charm_relations()
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
-        bad_data = copy.deepcopy(SOURCE_DATA)  # type: Dict[str, Any]
-        bad_data["templates"]["tester"] = "JUNK! {{{novar}}}"
-
-        self.harness.update_relation_data(
-            rels[0],
-            "consumer",
-            {"dashboards": json.dumps(bad_data)},
-        )
-
-        data = json.loads(
-            self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
-        )
-        self.assertEqual(data["valid"], False)
-        self.assertIn("Cannot add Grafana dashboard. Template is not valid Jinja", data["errors"])
-
-    def test_provider_error_on_invalidation(self):
-        self.assertEqual(len(self.harness.charm.grafana_provider._stored.dashboards), 0)
-        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
-        rels = self.setup_charm_relations()
-        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
-
-        bad_data = copy.deepcopy(SOURCE_DATA)
-        bad_data["invalidated"] = True
-        bad_data["invalidated_reason"] = "Doesn't matter"
+        bad_data = {
+            "templates": {
+                "file:tester": {
+                    "charm": "grafana-k8s",
+                    "content": "{{ unclosed variable",
+                    "juju_topology": {
+                        "model": MODEL_INFO["name"],
+                        "model_uuid": MODEL_INFO["uuid"],
+                        "application": "consumer-tester",
+                        "unit": "consumer-tester/0",
+                    },
+                }
+            },
+            "uuid": "12345678",
+        }
 
         self.harness.update_relation_data(
             rels[0],
@@ -198,26 +144,12 @@ class TestDashboardProvider(unittest.TestCase):
         data = json.loads(
             self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
         )
-        self.assertEqual(data["valid"], False)
-        self.assertIn("Doesn't matter", data["errors"])
-
-    def test_provider_error_on_no_sources(self):
-        self.assertEqual(len(self.harness.charm.grafana_provider._stored.dashboards), 0)
-        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
-        rels = self.setup_charm_relations()
-        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
-        self.harness.charm.grafana_provider._stored.active_sources = []
-
-        self.harness.update_relation_data(
-            rels[0],
-            "consumer",
-            {
-                "dashboards": json.dumps(SOURCE_DATA),
-            },
+        self.assertEqual(
+            data["errors"],
+            [
+                {
+                    "dashboard_id": "file:tester",
+                    "error": "expected token 'end of print statement', got 'variable'",
+                }
+            ],
         )
-
-        data = json.loads(
-            self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
-        )
-        self.assertEqual(data["valid"], False)
-        self.assertIn("No configured datasources", data["errors"])

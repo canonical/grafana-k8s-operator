@@ -1,11 +1,10 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import base64
+import copy
 import json
 import unittest
 import uuid
-import zlib
 from unittest.mock import patch
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
@@ -17,18 +16,37 @@ if "unittest.util" in __import__("sys").modules:
     # Show full diff in self.assertEqual.
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
 
-DASHBOARD_TMPL = {"first": "test_first\n", "other": "test_second\n"}
+RELATION_TEMPLATES_DATA = {
+    "file:first": {
+        "charm": "consumer-tester",
+        "content": "eNorSS0uiU/LLCou4QIAG8EEUg==",
+        "juju_topology": {
+            "model": "testing",
+            "model_uuid": "abcdefgh-1234",
+            "application": "consumer-tester",
+            "unit": "consumer-tester/0",
+        },
+    },
+    "file:other": {
+        "charm": "consumer-tester",
+        "content": "eNorSS0uiS9OTc7PS+ECACCnBKY=",
+        "juju_topology": {
+            "model": "testing",
+            "model_uuid": "abcdefgh-1234",
+            "application": "consumer-tester",
+            "unit": "consumer-tester/0",
+        },
+    },
+}
 
 
 CONSUMER_META = """
 name: consumer-tester
 containers:
   grafana-tester:
-requires:
+provides:
   grafana-dashboard:
     interface: grafana_dashboard
-  monitoring:
-    interface: monitoring
 """
 
 
@@ -37,10 +55,7 @@ class ConsumerCharm(CharmBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
-        self.consumer = GrafanaDashboardConsumer(
-            self, "grafana-dashboard", event_relation="monitoring"
-        )
-        self.consumer._DASHBOARDS_PATH = "./tests/dashboard_templates"
+        self.consumer = GrafanaDashboardConsumer(self)
 
         self._stored.set_default(valid_events=0)  # available data sources
         self._stored.set_default(invalid_events=0)
@@ -57,112 +72,92 @@ class ConsumerCharm(CharmBase):
             self._stored.invalid_events += 1
 
 
-@patch.object(zlib, "compress", new=lambda x, *args, **kwargs: x)
-@patch.object(zlib, "decompress", new=lambda x, *args, **kwargs: x)
-@patch.object(uuid, "uuid4", new=lambda: "12345678")
-@patch.object(base64, "b64encode", new=lambda x: x)
-@patch.object(base64, "b64decode", new=lambda x: x)
 class TestDashboardConsumer(unittest.TestCase):
+    @patch(
+        "charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path",
+        new=lambda x, *args, **kwargs: "./tests/dashboard_templates",
+    )
+    @patch.object(uuid, "uuid4", new=lambda: "12345678")
     def setUp(self):
         self.harness = Harness(ConsumerCharm, meta=CONSUMER_META)
         self.harness._backend.model_name = "testing"
         self.harness._backend.model_uuid = "abcdefgh-1234"
         self.addCleanup(self.harness.cleanup)
-        self.harness.set_leader(True)
         self.harness.begin()
+        self.harness.set_leader(True)
 
-    def test_consumer_does_sets_dashboard_without_monitoring(self):
-        rel_id = self.harness.add_relation("grafana-dashboard", "consumer")
-        self.harness.add_relation_unit(rel_id, "consumer/0")
-        self.assertEqual(self.harness.charm._stored.invalid_events, 0)
-
+    @patch.object(uuid, "uuid4", new=lambda: "12345678")
     def test_consumer_sets_dashboard_data(self):
-        mon_rel_id = self.harness.add_relation("monitoring", "consumer")
-        self.harness.add_relation_unit(mon_rel_id, "monitoring/0")
-        rel_id = self.harness.add_relation("grafana-dashboard", "consumer")
-        self.harness.add_relation_unit(rel_id, "consumer/0")
+        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
+        self.harness.add_relation_unit(rel_id, "other_app/0")
         data = json.loads(
             self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
-        return_data = {
-            "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
-            "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
-            "templates": DASHBOARD_TMPL,
-            "removed": False,
-            "invalidated": False,
-            "invalidated_reason": "",
-            "uuid": "12345678",
-        }
-        self.maxDiff = None
-        self.assertEqual(return_data, data)
 
-    def test_consumer_can_remove_dashboard(self):
-        mon_rel_id = self.harness.add_relation("monitoring", "consumer")
-        self.harness.add_relation_unit(mon_rel_id, "monitoring/0")
-        rel_id = self.harness.add_relation("grafana-dashboard", "consumer")
-        self.harness.add_relation_unit(rel_id, "consumer/0")
-        data = json.loads(
+        self.assertDictEqual(
+            {
+                "templates": RELATION_TEMPLATES_DATA,
+                "uuid": "12345678",
+            },
+            data,
+        )
+
+    @patch.object(uuid, "uuid4", new=lambda: "12345678")
+    def test_consumer_can_remove_programmatically_added_dashboards(self):
+        self.harness.charm.consumer.add_dashboard("third")
+
+        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
+        self.harness.add_relation_unit(rel_id, "other_app/0")
+        actual_data = json.loads(
             self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
-        return_data = {
-            "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
-            "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
-            "templates": DASHBOARD_TMPL,
-            "removed": False,
-            "invalidated": False,
-            "invalidated_reason": "",
-            "uuid": "12345678",
-        }
-        self.assertEqual(return_data, data)
-        self.harness.charm.consumer.remove_dashboard()
-        return_data = {
-            "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
-            "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
-            "templates": DASHBOARD_TMPL,
-            "removed": True,
-            "invalidated": False,
-            "invalidated_reason": "",
+
+        expected_data_builtin_dashboards = {
+            "templates": copy.deepcopy(RELATION_TEMPLATES_DATA),
             "uuid": "12345678",
         }
 
-    def test_consumer_resends_dashboard_after_monitoring_established(self):
-        rel_id = self.harness.add_relation("grafana-dashboard", "consumer")
-        self.harness.add_relation_unit(rel_id, "consumer/0")
+        expected_data = copy.deepcopy(expected_data_builtin_dashboards)
+        expected_templates = expected_data["templates"]
+        expected_templates["prog:eNorycg"] = {  # type: ignore
+            "charm": "consumer-tester",
+            "content": "eNorycgsSgEABmwCHA==",
+            "juju_topology": {
+                "model": "testing",
+                "model_uuid": "abcdefgh-1234",
+                "application": "consumer-tester",
+                "unit": "consumer-tester/0",
+            },
+        }
 
-        mon_rel_id = self.harness.add_relation("monitoring", "consumer")
-        self.harness.add_relation_unit(mon_rel_id, "monitoring/0")
-        data = json.loads(
+        self.assertDictEqual(expected_data, actual_data)
+        self.harness.charm.consumer.remove_non_builtin_dashboards()
+        self.assertEqual(
+            expected_data_builtin_dashboards,
+            json.loads(
+                self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+            ),
+        )
+
+    @patch.object(uuid, "uuid4", new=lambda: "12345678")
+    def test_consumer_cannot_remove_builtin_dashboards(self):
+        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
+        self.harness.add_relation_unit(rel_id, "other_app/0")
+        actual_data = json.loads(
             self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
-        return_data = {
-            "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
-            "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
-            "templates": DASHBOARD_TMPL,
-            "removed": False,
-            "invalidated": False,
-            "invalidated_reason": "",
+
+        expected_data = {
+            "templates": RELATION_TEMPLATES_DATA,
             "uuid": "12345678",
         }
-        self.assertEqual(return_data, data)
 
-    def test_consumer_resends_dashboard_after_monitoring_established_with_multiple_sources(self):
-        rel_id = self.harness.add_relation("grafana-dashboard", "consumer")
-        self.harness.add_relation_unit(rel_id, "consumer/0")
+        self.assertDictEqual(expected_data, actual_data)
 
-        mon_rel_id_1 = self.harness.add_relation("monitoring", "consumer")
-        mon_rel_id_2 = self.harness.add_relation("monitoring", "consumer2")
-        self.harness.add_relation_unit(mon_rel_id_1, "monitoring-test/0")
-        self.harness.add_relation_unit(mon_rel_id_2, "monitoring-test2/0")
-        data = json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        self.harness.charm.consumer.remove_non_builtin_dashboards()
+        self.assertEqual(
+            expected_data,
+            json.loads(
+                self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+            ),
         )
-        return_data = {
-            "monitoring_target": "Consumer-tester [ testing / abcdefgh-1234 ]",
-            "monitoring_query": "juju_model='testing',juju_model_uuid='abcdefgh-1234',juju_application='consumer-tester'",
-            "templates": DASHBOARD_TMPL,
-            "removed": False,
-            "invalidated": False,
-            "invalidated_reason": "",
-            "uuid": "12345678",
-        }
-        self.assertEqual(return_data, data)

@@ -7,8 +7,23 @@ import json
 import logging
 from typing import Dict, List, Optional
 
-from ops.charm import CharmBase, CharmEvents, RelationDepartedEvent, RelationJoinedEvent
-from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
+from ops.charm import (
+    CharmBase,
+    CharmEvents,
+    RelationDepartedEvent,
+    RelationJoinedEvent,
+    RelationMeta,
+    RelationRole,
+)
+from ops.framework import (
+    EventBase,
+    EventSource,
+    Object,
+    ObjectEvents,
+    StoredDict,
+    StoredList,
+    StoredState,
+)
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
@@ -22,6 +37,118 @@ LIBAPI = 0
 LIBPATCH = 1
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_RELATION_NAME = "grafana-source"
+RELATION_INTERFACE_NAME = "grafana_datasource"
+
+
+def _type_convert_stored(obj):
+    """Convert Stored* to their appropriate types, recursively."""
+    if isinstance(obj, StoredList):
+        return list(map(_type_convert_stored, obj))
+    elif isinstance(obj, StoredDict):
+        rdict = {}
+        for k in obj.keys():
+            rdict[k] = _type_convert_stored(obj[k])
+        return rdict
+    else:
+        return obj
+
+
+class RelationNotFoundError(Exception):
+    """Raised if there is no relation with the given name."""
+
+    def __init__(self, relation_name: str):
+        self._relation_name = relation_name
+        self.message = f"No relation named '{relation_name}' found"
+
+        super().__init__(self.message)
+
+
+class RelationInterfaceMismatchError(Exception):
+    """Raised if the relation with the given name has a different interface."""
+
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_interface: str,
+        actual_relation_interface: str,
+    ):
+        self._relation_name = relation_name
+        self.expected_relation_interface = expected_relation_interface
+        self.actual_relation_interface = actual_relation_interface
+        self.message = (
+            f"The '{relation_name}' relation has '{actual_relation_interface}' as "
+            f"interface rather than the expected '{expected_relation_interface}'"
+        )
+
+        super().__init__(self.message)
+
+
+class RelationRoleMismatchError(Exception):
+    """Raised if the relation with the given name has a different direction."""
+
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_role: RelationRole,
+        actual_relation_role: RelationRole,
+    ):
+        self._relation_name = relation_name
+        self.expected_relation_interface = expected_relation_role
+        self.actual_relation_role = actual_relation_role
+        self.message = (
+            f"The '{relation_name}' relation has role '{repr(actual_relation_role)}' "
+            f"rather than the expected '{repr(expected_relation_role)}'"
+        )
+
+        super().__init__(self.message)
+
+
+def _validate_relation_by_interface_and_direction(
+    charm: CharmBase,
+    relation_name: str,
+    expected_relation_interface: str,
+    expected_relation_role: RelationRole,
+) -> None:
+    """Verifies that a relation has the necessary characteristics.
+
+    Verifies that the `relation_name` provided: (1) exists in metadata.yaml,
+    (2) declares as interface the interface name passed as `relation_interface`
+    and (3) has the right "direction", i.e., it is a relation that `charm`
+    provides or requires.
+
+    Args:
+        charm: a `CharmBase` object to scan for the matching relation.
+        relation_name: the name of the relation to be verified.
+        expected_relation_interface: the interface name to be matched by the
+            relation named `relation_name`.
+        expected_relation_role: whether the `relation_name` must be either
+            provided or required by `charm`.
+    """
+    if relation_name not in charm.meta.relations:
+        raise RelationNotFoundError(relation_name)
+
+    relation: RelationMeta = charm.meta.relations[relation_name]
+
+    actual_relation_interface = relation.interface_name
+    if actual_relation_interface != expected_relation_interface:
+        raise RelationInterfaceMismatchError(
+            relation_name, expected_relation_interface, actual_relation_interface
+        )
+
+    if expected_relation_role == RelationRole.provides:
+        if relation_name not in charm.meta.provides:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.provides, RelationRole.requires
+            )
+    elif expected_relation_role == RelationRole.requires:
+        if relation_name not in charm.meta.requires:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.requires, RelationRole.provides
+            )
+    else:
+        raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
 
 
 class SourceFieldsMissingError(Exception):
@@ -66,8 +193,8 @@ class GrafanaSourceConsumer(Object):
     def __init__(
         self,
         charm: CharmBase,
-        name: str,
         refresh_event: CharmEvents,
+        relation_name: str = DEFAULT_RELATION_NAME,
         source_type: Optional[str] = "prometheus",
         source_port: Optional[str] = "9090",
     ) -> None:
@@ -81,9 +208,7 @@ class GrafanaSourceConsumer(Object):
         by instantiating a :class:`GrafanaSourceConsumer` object and
         adding its datasources as follows:
 
-            self.grafana = GrafanaSourceConsumer(
-                self, "grafana-datasource", {"grafana_datasource"}: ">=2.0"}
-            )
+            self.grafana = GrafanaSourceConsumer(self)
             self.grafana.add_source(
                 address=<address>,
                 port=<port>
@@ -93,8 +218,11 @@ class GrafanaSourceConsumer(Object):
             charm: a :class:`CharmBase` object which manages this
                 :class:`GrafanaSourceConsumer` object. Generally this is
                 `self` in the instantiating class.
-            name: a :string: name of the relation between `charm`
-                the Grafana charmed service.
+            relation_name: string name of the relation that is provides the
+                Grafana source service. It is strongly advised not to change
+                the default, so that people deploying your charm will have a
+                consistent experience with all other charms that provide
+                Grafana datasources.
             refresh_event: a :class:`CharmEvents` event on which the IP
                 address should be refreshed in case of pod or
                 machine/VM restart.
@@ -103,10 +231,14 @@ class GrafanaSourceConsumer(Object):
             source_port: an optional (default `9090`) source port
                 required for Grafana configuration
         """
-        super().__init__(charm, name)
-        self.charm = charm
-        self.name = name
-        events = self.charm.on[name]
+        _validate_relation_by_interface_and_direction(
+            charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
+        )
+
+        super().__init__(charm, relation_name)
+        self._charm = charm
+        self._relation_name = relation_name
+        events = self._charm.on[relation_name]
 
         self._source_type = source_type
         self._source_port = source_port
@@ -118,11 +250,11 @@ class GrafanaSourceConsumer(Object):
         """Inform the provider about the source configuration."""
         self._set_unit_ip(event)
 
-        if not self.charm.unit.is_leader():
+        if not self._charm.unit.is_leader():
             return
 
         logger.debug("Setting Grafana data sources: %s", self._scrape_data)
-        event.relation.data[self.charm.app]["grafana_source_data"] = json.dumps(self._scrape_data)
+        event.relation.data[self._charm.app]["grafana_source_data"] = json.dumps(self._scrape_data)
 
     @property
     def _scrape_data(self) -> Dict:
@@ -132,9 +264,9 @@ class GrafanaSourceConsumer(Object):
             Source configuration data for Grafana.
         """
         data = {
-            "model": str(self.charm.model.name),
-            "model_uuid": str(self.charm.model.uuid),
-            "application": str(self.charm.model.app.name),
+            "model": str(self._charm.model.name),
+            "model_uuid": str(self._charm.model.uuid),
+            "application": str(self._charm.model.app.name),
             "type": self._source_type,
         }
         return data
@@ -145,9 +277,9 @@ class GrafanaSourceConsumer(Object):
         Each time a consumer charm container is restarted it updates its own host address in the
         unit relation data for the Prometheus provider.
         """
-        for relation in self.charm.model.relations[self.name]:
-            relation.data[self.charm.unit]["grafana_source_host"] = "{}:{}".format(
-                str(self.charm.model.get_binding(relation).network.bind_address),
+        for relation in self._charm.model.relations[self._relation_name]:
+            relation.data[self._charm.unit]["grafana_source_host"] = "{}:{}".format(
+                str(self._charm.model.get_binding(relation).network.bind_address),
                 self._source_port,
             )
 
@@ -158,19 +290,26 @@ class GrafanaSourceProvider(Object):
     on = GrafanaSourceEvents()
     _stored = StoredState()
 
-    def __init__(self, charm: CharmBase, name: str) -> None:
+    def __init__(self, charm: CharmBase, relation_name: str = DEFAULT_RELATION_NAME) -> None:
         """A Grafana based Monitoring service consumer.
 
         Args:
             charm: a :class:`CharmBase` instance that manages this
                 instance of the Grafana source service.
-            name: string name of the relation that is provides the
-                Grafana source service.
+            relation_name: string name of the relation that is provides the
+                Grafana source service. It is strongly advised not to change
+                the default, so that people deploying your charm will have a
+                consistent experience with all other charms that provide
+                Grafana datasources.
         """
-        super().__init__(charm, name)
-        self.name = name
-        self.charm = charm
-        events = self.charm.on[name]
+        _validate_relation_by_interface_and_direction(
+            charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
+        )
+
+        super().__init__(charm, relation_name)
+        self._relation_name = relation_name
+        self._charm = charm
+        events = self._charm.on[relation_name]
 
         self._stored.set_default(
             sources=dict(),
@@ -193,12 +332,12 @@ class GrafanaSourceProvider(Object):
         The Grafana charm can then respond to the event to update its
         configuration.
         """
-        if not self.charm.unit.is_leader():
+        if not self._charm.unit.is_leader():
             return
 
         sources = {}
 
-        for rel in self.charm.model.relations[self.name]:
+        for rel in self._charm.model.relations[self._relation_name]:
             source = self._get_source_config(rel)
             if source:
                 sources[rel.id] = source
@@ -263,7 +402,7 @@ class GrafanaSourceProvider(Object):
         added to a list of sources to remove, and other consumers
         are informed through a :class:`GrafanaSourcesChanged` event.
         """
-        if not self.charm.unit.is_leader():
+        if not self._charm.unit.is_leader():
             return
 
         self._remove_source_from_datastore(event)
@@ -302,23 +441,11 @@ class GrafanaSourceProvider(Object):
         """Returns an array of sources the source_provider knows about."""
         sources = []
         for source in self._stored.sources.values():
-            sources.extend([host for host in source])
+            sources.extend([host for host in _type_convert_stored(source)])
 
         return sources
-
-    def update_port(self, relation_name: str, port: int) -> None:
-        """Updates the port grafana-k8s is listening on."""
-        if self.charm.unit.is_leader():
-            for relation in self.charm.model.relations[relation_name]:
-                logger.debug("Setting grafana-k8s address data for relation", relation)
-                if str(port) != relation.data[self.charm.app].get("port", None):
-                    relation.data[self.charm.app]["port"] = str(port)
 
     @property
     def sources_to_delete(self) -> List[str]:
         """Returns an array of source names which have been removed."""
-        sources_to_delete = []
-        for source in self._stored.sources_to_delete:
-            sources_to_delete.append(source)
-
-        return sources_to_delete
+        return [_type_convert_stored(source) for source in self._stored.sources_to_delete]
