@@ -12,10 +12,7 @@ Deploy Grafana on its own:
 ```bash
 git clone git@github.com:canonical/grafana-k8s.git
 cd grafana-k8s
-virtualenv -p python3 venv
-source venv/bin/activate
-pip install -r requirements.txt
-charmcraft build
+charmcraft pack
 juju deploy ./grafana-k8s_ubuntu-20.04-amd64.charm --resource grafana-image=ubuntu/grafana:latest
 ```
 
@@ -47,12 +44,16 @@ If HA is not required, there is no need to add a database relation.
 Create and activate a virtualenv,
 and install the development requirements,
 
-    virtualenv -p python3 venv
-    source venv/bin/activate
-    pip install -r requirements-dev.txt
+```sh
+virtualenv -p python3 venv
+source venv/bin/activate
+pip install -r requirements-dev.txt
+```
 
 ## Testing
 
-Just run `run_tests`:
+The tests are run with `tox`; the following `tox` targets are available:
 
-    ./run_tests
+* `lint` runs the linting checks based on [`pflake8`](https://flake8.pycqa.org/en/latest/), [`isort`](https://pypi.org/project/isort/) and [`black`](https://github.com/psf/black), in order; the first to fail interrupts the `tox -e lint` run.
+* `static` runs static checks with [`mypy`](http://mypy-lang.org/).
+* `unit` runs the unit tests.
