@@ -22,6 +22,7 @@ import hashlib
 import logging
 import os
 from io import StringIO
+from typing import Union
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
@@ -154,7 +155,7 @@ class GrafanaCharm(CharmBase):
         """Go into maintenance state if the unit is stopped."""
         self.unit.status = MaintenanceStatus("Application is terminating.")
 
-    def _configure(self, event: CharmEvents) -> None:
+    def _configure(self, event: Union[CharmEvents, None]) -> None:
         """Configure Grafana.
 
         Generate configuration files and check the sums against what is
@@ -232,6 +233,7 @@ class GrafanaCharm(CharmBase):
         Args:
             dashboard_path: str; A file path to the dashboard to provision
         """
+        self._configure(None)
         logger.info("Initializing dashboard provisioning path")
         container = self.unit.get_container(self.name)
 
