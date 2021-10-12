@@ -40,7 +40,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 logger = logging.getLogger(__name__)
 
@@ -377,7 +377,7 @@ class GrafanaDashboardProvider(Object):
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
-                self._upset_dashboards_on_relation(dashboard_relation.id)
+                self._upset_dashboards_on_relation(dashboard_relation)
 
     def remove_non_builtin_dashboards(self) -> None:
         """Remove all dashboards to the relation added via :method:`add_dashboard`."""
@@ -391,13 +391,13 @@ class GrafanaDashboardProvider(Object):
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
-                self._upset_dashboards_on_relation(dashboard_relation.id)
+                self._upset_dashboards_on_relation(dashboard_relation)
 
     def update_dashboards(self) -> None:
         """Trigger the re-evaluation of the data on all relations."""
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
-                self._upset_dashboards_on_relation(dashboard_relation.id)
+                self._upset_dashboards_on_relation(dashboard_relation)
 
     def _update_all_dashboards_from_dir(self, _: HookEvent) -> None:
         """Scans the built-in dashboards and updates relations with changes."""
@@ -421,7 +421,7 @@ class GrafanaDashboardProvider(Object):
 
             if self._charm.unit.is_leader():
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
-                    self._upset_dashboards_on_relation(dashboard_relation.id)
+                    self._upset_dashboards_on_relation(dashboard_relation)
 
     def _on_grafana_dashboard_relation_created(self, event: RelationCreatedEvent) -> None:
         """Watch for a relation being created and automatically send dashboards.
@@ -431,7 +431,7 @@ class GrafanaDashboardProvider(Object):
                 `grafana_dashboaard` relationship is joined
         """
         if self._charm.unit.is_leader():
-            self._upset_dashboards_on_relation(event.relation.id)
+            self._upset_dashboards_on_relation(event.relation)
 
     def _on_grafana_dashboard_relation_changed(self, event: RelationChangedEvent) -> None:
         """Watch for changes so we know if there's an error to signal back to the parent charm.
@@ -440,8 +440,7 @@ class GrafanaDashboardProvider(Object):
             event: The `RelationChangedEvent` that triggered this handler.
         """
         if self._charm.unit.is_leader():
-            rel = self.framework.model.get_relation(self._relation_name, event.relation.id)
-            data = json.loads(rel.data[event.app].get("event", "{}"))
+            data = json.loads(event.relation.data[event.app].get("event", "{}"))
 
             if not data:
                 return
@@ -453,7 +452,7 @@ class GrafanaDashboardProvider(Object):
             else:
                 self.on.dashboard_status_changed.emit(valid=valid, errors=errors)
 
-    def _upset_dashboards_on_relation(self, rel_id: int) -> None:
+    def _upset_dashboards_on_relation(self, relation: Relation) -> None:
         """Update the dashboards in the relation data bucket."""
         # It's completely ridiculous to add a UUID, but if we don't have some
         # pseudo-random value, this never makes it across 'juju set-state'
@@ -461,8 +460,8 @@ class GrafanaDashboardProvider(Object):
             "templates": _type_convert_stored(self._stored.dashboard_templates),
             "uuid": str(uuid.uuid4()),
         }
-        rel = self.framework.model.get_relation(self._relation_name, rel_id)
-        rel.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
+
+        relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
     def _content_to_dashboard_object(self, content: str) -> Dict:
         return {
@@ -608,7 +607,7 @@ class GrafanaDashboardConsumer(Object):
         if not self._charm.unit.is_leader():
             return
 
-        self._remove_all_dashboards_for_relation(event.relation.id)
+        self._remove_all_dashboards_for_relation(event.relation)
 
     def _render_dashboards_and_emit_event(self, relation: Relation) -> None:
         """Validate a given dashboard.
