@@ -348,7 +348,7 @@ class GrafanaCharm(CharmBase):
         ]
         if len(missing_fields) > 0:
             raise SourceFieldsMissingError(
-                "Missing required data fields for database relation: {}".format(missing_fields)
+                f"Missing required data fields for database relation: {missing_fields}"
             )
 
         # add the new database relation data to the datastore
