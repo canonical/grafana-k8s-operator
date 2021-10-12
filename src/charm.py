@@ -170,7 +170,7 @@ class GrafanaCharm(CharmBase):
         if not self.grafana_config_ini_hash == config_ini_hash:
             self.grafana_config_ini_hash = config_ini_hash
             self._update_grafana_config_ini(grafana_config_ini)
-            logger.info("Pushed new grafana-k8s base configuration")
+            logger.info("Updated Grafana's base configuration")
 
             restart = True
 
@@ -180,7 +180,7 @@ class GrafanaCharm(CharmBase):
         if not self.grafana_datasources_hash == datasources_hash:
             self.grafana_datasources_hash = datasources_hash
             self._update_datasource_config(grafana_datasources)
-            logger.info("Pushed new grafana-k8s datasource configuration")
+            logger.info("Updated Grafana's datasource configuration")
 
             restart = True
 
@@ -191,7 +191,7 @@ class GrafanaCharm(CharmBase):
         """Write an updated datasource configuration file to the Pebble container if necessary.
 
         Args:
-            config: A :str: containing the datasource configuraiton
+            config: A :str: containing the datasource configuration
         """
         container = self.unit.get_container(self.name)
 
@@ -207,7 +207,7 @@ class GrafanaCharm(CharmBase):
         """Write an updated Grafana configuration file to the Pebble container if necessary.
 
         Args:
-            config: A :str: containing the datasource configuraiton
+            config: A :str: containing the datasource configuration
         """
         try:
             self.container.push(CONFIG_PATH, config)
@@ -260,9 +260,9 @@ class GrafanaCharm(CharmBase):
     def _on_dashboards_changed(self, event) -> None:
         """Handle dashboard events."""
         container = self.unit.get_container(self.name)
-        dashboard_path = os.path.join(DATASOURCE_PATH, "dashboards")
+        dashboards_dir_path = os.path.join(DATASOURCE_PATH, "dashboards")
 
-        self.init_dashboard_provisioning(dashboard_path)
+        self.init_dashboard_provisioning(dashboards_dir_path)
 
         if not container.can_connect():
             logger.debug("Cannot connect to Pebble yet, deferring event")
@@ -271,7 +271,7 @@ class GrafanaCharm(CharmBase):
 
         dashboards_file_to_be_kept = {}
         try:
-            for dashboard_file in container.list_files(dashboard_path, pattern="juju_*.json"):
+            for dashboard_file in container.list_files(dashboards_dir_path, pattern="juju_*.json"):
                 dashboards_file_to_be_kept[dashboard_file.path] = False
 
             for dashboard in self.dashboard_consumer.dashboards:
@@ -282,10 +282,10 @@ class GrafanaCharm(CharmBase):
                     dashboard["charm"], dashboard_content_digest[0:7]
                 )
 
-                path = os.path.join(dashboard_path, dashboard_filename)
+                path = os.path.join(dashboards_dir_path, dashboard_filename)
                 dashboards_file_to_be_kept[path] = True
 
-                logger.debug("New dashboard created at: %s", path)
+                logger.debug("New dashboard %s", path)
                 container.push(path, dashboard_content_bytes)
 
             for dashboard_file_path, to_be_kept in dashboards_file_to_be_kept.items():
@@ -348,8 +348,7 @@ class GrafanaCharm(CharmBase):
         ]
         if len(missing_fields) > 0:
             raise SourceFieldsMissingError(
-                "Missing required data fields for grafana-k8s database "
-                "relation: {}".format(missing_fields)
+                f"Missing required data fields for database relation: {missing_fields}"
             )
 
         # add the new database relation data to the datastore
