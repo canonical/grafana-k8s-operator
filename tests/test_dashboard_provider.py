@@ -19,7 +19,7 @@ if "unittest.util" in __import__("sys").modules:
 RELATION_TEMPLATES_DATA = {
     "file:first": {
         "charm": "provider-tester",
-        "content": "eNorSS0uiU/LLCou4QIAG8EEUg==",
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAKdGVzdF9maXJzdAoAAIC4BxCQe2GHAAEjC8Ib/QkftvN9AQAAAAAEWVo=",
         "juju_topology": {
             "model": "testing",
             "model_uuid": "abcdefgh-1234",
@@ -29,7 +29,7 @@ RELATION_TEMPLATES_DATA = {
     },
     "file:other": {
         "charm": "provider-tester",
-        "content": "eNorSS0uiS9OTc7PS+ECACCnBKY=",
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9zZWNvbmQKAEby/qNFFKmEAAEkDKYY2NgftvN9AQAAAAAEWVo=",
         "juju_topology": {
             "model": "testing",
             "model_uuid": "abcdefgh-1234",
@@ -117,11 +117,12 @@ class TestDashboardProvider(unittest.TestCase):
             "uuid": "12345678",
         }
 
+        self.maxDiff = None
         expected_data = copy.deepcopy(expected_data_builtin_dashboards)
         expected_templates = expected_data["templates"]
-        expected_templates["prog:eNorycg"] = {  # type: ignore
+        expected_templates["prog:/Td6WFo"] = {  # type: ignore
             "charm": "provider-tester",
-            "content": "eNorycgsSgEABmwCHA==",
+            "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAEdGhpcmQAAAAAtr5hbOrisy0AAR0FuC2Arx+2830BAAAAAARZWg==",
             "juju_topology": {
                 "model": "testing",
                 "model_uuid": "abcdefgh-1234",

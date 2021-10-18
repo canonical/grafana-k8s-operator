@@ -6,9 +6,9 @@
 import base64
 import json
 import logging
+import lzma
 import os
 import uuid
-import zlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -474,7 +474,7 @@ class GrafanaDashboardProvider(Object):
         if isinstance(content, str):
             content = bytes(content, "utf-8")
 
-        return base64.b64encode(zlib.compress(content, 9)).decode("utf-8")
+        return base64.b64encode(lzma.compress(content)).decode("utf-8")
 
     @property
     def _juju_topology(self) -> Dict:
@@ -644,14 +644,14 @@ class GrafanaDashboardConsumer(Object):
         # subprocess, so we have to use b64, annoyingly.
         # Worse, Python3 expects absolutely everything to be a byte, and a plain
         # `base64.b64encode()` is still too large, so we have to go through hoops
-        # of encoding to byte, compressing with zlib, converting to base64 so it
+        # of encoding to byte, compressing with lzma, converting to base64 so it
         # can be converted to JSON, then all the way back.
 
         rendered_dashboards = []
         relation_has_invalid_dashboards = False
 
         for _, (fname, template) in enumerate(templates.items()):
-            deencoded_content = zlib.decompress(
+            deencoded_content = lzma.decompress(
                 base64.b64decode(template["content"].encode("utf-8"))
             ).decode()
 

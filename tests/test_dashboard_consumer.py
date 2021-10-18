@@ -3,9 +3,9 @@
 
 import base64
 import json
+import lzma
 import unittest
 import uuid
-import zlib
 from unittest.mock import patch
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
@@ -56,8 +56,8 @@ class ConsumerCharm(CharmBase):
         return "2.0.0"
 
 
-@patch.object(zlib, "compress", new=lambda x, *args, **kwargs: x)
-@patch.object(zlib, "decompress", new=lambda x, *args, **kwargs: x)
+@patch.object(lzma, "compress", new=lambda x, *args, **kwargs: x)
+@patch.object(lzma, "decompress", new=lambda x, *args, **kwargs: x)
 @patch.object(uuid, "uuid4", new=lambda: "12345678")
 @patch.object(base64, "b64encode", new=lambda x: x)
 @patch.object(base64, "b64decode", new=lambda x: x)
