@@ -142,7 +142,7 @@ class TestCharm(unittest.TestCase):
         config = push.call_args[0]
         self.assertEqual(datasource_config(config).get("datasources"), BASIC_DATASOURCES)
 
-        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)
+        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore[arg-type]
         self.harness.charm.on["grafana-source"].relation_departed.emit(rel)
 
         config = push.call_args[0]

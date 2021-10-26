@@ -244,12 +244,12 @@ class GrafanaSourceProvider(Object):
         self._source_type = source_type
         self._source_port = source_port
 
-        self.framework.observe(events.relation_joined, self._set_sources)
-        self.framework.observe(refresh_event, self._set_unit_ip)
+        self.framework.observe(events.relation_joined, self._set_sources)  # type: ignore[arg-type]
+        self.framework.observe(refresh_event, self._set_unit_ip)  # type: ignore[arg-type]
 
     def _set_sources(self, event: RelationJoinedEvent):
         """Inform the consumer about the source configuration."""
-        self._set_unit_ip(event)
+        self._set_unit_ip(event)  # type: ignore[arg-type]
 
         if not self._charm.unit.is_leader():
             return
@@ -316,8 +316,8 @@ class GrafanaSourceConsumer(Object):
             sources_to_delete=set(),
         )
 
-        self.framework.observe(events.relation_changed, self._on_grafana_source_relation_changed)
-        self.framework.observe(events.relation_departed, self._on_grafana_source_relation_departed)
+        self.framework.observe(events.relation_changed, self._on_grafana_source_relation_changed)  # type: ignore[arg-type]
+        self.framework.observe(events.relation_departed, self._on_grafana_source_relation_departed)  # type: ignore[arg-type]
 
     def _on_grafana_source_relation_changed(self, event: CharmEvents) -> None:
         """Handle relation changes in related providers.

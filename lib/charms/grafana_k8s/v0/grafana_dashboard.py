@@ -355,17 +355,17 @@ class GrafanaDashboardProvider(Object):
         self._dashboards_path = dashboards_path
         self._stored.set_default(dashboard_templates={})
 
-        self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)
-        self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)
+        self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)  # type: ignore[arg-type]
+        self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)  # type: ignore[arg-type]
 
         self.framework.observe(
             self._charm.on[self._relation_name].relation_created,
             self._on_grafana_dashboard_relation_created,
-        )
+        )  # type: ignore[arg-type]
         self.framework.observe(
             self._charm.on[self._relation_name].relation_changed,
             self._on_grafana_dashboard_relation_changed,
-        )
+        )  # type: ignore[arg-type]
 
     def add_dashboard(self, content: str) -> None:
         """Add a dashboard to the relation managed by this :class:`GrafanaDashboardProvider`.
@@ -547,11 +547,11 @@ class GrafanaDashboardConsumer(Object):
         self.framework.observe(
             self._charm.on[self._relation_name].relation_changed,
             self._on_grafana_dashboard_relation_changed,
-        )
+        )  # type: ignore[arg-type]
         self.framework.observe(
             self._charm.on[self._relation_name].relation_broken,
             self._on_grafana_dashboard_relation_broken,
-        )
+        )  # type: ignore[arg-type]
 
     def get_dashboards_from_relation(self, relation_id: int) -> List:
         """Get a list of known dashboards for one instance of the monitored relation.
