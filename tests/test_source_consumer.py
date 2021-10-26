@@ -43,8 +43,8 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.grafana_consumer.on.sources_changed, self.source_events)  # type: ignore[arg-type]
         self.framework.observe(
             self.grafana_consumer.on.sources_to_delete_changed,
-            self.source_delete_events,
-        )  # type: ignore[arg-type]
+            self.source_delete_events,  # type: ignore[arg-type]
+        )
 
     def source_events(self, _):
         self._stored.source_events += 1
@@ -264,7 +264,7 @@ class TestSourceConsumer(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.source_events, 4)
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 2)
 
-        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore[arg-type]
+        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
 
         self.harness.charm.on["grafana-source"].relation_departed.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 1)
@@ -274,7 +274,7 @@ class TestSourceConsumer(unittest.TestCase):
         self.harness.set_leader(False)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
 
-        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore[arg-type]
+        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
 
         self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 0)
@@ -284,7 +284,7 @@ class TestSourceConsumer(unittest.TestCase):
         self.harness.set_leader(False)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
 
-        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore[arg-type]
+        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
 
         self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 0)

@@ -62,8 +62,8 @@ class ProviderCharm(CharmBase):
 
         self.framework.observe(
             self.provider.on.dashboard_status_changed,
-            self._on_dashboard_status_changed,
-        )  # type: ignore[arg-type]
+            self._on_dashboard_status_changed,  # type: ignore[arg-type]
+        )
 
     def _on_dashboard_status_changed(self, event):
         if event.valid:
