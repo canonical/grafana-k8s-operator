@@ -538,8 +538,10 @@ class GrafanaCharm(CharmBase):
 
     def _on_get_admin_password(self, event: ActionEvent) -> None:
         """Returns the password for the admin user as an action response."""
-        logger.info(self._get_admin_password())
-        event.set_results({"admin-password": self._get_admin_password()})
+        if self.grafana_service.password_has_been_changed:
+            event.set_results({"admin-password": "Admin password has been changed by an administrator"})
+        else:
+            event.set_results({"admin-password": self._get_admin_password()})
 
     def _get_admin_password(self) -> str:
         """Returns the password for the admin user."""

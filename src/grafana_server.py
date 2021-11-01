@@ -44,6 +44,23 @@ class Grafana:
         return True if self.build_info.get("database", None) == "ok" else False
 
     @property
+    def password_has_been_changed(self, username: str, passwd: str) -> bool:
+        """Checks whether the admin password has been changed from default generated.
+
+        Returns:
+            :bool: indicating whether the password was changed.
+        """
+        api_path = "/api/org"
+        url = "http://{}:{}/{}".format(self.host, self.port, api_path)
+        headers = urllib3.make_headers(basic_auth="{}:{}".format(username, passwd))
+
+        try:
+            self.http.request("GET", url, headers=headers)
+            return True
+        except urllib3.exceptions.HTTPError:
+            return False
+
+    @property
     def build_info(self) -> dict:
         """A convenience method which queries the API to see whether Grafana is really ready.
 
