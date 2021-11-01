@@ -43,7 +43,6 @@ class Grafana:
         """
         return True if self.build_info.get("database", None) == "ok" else False
 
-    @property
     def password_has_been_changed(self, username: str, passwd: str) -> bool:
         """Checks whether the admin password has been changed from default generated.
 
