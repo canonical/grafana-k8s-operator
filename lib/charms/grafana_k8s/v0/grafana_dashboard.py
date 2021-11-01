@@ -6,9 +6,9 @@
 import base64
 import json
 import logging
+import lzma
 import os
 import uuid
-import zlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -40,7 +40,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +200,17 @@ def _validate_relation_by_interface_and_direction(
         raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
 
 
+def _encode_dashboard_content(content: Union[str, bytes]) -> str:
+    if isinstance(content, str):
+        content = bytes(content, "utf-8")
+
+    return base64.b64encode(lzma.compress(content)).decode("utf-8")
+
+
+def _decode_dashboard_content(encoded_content: str) -> str:
+    return lzma.decompress(base64.b64decode(encoded_content.encode("utf-8"))).decode()
+
+
 def _type_convert_stored(obj):
     """Convert Stored* to their appropriate types, recursively."""
     if isinstance(obj, StoredList):
@@ -272,7 +283,7 @@ class GrafanaDashboardProvider(Object):
         self,
         charm: CharmBase,
         relation_name: str = DEFAULT_RELATION_NAME,
-        dashboards_path: str = "grafana_dashboards",
+        dashboards_path: str = "src/grafana_dashboards",
     ) -> None:
         """API to provide Grafana dashboard to a Grafana charmed operator.
 
@@ -344,16 +355,16 @@ class GrafanaDashboardProvider(Object):
         self._dashboards_path = dashboards_path
         self._stored.set_default(dashboard_templates={})
 
-        self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)
-        self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)
+        self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)  # type: ignore[arg-type]
+        self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)  # type: ignore[arg-type]
 
         self.framework.observe(
             self._charm.on[self._relation_name].relation_created,
-            self._on_grafana_dashboard_relation_created,
+            self._on_grafana_dashboard_relation_created,  # type: ignore[arg-type]
         )
         self.framework.observe(
             self._charm.on[self._relation_name].relation_changed,
-            self._on_grafana_dashboard_relation_changed,
+            self._on_grafana_dashboard_relation_changed,  # type: ignore[arg-type]
         )
 
     def add_dashboard(self, content: str) -> None:
@@ -368,7 +379,7 @@ class GrafanaDashboardProvider(Object):
         # that the stored state is there when this unit becomes leader.
         stored_dashboard_templates = self._stored.dashboard_templates
 
-        encoded_dashboard = self._encode_dashboard_content(content)
+        encoded_dashboard = _encode_dashboard_content(content)
 
         # Use as id the first chars of the encoded dashboard, so that its
         # it is predictable across units.
@@ -416,7 +427,7 @@ class GrafanaDashboardProvider(Object):
             for path in filter(Path.is_file, Path(self._dashboards_path).glob("*.tmpl")):
                 id = f"file:{path.stem}"
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
-                    self._encode_dashboard_content(path.read_bytes())
+                    _encode_dashboard_content(path.read_bytes())
                 )
 
             if self._charm.unit.is_leader():
@@ -469,12 +480,6 @@ class GrafanaDashboardProvider(Object):
             "content": content,
             "juju_topology": self._juju_topology,
         }
-
-    def _encode_dashboard_content(self, content: Union[str, bytes]) -> str:
-        if isinstance(content, str):
-            content = bytes(content, "utf-8")
-
-        return base64.b64encode(zlib.compress(content, 9)).decode("utf-8")
 
     @property
     def _juju_topology(self) -> Dict:
@@ -541,11 +546,11 @@ class GrafanaDashboardConsumer(Object):
 
         self.framework.observe(
             self._charm.on[self._relation_name].relation_changed,
-            self._on_grafana_dashboard_relation_changed,
+            self._on_grafana_dashboard_relation_changed,  # type: ignore[arg-type]
         )
         self.framework.observe(
             self._charm.on[self._relation_name].relation_broken,
-            self._on_grafana_dashboard_relation_broken,
+            self._on_grafana_dashboard_relation_broken,  # type: ignore[arg-type]
         )
 
     def get_dashboards_from_relation(self, relation_id: int) -> List:
@@ -644,33 +649,31 @@ class GrafanaDashboardConsumer(Object):
         # subprocess, so we have to use b64, annoyingly.
         # Worse, Python3 expects absolutely everything to be a byte, and a plain
         # `base64.b64encode()` is still too large, so we have to go through hoops
-        # of encoding to byte, compressing with zlib, converting to base64 so it
+        # of encoding to byte, compressing with lzma, converting to base64 so it
         # can be converted to JSON, then all the way back.
 
         rendered_dashboards = []
         relation_has_invalid_dashboards = False
 
         for _, (fname, template) in enumerate(templates.items()):
-            deencoded_content = zlib.decompress(
-                base64.b64decode(template["content"].encode("utf-8"))
-            ).decode()
+            decoded_content = _decode_dashboard_content(template["content"])
 
             content = None
             error = None
             try:
-                content = Template(deencoded_content).render()
+                content = _encode_dashboard_content(Template(decoded_content).render())
             except TemplateSyntaxError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True
 
-            # Prepend the relation name and ID to the dashboard ID to avoid clashes with multiple
-            # relations with apps from the same charm, or having dashboards with the same ids
-            # inside their charm operators
+            # Prepend the relation name and ID to the dashboard ID to avoid clashes with
+            # multiple relations with apps from the same charm, or having dashboards with
+            # the same ids inside their charm operators
             rendered_dashboards.append(
                 {
                     "id": f"{relation.name}:{relation.id}/{fname}",
                     "original_id": fname,
-                    "content": content,
+                    "content": content if content else None,
                     "template": template,
                     "valid": (error is None),
                     "error": error,
@@ -731,7 +734,7 @@ class GrafanaDashboardConsumer(Object):
             "id": dashboard["original_id"],
             "relation_id": relation_id,
             "charm": dashboard["template"]["charm"],
-            "content": _type_convert_stored(dashboard["content"]),
+            "content": _decode_dashboard_content(dashboard["content"]),
         }
 
     @property
