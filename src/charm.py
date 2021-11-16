@@ -21,6 +21,8 @@ import configparser
 import hashlib
 import logging
 import os
+import secrets
+import string
 from io import StringIO
 
 import yaml
@@ -31,6 +33,7 @@ from charms.grafana_k8s.v0.grafana_source import (
     SourceFieldsMissingError,
 )
 from ops.charm import (
+    ActionEvent,
     CharmBase,
     ConfigChangedEvent,
     RelationBrokenEvent,
@@ -85,7 +88,9 @@ class GrafanaCharm(CharmBase):
         self.grafana_service = Grafana("localhost", PORT)
         self.grafana_config_ini_hash = None
         self.grafana_datasources_hash = None
-        self._stored.set_default(database=dict(), pebble_ready=False, k8s_service_patched=False)
+        self._stored.set_default(
+            database=dict(), pebble_ready=False, k8s_service_patched=False, admin_password=""
+        )
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)  # type: ignore[arg-type]
@@ -93,6 +98,7 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)  # type: ignore[arg-type]
         self.framework.observe(self.on.stop, self._on_stop)  # type: ignore[arg-type]
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)  # type: ignore[arg-type]
+        self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)  # type: ignore[arg-type]
 
         # -- grafana_source relation observations
         self.source_consumer = GrafanaSourceConsumer(self, "grafana-source")
@@ -476,6 +482,7 @@ class GrafanaCharm(CharmBase):
                             "GF_LOG_LEVEL": self.model.config["log_level"],
                             "GF_PATHS_PROVISIONING": DATASOURCE_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
+                            "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
                             **dbinfo,
                         },
                     }
@@ -528,6 +535,31 @@ class GrafanaCharm(CharmBase):
 
         datasources_string = yaml.dump(datasources_dict)
         return datasources_string
+
+    def _on_get_admin_password(self, event: ActionEvent) -> None:
+        """Returns the password for the admin user as an action response."""
+        if self.grafana_service.password_has_been_changed(
+            self.model.config["admin_user"], self._get_admin_password()
+        ):
+            event.set_results(
+                {"admin-password": "Admin password has been changed by an administrator"}
+            )
+        else:
+            event.set_results({"admin-password": self._get_admin_password()})
+
+    def _get_admin_password(self) -> str:
+        """Returns the password for the admin user."""
+        if not self._stored.admin_password:
+            self._stored.admin_password = self._generate_password()
+
+        return self._stored.admin_password
+
+    def _generate_password(self) -> str:
+        """Generates a random 12 character password."""
+        # Really limited by what can be passed into shell commands, since this all goes
+        # through subprocess. So much for complex password
+        chars = string.ascii_letters + string.digits
+        return "".join(secrets.choice(chars) for _ in range(12))
 
 
 if __name__ == "__main__":

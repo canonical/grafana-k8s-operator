@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+import re
 import unittest
 from unittest.mock import patch
 
@@ -175,3 +176,9 @@ class TestCharm(unittest.TestCase):
 
         config = push.call_args[0]
         self.assertEqual(dashboard_config(config), DASHBOARD_CONFIG)
+
+    def can_get_password(self):
+        self.harness.set_leader(True)
+
+        # Harness doesn't quite support actions yet...
+        self.assertTrue(re.match(r"[A-Za-z0-9]{12}", self.harness.charm._get_admin_password()))

@@ -41,6 +41,12 @@ View the dashboard in a browser:
 
 The Grafana dashboard may be accessed on port `3000` on the IP address of the Grafana unit.
 This unit and its IP address can be retrieved using the `juju status` command.
+
+The default password is randomized at first install, and can be retrieved with:
+```bash
+juju run-action grafana-k8s/0 get-admin-password --wait
+```
+
 Additionally, Grafana can be accessed via the Kubernetes service matching the Juju application name in the namespace matching the Juju model's name.
 
 ## High Availability Grafana
