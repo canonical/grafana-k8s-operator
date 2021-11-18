@@ -72,7 +72,7 @@ class TestSourceProvider(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, "provider/0")
         data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         self.assertIn("grafana_source_host", data)
-        self.assertEqual(data["grafana_source_host"], f"{bind_address}:9090")
+        self.assertEqual(data["grafana_source_host"], "{}:9090".format(bind_address))
 
     @patch("ops.testing._TestingModelBackend.network_get")
     def test_provider_unit_sets_bind_address_on_relation_joined(self, mock_net_get):
@@ -90,4 +90,4 @@ class TestSourceProvider(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, "provider/0")
         data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         self.assertIn("grafana_source_host", data)
-        self.assertEqual(data["grafana_source_host"], f"{bind_address}:9090")
+        self.assertEqual(data["grafana_source_host"], "{}:9090".format(bind_address))
