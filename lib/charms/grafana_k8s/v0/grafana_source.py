@@ -413,7 +413,7 @@ class GrafanaSourceConsumer(Object):
         Add the name to the list of sources to remove when a relation is broken.
         """
         rel_id = event.relation.id
-        logger.debug("Removing all data for relation: {}".format(rel_id))
+        logger.debug(f"Removing all data for relation: {rel_id}")
 
         removed_source = self._stored.sources.pop(rel_id, None)
         if removed_source:

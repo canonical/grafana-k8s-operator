@@ -634,7 +634,7 @@ class GrafanaDashboardConsumer(Object):
             )
             return
 
-        data = json.loads(raw_data)
+        data: dict = json.loads(raw_data)
 
         # The only piece of data needed on this side of the relations is "templates"
         templates = data.pop("templates")
