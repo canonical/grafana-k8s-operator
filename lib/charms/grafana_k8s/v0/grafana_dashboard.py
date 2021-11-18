@@ -626,7 +626,9 @@ class GrafanaDashboardConsumer(Object):
         """
         other_app = relation.app
 
-        if not (raw_data := relation.data[other_app].get("dashboards", {})):
+        raw_data = relation.data[other_app].get("dashboards", {})
+
+        if not raw_data:
             logger.warning(
                 "No dashboard data found in the %s:%s relation",
                 self._relation_name,
