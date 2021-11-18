@@ -46,7 +46,7 @@ class ConsumerCharm(CharmBase):
         self._stored.set_default(dashboard_events=0)
 
         self.grafana_consumer = GrafanaDashboardConsumer(self)
-        self.framework.observe(self.grafana_consumer.on.dashboards_changed, self.dashboard_events)  # type: ignore[arg-type]
+        self.framework.observe(self.grafana_consumer.on.dashboards_changed, self.dashboard_events)
 
     def dashboard_events(self, _):
         self._stored.dashboard_events += 1

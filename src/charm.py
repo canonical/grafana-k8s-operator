@@ -93,33 +93,33 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- standard events
-        self.framework.observe(self.on.install, self._on_install)  # type: ignore[arg-type]
-        self.framework.observe(self.on.grafana_pebble_ready, self._on_pebble_ready)  # type: ignore[arg-type]
-        self.framework.observe(self.on.config_changed, self._on_config_changed)  # type: ignore[arg-type]
-        self.framework.observe(self.on.stop, self._on_stop)  # type: ignore[arg-type]
-        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)  # type: ignore[arg-type]
-        self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)  # type: ignore[arg-type]
+        self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.grafana_pebble_ready, self._on_pebble_ready)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.stop, self._on_stop)
+        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
+        self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
 
         # -- grafana_source relation observations
         self.source_consumer = GrafanaSourceConsumer(self, "grafana-source")
         self.framework.observe(
             self.source_consumer.on.sources_changed,
-            self._on_grafana_source_changed,  # type: ignore[arg-type]
+            self._on_grafana_source_changed,
         )
         self.framework.observe(
             self.source_consumer.on.sources_to_delete_changed,
-            self._on_grafana_source_changed,  # type: ignore[arg-type]
+            self._on_grafana_source_changed,
         )
 
         # -- grafana_dashboard relation observations
         self.dashboard_consumer = GrafanaDashboardConsumer(self, "grafana-dashboard")
         self.framework.observe(
-            self.dashboard_consumer.on.dashboards_changed, self._on_dashboards_changed  # type: ignore[arg-type]
+            self.dashboard_consumer.on.dashboards_changed, self._on_dashboards_changed
         )
 
         # -- database relation observations
-        self.framework.observe(self.on["database"].relation_changed, self._on_database_changed)  # type: ignore[arg-type]
-        self.framework.observe(self.on["database"].relation_broken, self._on_database_broken)  # type: ignore[arg-type]
+        self.framework.observe(self.on["database"].relation_changed, self._on_database_changed)
+        self.framework.observe(self.on["database"].relation_broken, self._on_database_broken)
 
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
