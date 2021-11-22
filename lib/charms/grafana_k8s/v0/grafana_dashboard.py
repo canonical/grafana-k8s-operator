@@ -92,7 +92,7 @@ class RelationRoleMismatchError(Exception):
         self.relation_name = relation_name
         self.expected_relation_interface = expected_relation_role
         self.actual_relation_role = actual_relation_role
-        self.message = "The '{}' relation has role '{}' " "rather than the expected '{}'".format(
+        self.message = "The '{}' relation has role '{}' rather than the expected '{}'".format(
             relation_name, repr(actual_relation_role), repr(expected_relation_role)
         )
 
