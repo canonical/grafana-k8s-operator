@@ -55,9 +55,9 @@ class Grafana:
 
         try:
             self.http.request("GET", url, headers=headers)
-            return True
-        except urllib3.exceptions.HTTPError:
             return False
+        except urllib3.exceptions.HTTPError:
+            return True
 
     @property
     def build_info(self) -> dict:

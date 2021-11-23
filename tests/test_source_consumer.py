@@ -40,10 +40,10 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(source_delete_events=0)
 
         self.grafana_consumer = GrafanaSourceConsumer(self, "grafana-source")
-        self.framework.observe(self.grafana_consumer.on.sources_changed, self.source_events)  # type: ignore[arg-type]
+        self.framework.observe(self.grafana_consumer.on.sources_changed, self.source_events)
         self.framework.observe(
             self.grafana_consumer.on.sources_to_delete_changed,
-            self.source_delete_events,  # type: ignore[arg-type]
+            self.source_delete_events,
         )
 
     def source_events(self, _):
