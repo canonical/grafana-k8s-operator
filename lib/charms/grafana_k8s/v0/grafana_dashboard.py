@@ -859,7 +859,6 @@ class GrafanaDashboardAggregator(Object):
             "uuid": str(uuid.uuid4()),
         }
 
-        logger.info("Relations: {}".format(self.model.relations))
         for grafana_relation in self.model.relations[self._grafana_relation]:
             grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
