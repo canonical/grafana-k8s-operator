@@ -18,6 +18,7 @@ from ops.charm import (
     RelationBrokenEvent,
     RelationChangedEvent,
     RelationCreatedEvent,
+    RelationEvent,
     RelationRole,
 )
 from ops.framework import (
@@ -383,7 +384,7 @@ class GrafanaDashboardProvider(Object):
 
         # Use as id the first chars of the encoded dashboard, so that its
         # it is predictable across units.
-        id = "prog:{}".format(encoded_dashboard[0:7])
+        id = f"prog:{encoded_dashboard[-24:-16]}"
         stored_dashboard_templates[id] = self._content_to_dashboard_object(encoded_dashboard)
 
         if self._charm.unit.is_leader():
@@ -731,7 +732,6 @@ class GrafanaDashboardConsumer(Object):
             self.on.dashboards_changed.emit()
 
     def _to_external_object(self, relation_id, dashboard):
-        print(dashboard)
         return {
             "id": dashboard["original_id"],
             "relation_id": relation_id,
@@ -755,3 +755,189 @@ class GrafanaDashboardConsumer(Object):
                 dashboards.append(self._to_external_object(relation_id, dashboard))
 
         return dashboards
+
+
+class GrafanaDashboardAggregator(Object):
+    """API to provide retrieve Grafana dashboards from machine dashboards.
+
+    The :class:`GrafanaDashboardProvider` object provides a way to
+    collate and aggregate Grafana dashboards from reactive/machine charms
+    and transport them into Charmed Operators, using Juju topology.
+
+    For detailed usage instructions, see the documentation for
+    :module:`lma-proxy-operator`self.
+
+    "class"`GrafanaDashboardAggregator` expects to be provided with a
+
+    In its most streamline usage, the :class:`GrafanaDashboardAggregator` is
+    integrated in a charmed operator as follows:
+
+        self.grafana = GrafanaDashboardAggregator(self)
+
+    Args:
+        charm: a :class:`CharmBase` object which manages this
+            :class:`GrafanaProvider` object. Generally this is
+            `self` in the instantiating class.
+        target_relation: a :string: name of a relation managed by this
+            :class:`GrafanaDashboardAggregator`; , which is used to communicate
+            with reactive/machine charms it defaults to "dashboards".
+        grafana_relation: a :string: name of a relation used by this
+            :class:`GrafanaDashboardAggregator`; , which is used to communicate
+            with charmed grafana. It defaults to "downstream-grafana-dashboard"
+    """
+
+    _stored = StoredState()
+    on = GrafanaProviderEvents()
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        target_relation: str = "dashboards",
+        grafana_relation: str = "downstream-grafana-dashboard",
+    ) -> None:
+        super().__init__(charm, grafana_relation)
+        self._stored.set_default(
+            dashboard_templates={},
+            id_mappings={},
+        )
+
+        self._charm = charm
+        self._target_relation = target_relation
+        self._grafana_relation = grafana_relation
+
+        self.framework.observe(
+            self._charm.on[self._target_relation].relation_changed,
+            self.update_dashboards,
+        )
+        self.framework.observe(
+            self._charm.on[self._target_relation].relation_broken,
+            self.remove_dashboards,
+        )
+
+    def update_dashboards(self, event: RelationEvent) -> None:
+        """If we get a dashboard from a reactive charm, parse it out and update."""
+        if self._charm.unit.is_leader():
+            self._upset_dashboards_on_event(event)
+
+    def _upset_dashboards_on_event(self, event: RelationEvent) -> None:
+        """Update the dashboards in the relation data bucket."""
+        dashboards = self._handle_reactive_dashboards(event)
+
+        if not dashboards:
+            logger.warning(
+                "Could not find dashboard data after a relation change for {}".format(event.app)
+            )
+            return
+
+        self._stored.id_mappings[event.app.name] = dashboards
+
+        for id in dashboards.keys():
+            self._stored.dashboard_templates[id] = self._content_to_dashboard_object(
+                dashboards[id], event
+            )
+
+        # It's still ridiculous to add a UUID here, but needed
+        stored_data = {
+            "templates": _type_convert_stored(self._stored.dashboard_templates),
+            "uuid": str(uuid.uuid4()),
+        }
+
+        for grafana_relation in self.model.relations[self._grafana_relation]:
+            logger.warning("Found relation {}".format(grafana_relation))
+            grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
+
+    def remove_dashboards(self, event: RelationBrokenEvent) -> None:
+        """Remove a dashboard if the relation is broken."""
+        app_ids = _type_convert_stored(self._stored.id_mappings[event.app.name])
+
+        del self._stored.id_mappings[event.app.name]
+        for id in app_ids.keys():
+            del self._stored.dashboard_templates[id]
+
+        stored_data = {
+            "templates": _type_convert_stored(self._stored.dashboard_templates),
+            "uuid": str(uuid.uuid4()),
+        }
+
+        logger.info("Relations: {}".format(self.model.relations))
+        for grafana_relation in self.model.relations[self._grafana_relation]:
+            grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
+
+    def _handle_reactive_dashboards(self, event: RelationEvent) -> Dict:
+        """Look for a dashboard in relation data (during a reactive hook) or builtin by name."""
+        templates = []
+        id = ""
+
+        # Reactive data can reliably be pulled out of events. In theory, if we got an event,
+        # it's on the bucket, but using event explicitly keeps the mental model in
+        # place for reactive
+        for k in event.relation.data[event.unit].keys():
+            if k.startswith("request_"):
+                templates.append(json.loads(event.relation.data[event.unit][k])["dashboard"])
+
+        # Try app data if we haven't found it
+        for k in event.relation.data[event.app].keys():
+            if k.startswith("request_"):
+                templates.append(json.loads(event.relation.data[event.unit][k])["dashboard"])
+
+        builtins = self._maybe_builtin_dashboards(event)
+
+        if not templates and not builtins:
+            return {}
+
+        dashboards = {}
+        for t in templates:
+            # This seems ridiculous, too, but to get it from a "dashboards" key in serialized JSON
+            # in the bucket back out to the actual "dashboard" we _need_, this is the way
+            dash = json.dumps(t)
+
+            from jinja2 import Template
+
+            content = _encode_dashboard_content(
+                Template(dash).render(host=event.unit.name, datasource="prometheus")
+            )
+            id = "prog:{}".format(content[-24:-16])
+
+            dashboards[id] = content
+        return {**builtins, **dashboards}
+
+    def _maybe_builtin_dashboards(self, event: RelationEvent) -> Dict:
+        """Scans the built-in dashboards and tries to match one with the event."""
+        builtins = {}
+        dashboards_path = None
+
+        try:
+            dashboards_path = _resolve_dir_against_charm_path(
+                self._charm, "src/grafana_dashboards"
+            )
+        except InvalidDirectoryPathError as e:
+            logger.warning(
+                "Invalid Grafana dashboards folder at %s: %s",
+                e.grafana_dashboards_absolute_path,
+                e.message,
+            )
+
+        if dashboards_path:
+            for path in filter(Path.is_file, Path(dashboards_path).glob("*.tmpl")):
+                if event.app.name in path.name:
+                    id = f"file:{path.stem}"
+                    builtins[id] = self._content_to_dashboard_object(
+                        _encode_dashboard_content(path.read_bytes()), event
+                    )
+
+        return builtins
+
+    def _content_to_dashboard_object(self, content: str, event: RelationEvent) -> Dict:
+        return {
+            "charm": event.app.name,
+            "content": content,
+            "juju_topology": self._juju_topology(event),
+        }
+
+    def _juju_topology(self, event: RelationEvent) -> Dict:
+        return {
+            "model": self._charm.model.name,
+            "model_uuid": self._charm.model.uuid,
+            "application": event.app.name,
+            "unit": event.unit.name,
+        }

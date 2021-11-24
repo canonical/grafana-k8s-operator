@@ -120,7 +120,7 @@ class TestDashboardProvider(unittest.TestCase):
         self.maxDiff = None
         expected_data = copy.deepcopy(expected_data_builtin_dashboards)
         expected_templates = expected_data["templates"]
-        expected_templates["prog:/Td6WFo"] = {  # type: ignore
+        expected_templates["prog:uC2Arx+2"] = {  # type: ignore
             "charm": "provider-tester",
             "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAEdGhpcmQAAAAAtr5hbOrisy0AAR0FuC2Arx+2830BAAAAAARZWg==",
             "juju_topology": {
