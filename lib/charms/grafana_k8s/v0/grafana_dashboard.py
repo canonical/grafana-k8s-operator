@@ -765,11 +765,10 @@ class GrafanaDashboardAggregator(Object):
     and transport them into Charmed Operators, using Juju topology.
 
     For detailed usage instructions, see the documentation for
-    :module:`lma-proxy-operator`self.
+    :module:`lma-proxy-operator`, as this class is intended for use as a
+    single point of intersection rather than use in individual charms.
 
-    "class"`GrafanaDashboardAggregator` expects to be provided with a
-
-    In its most streamline usage, the :class:`GrafanaDashboardAggregator` is
+    In its most streamlined usage, :class:`GrafanaDashboardAggregator` is
     integrated in a charmed operator as follows:
 
         self.grafana = GrafanaDashboardAggregator(self)
@@ -843,7 +842,6 @@ class GrafanaDashboardAggregator(Object):
         }
 
         for grafana_relation in self.model.relations[self._grafana_relation]:
-            logger.warning("Found relation {}".format(grafana_relation))
             grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
     def remove_dashboards(self, event: RelationBrokenEvent) -> None:
