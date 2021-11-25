@@ -989,7 +989,7 @@ class GrafanaDashboardAggregator(Object):
 
         self._stored.id_mappings[event.app.name] = dashboards
 
-        for id in dashboards.keys():
+        for id in dashboards:
             self._stored.dashboard_templates[id] = self._content_to_dashboard_object(
                 dashboards[id], event
             )
@@ -1008,7 +1008,7 @@ class GrafanaDashboardAggregator(Object):
         app_ids = _type_convert_stored(self._stored.id_mappings[event.app.name])
 
         del self._stored.id_mappings[event.app.name]
-        for id in app_ids.keys():
+        for id in app_ids:
             del self._stored.dashboard_templates[id]
 
         stored_data = {
