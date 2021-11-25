@@ -541,7 +541,7 @@ class GrafanaDashboardProvider(Object):
 
         encoded_dashboard = _encode_dashboard_content(content)
 
-        # Use as id the first chars of the encoded dashboard, so that its
+        # Use as id the first chars of the encoded dashboard, so that
         # it is predictable across units.
         id = f"prog:{encoded_dashboard[-24:-16]}"
         stored_dashboard_templates[id] = self._content_to_dashboard_object(encoded_dashboard)
@@ -917,7 +917,7 @@ class GrafanaDashboardConsumer(Object):
 
 
 class GrafanaDashboardAggregator(Object):
-    """API to provide retrieve Grafana dashboards from machine dashboards.
+    """API to retrieve Grafana dashboards from machine dashboards.
 
     The :class:`GrafanaDashboardProvider` object provides a way to
     collate and aggregate Grafana dashboards from reactive/machine charms
@@ -937,10 +937,10 @@ class GrafanaDashboardAggregator(Object):
             :class:`GrafanaProvider` object. Generally this is
             `self` in the instantiating class.
         target_relation: a :string: name of a relation managed by this
-            :class:`GrafanaDashboardAggregator`; , which is used to communicate
+            :class:`GrafanaDashboardAggregator`, which is used to communicate
             with reactive/machine charms it defaults to "dashboards".
         grafana_relation: a :string: name of a relation used by this
-            :class:`GrafanaDashboardAggregator`; , which is used to communicate
+            :class:`GrafanaDashboardAggregator`, which is used to communicate
             with charmed grafana. It defaults to "downstream-grafana-dashboard"
     """
 
@@ -952,7 +952,7 @@ class GrafanaDashboardAggregator(Object):
         charm: CharmBase,
         target_relation: str = "dashboards",
         grafana_relation: str = "downstream-grafana-dashboard",
-    ) -> None:
+    )
         super().__init__(charm, grafana_relation)
         self._stored.set_default(
             dashboard_templates={},
@@ -1105,7 +1105,7 @@ class GrafanaDashboardAggregator(Object):
         if dashboards_path:
             for path in filter(Path.is_file, Path(dashboards_path).glob("*.tmpl")):
                 if event.app.name in path.name:
-                    id = f"file:{path.stem}"
+                    id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
                         _encode_dashboard_content(path.read_bytes()), event
                     )
