@@ -18,7 +18,6 @@ from ops.charm import (
     RelationBrokenEvent,
     RelationChangedEvent,
     RelationCreatedEvent,
-    RelationMeta,
     RelationRole,
 )
 from ops.framework import (
@@ -40,7 +39,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 7
+LIBPATCH = 8
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ class RelationNotFoundError(Exception):
 
     def __init__(self, relation_name: str):
         self.relation_name = relation_name
-        self.message = f"No relation named '{relation_name}' found"
+        self.message = "No relation named '{}' found".format(relation_name)
 
         super().__init__(self.message)
 
@@ -72,8 +71,10 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            f"The '{relation_name}' relation has '{actual_relation_interface}' as "
-            f"interface rather than the expected '{expected_relation_interface}'"
+            "The '{}' relation has '{}' as "
+            "interface rather than the expected '{}'".format(
+                relation_name, actual_relation_interface, expected_relation_interface
+            )
         )
 
         super().__init__(self.message)
@@ -91,9 +92,8 @@ class RelationRoleMismatchError(Exception):
         self.relation_name = relation_name
         self.expected_relation_interface = expected_relation_role
         self.actual_relation_role = actual_relation_role
-        self.message = (
-            f"The '{relation_name}' relation has role '{repr(actual_relation_role)}' "
-            f"rather than the expected '{repr(expected_relation_role)}'"
+        self.message = "The '{}' relation has role '{}' rather than the expected '{}'".format(
+            relation_name, repr(actual_relation_role), repr(expected_relation_role)
         )
 
         super().__init__(self.message)
@@ -124,7 +124,7 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
         InvalidDirectoryPathError if the resolved path does not exist or it is not a directory
 
     """
-    charm_dir = Path(charm.charm_dir)
+    charm_dir = Path(str(charm.charm_dir))
     if not charm_dir.exists() or not charm_dir.is_dir():
         # Operator Framework does not currently expose a robust
         # way to determine the top level charm source directory
@@ -178,7 +178,7 @@ def _validate_relation_by_interface_and_direction(
     if relation_name not in charm.meta.relations:
         raise RelationNotFoundError(relation_name)
 
-    relation: RelationMeta = charm.meta.relations[relation_name]
+    relation = charm.meta.relations[relation_name]
 
     actual_relation_interface = relation.interface_name
     if actual_relation_interface != expected_relation_interface:
@@ -197,7 +197,7 @@ def _validate_relation_by_interface_and_direction(
                 relation_name, RelationRole.requires, RelationRole.provides
             )
     else:
-        raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
+        raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
 
 
 def _encode_dashboard_content(content: Union[str, bytes]) -> str:
@@ -383,7 +383,7 @@ class GrafanaDashboardProvider(Object):
 
         # Use as id the first chars of the encoded dashboard, so that its
         # it is predictable across units.
-        id = f"prog:{encoded_dashboard[0:7]}"
+        id = "prog:{}".format(encoded_dashboard[0:7])
         stored_dashboard_templates[id] = self._content_to_dashboard_object(encoded_dashboard)
 
         if self._charm.unit.is_leader():
@@ -425,7 +425,7 @@ class GrafanaDashboardProvider(Object):
                     del stored_dashboard_templates[dashboard_id]
 
             for path in filter(Path.is_file, Path(self._dashboards_path).glob("*.tmpl")):
-                id = f"file:{path.stem}"
+                id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
                 )
@@ -626,7 +626,9 @@ class GrafanaDashboardConsumer(Object):
         """
         other_app = relation.app
 
-        if not (raw_data := relation.data[other_app].get("dashboards", {})):
+        raw_data = relation.data[other_app].get("dashboards", {})
+
+        if not raw_data:
             logger.warning(
                 "No dashboard data found in the %s:%s relation",
                 self._relation_name,
@@ -641,8 +643,8 @@ class GrafanaDashboardConsumer(Object):
 
         # Import only if a charmed operator uses the consumer, we don't impose these
         # dependencies on the client
-        from jinja2 import Template
-        from jinja2.exceptions import TemplateSyntaxError
+        from jinja2 import Template  # type: ignore
+        from jinja2.exceptions import TemplateSyntaxError  # type: ignore
 
         # The dashboards are WAY too big since this ultimately calls out to Juju to
         # set the relation data, and it overflows the maximum argument length for
@@ -671,7 +673,7 @@ class GrafanaDashboardConsumer(Object):
             # the same ids inside their charm operators
             rendered_dashboards.append(
                 {
-                    "id": f"{relation.name}:{relation.id}/{fname}",
+                    "id": "{}:{}/{}".format(relation.name, relation.id, fname),
                     "original_id": fname,
                     "content": content if content else None,
                     "template": template,

@@ -313,7 +313,7 @@ class GrafanaCharm(CharmBase):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
         if self.unit.is_leader() and not self._stored.k8s_service_patched:
             service_ports = [
-                (f"{self.app.name}", PORT, PORT),
+                (self.app.name, PORT, PORT),
             ]
             try:
                 K8sServicePatch.set_ports(self.app.name, service_ports)
@@ -354,7 +354,7 @@ class GrafanaCharm(CharmBase):
         ]
         if len(missing_fields) > 0:
             raise SourceFieldsMissingError(
-                f"Missing required data fields for database relation: {missing_fields}"
+                "Missing required data fields for database relation: {}".format(missing_fields)
             )
 
         # add the new database relation data to the datastore
