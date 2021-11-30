@@ -952,7 +952,7 @@ class GrafanaDashboardAggregator(Object):
         charm: CharmBase,
         target_relation: str = "dashboards",
         grafana_relation: str = "downstream-grafana-dashboard",
-    )
+    ):
         super().__init__(charm, grafana_relation)
         self._stored.set_default(
             dashboard_templates={},
