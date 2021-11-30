@@ -1019,24 +1019,37 @@ class GrafanaDashboardAggregator(Object):
         for grafana_relation in self.model.relations[self._grafana_relation]:
             grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
-    def _strip_existing_datasources(self, template: dict) -> dict:
+    # Yes, this has a fair amount of branching. It's not that complex, though
+    def _strip_existing_datasources(self, template: dict) -> dict:  # noqa: C901
         """Remove existing reactive charm datasource templating out."""
-        for i in range(len(template["dashboard"]["templating"]["list"])):
-            if "Juju" in template["dashboard"]["templating"]["list"][i]["datasource"]:
-                template["dashboard"]["templating"]["list"][i]["datasource"] = r"${prometheusds}"
-            if template["dashboard"]["templating"]["list"][i]["name"] == "host":
-                template["dashboard"]["templating"]["list"][i] = REACTIVE_CONVERTER
+        dash = template["dashboard"]
+        try:
+            if "list" in dash["templating"]:
+                for i in range(len(dash["templating"]["list"])):
+                    if (
+                        "datasource" in dash["templating"]["list"][i]
+                        and "Juju" in dash["templating"]["list"][i]["datasource"]
+                    ):
+                        dash["templating"]["list"][i]["datasource"] = r"${prometheusds}"
+                    if (
+                        "name" in dash["templating"]["list"][i]
+                        and dash["templating"]["list"][i]["name"] == "host"
+                    ):
+                        dash["templating"]["list"][i] = REACTIVE_CONVERTER
+        except KeyError:
+            logger.debug("No existing templating data in dashboard")
 
-        if "__inputs" in template["dashboard"]:
-            inputs = template["dashboard"]["__inputs"]
-            for i in range(len(template["dashboard"]["__inputs"])):
-                if template["dashboard"]["__inputs"][i]["pluginName"] == "Prometheus":
-                    del inputs[i]
+        if "__inputs" in dash:
+            inputs = dash
+            for i in range(len(dash["__inputs"])):
+                if dash["__inputs"][i]["pluginName"] == "Prometheus":
+                    del inputs["__inputs"][i]
             if inputs:
-                template["dashboard"]["__inputs"] = inputs
+                dash["__inputs"] = inputs["__inputs"]
             else:
-                del template["dashboard"]["__inputs"]
+                del dash["__inputs"]
 
+        template["dashboard"] = dash
         return template
 
     def _handle_reactive_dashboards(self, event: RelationEvent) -> Dict:
