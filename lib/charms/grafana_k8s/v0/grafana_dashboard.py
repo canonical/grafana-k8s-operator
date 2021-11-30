@@ -822,8 +822,8 @@ class GrafanaDashboardConsumer(Object):
             content = None
             error = None
             try:
-                content = _encode_dashboard_content(Template(decoded_content).render())
-                content = _inject_dashboard_dropdowns(content)
+                content = Template(decoded_content).render()
+                content = _encode_dashboard_content(_inject_dashboard_dropdowns(content))
             except TemplateSyntaxError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True
