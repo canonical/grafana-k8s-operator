@@ -641,6 +641,9 @@ class GrafanaDashboardProvider(Object):
             "juju_topology": self._juju_topology,
         }
 
+    # This is not actually used in the dashboards, but is present to provide a secondary
+    # salt to ensure uniqueness in the dict keys in case individual charm units provide
+    # dashboards
     @property
     def _juju_topology(self) -> Dict:
         return {
@@ -1021,7 +1024,24 @@ class GrafanaDashboardAggregator(Object):
 
     # Yes, this has a fair amount of branching. It's not that complex, though
     def _strip_existing_datasources(self, template: dict) -> dict:  # noqa: C901
-        """Remove existing reactive charm datasource templating out."""
+        """Remove existing reactive charm datasource templating out.
+
+        This method iterates through *known* places where reactive charms may set
+        data in contributed dashboards and removes them.
+
+        `dashboard["__inputs"]` is a property sometimes set when exporting dashboards from
+        the Grafana UI. It is not present in earlier Grafana versions, and can be disabled
+        in 5.3.4 and above (optionally). If set, any values present will be substituted on
+        import. Some reactive charms use this for Prometheus. LMA2 uses dropdown selectors
+        for datasources, and leaving this present results in "default" datasource values
+        which are broken.
+
+        Similarly, `dashboard["templating"]["list"][N]["name"] == "host"` can be used to
+        set a `host` variable for use in dashboards which is not meaningful in the context
+        of Juju topology and will yield broken dashboards.
+
+        Further properties may be discovered.
+        """
         dash = template["dashboard"]
         try:
             if "list" in dash["templating"]:
@@ -1132,6 +1152,9 @@ class GrafanaDashboardAggregator(Object):
             "juju_topology": self._juju_topology(event),
         }
 
+    # This is not actually used in the dashboards, but is present to provide a secondary
+    # salt to ensure uniqueness in the dict keys in case individual charm units provide
+    # dashboards
     def _juju_topology(self, event: RelationEvent) -> Dict:
         return {
             "model": self._charm.model.name,
