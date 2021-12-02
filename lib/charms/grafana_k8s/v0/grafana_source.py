@@ -364,13 +364,13 @@ class GrafanaSourceConsumer(Object):
 
             host_data = {
                 "unit": unit_name,
-                "source-name": unique_source_name,
-                "source-type": source_data["type"],
+                "source_name": unique_source_name,
+                "source_type": source_data["type"],
                 "url": "http://{}".format(host_addr),
             }
 
-            if host_data["source-name"] in self._stored.sources_to_delete:
-                self._stored.sources_to_delete.remove(host_data["source-name"])
+            if host_data["source_name"] in self._stored.sources_to_delete:
+                self._stored.sources_to_delete.remove(host_data["source_name"])
 
             data.append(host_data)
         return data
@@ -420,7 +420,7 @@ class GrafanaSourceConsumer(Object):
             if event.unit:
                 # Remove one unit only
                 dead_unit = [s for s in removed_source if s["unit"] == event.unit.name][0]
-                self._remove_source(dead_unit["source-name"])
+                self._remove_source(dead_unit["source_name"])
 
                 # Re-update the list of stored sources
                 self._stored.sources[rel_id] = [
@@ -428,7 +428,7 @@ class GrafanaSourceConsumer(Object):
                 ]
             else:
                 for host in removed_source:
-                    self._remove_source(host["source-name"])
+                    self._remove_source(host["source_name"])
 
             self.on.sources_to_delete_changed.emit()
 

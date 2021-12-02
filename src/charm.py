@@ -522,8 +522,8 @@ class GrafanaCharm(CharmBase):
                 "orgId": "1",
                 "access": "proxy",
                 "isDefault": "false",
-                "name": source_info["source-name"],
-                "type": source_info["source-type"],
+                "name": source_info["source_name"],
+                "type": source_info["source_type"],
                 "url": source_info["url"],
             }
             datasources_dict["datasources"].append(source)  # type: ignore[attr-defined]
