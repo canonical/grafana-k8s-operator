@@ -112,8 +112,8 @@ class TestSourceConsumer(unittest.TestCase):
 
     def validate_sources(self, sources):
         for source in sources:
-            self.assertIn("source-name", source)
-            self.assertIn("source-type", source)
+            self.assertIn("source_name", source)
+            self.assertIn("source_type", source)
             self.assertIn("url", source)
 
     def test_consumer_notifies_on_new_sources(self):
@@ -129,8 +129,8 @@ class TestSourceConsumer(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
         )
         completed_data = {
-            "source-name": "{}_0".format(generate_source_name(SOURCE_DATA)),
-            "source-type": "prometheus",
+            "source_name": "{}_0".format(generate_source_name(SOURCE_DATA)),
+            "source_type": "prometheus",
             "url": "http://1.2.3.4:9090",
             "unit": "prometheus/0",
         }
@@ -181,8 +181,8 @@ class TestSourceConsumer(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
         )
         completed_data = {
-            "source-name": "{}_0".format(generate_source_name(SOURCE_DATA)),
-            "source-type": "prometheus",
+            "source_name": "{}_0".format(generate_source_name(SOURCE_DATA)),
+            "source_type": "prometheus",
             "url": "http://1.2.3.4:9090",
             "unit": "prometheus/0",
         }
@@ -203,8 +203,8 @@ class TestSourceConsumer(unittest.TestCase):
             other_rel_id, "other-source/0", {"grafana_source_host": "2.3.4.5:9090"}
         )
         completed_data = {
-            "source-name": "{}_0".format(generate_source_name(OTHER_SOURCE_DATA)),
-            "source-type": "prometheus",
+            "source_name": "{}_0".format(generate_source_name(OTHER_SOURCE_DATA)),
+            "source_type": "prometheus",
             "url": "http://2.3.4.5:9090",
             "unit": "other-source/0",
         }
@@ -229,8 +229,8 @@ class TestSourceConsumer(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
         )
         completed_data = {
-            "source-name": "{}_0".format(generate_source_name(SOURCE_DATA)),
-            "source-type": "prometheus",
+            "source_name": "{}_0".format(generate_source_name(SOURCE_DATA)),
+            "source_type": "prometheus",
             "url": "http://1.2.3.4:9090",
             "unit": "prometheus/0",
         }
@@ -251,8 +251,8 @@ class TestSourceConsumer(unittest.TestCase):
             other_rel_id, "other-source/0", {"grafana_source_host": "2.3.4.5:9090"}
         )
         completed_data = {
-            "source-name": "{}_0".format(generate_source_name(OTHER_SOURCE_DATA)),
-            "source-type": "prometheus",
+            "source_name": "{}_0".format(generate_source_name(OTHER_SOURCE_DATA)),
+            "source_type": "prometheus",
             "url": "http://2.3.4.5:9090",
             "unit": "other-source/0",
         }
