@@ -16,7 +16,10 @@ def copy_grafana_libraries_into_tester_charm(ops_test: OpsTest) -> None:
         for lib in ["grafana_dashboard.py", "grafana_source.py"]
     ]
     for lib in libs:
-        shutil.copyfile(lib.as_posix(), f"tests/integration/grafana-tester/{lib.as_posix()}")
+        Path("tests/integration/grafana-tester", lib.parent).mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(
+            lib.as_posix(), "tests/integration/grafana-tester/{}".format(lib.as_posix())
+        )
 
 
 @pytest.fixture(scope="module")

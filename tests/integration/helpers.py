@@ -42,7 +42,7 @@ async def unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
         unit address as a string
     """
     status = await ops_test.model.get_status()
-    return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
+    return status["applications"][app_name]["units"]["{}/{}".format(app_name, unit_num)]["address"]
 
 
 async def check_grafana_is_ready(ops_test: OpsTest, app_name: str, unit_num: int) -> bool:
@@ -196,7 +196,7 @@ def oci_image(metadata_file: str, image_name: str) -> str:
 
     image = resources.get(image_name, {})
     if not image:
-        raise ValueError(f"{image_name} image not found")
+        raise ValueError("{} image not found".format(image_name))
 
     upstream_source = image.get("upstream-source", "")
     if not upstream_source:

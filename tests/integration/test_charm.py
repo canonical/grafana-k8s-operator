@@ -91,14 +91,14 @@ async def test_grafana_source_relation_data_with_grafana_tester(
 
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
     initial_datasources = await get_grafana_datasources(ops_test, grafana_app_name, 0)
-    assert initial_datasources == {}
+    assert initial_datasources == []
 
     await ops_test.model.add_relation(
-        f"{grafana_app_name}:grafana-source", f"{tester_app_name}:grafana-source"
+        "{}:grafana-source".format(grafana_app_name), "{}:grafana-source".format(tester_app_name)
     )
     await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
 
-    datasource_suffix = f"{tester_app_name}_0"
+    datasource_suffix = "{}_0".format(tester_app_name)
     datasources_with_relation = await get_grafana_datasources(ops_test, grafana_app_name, 0)
     tester_datasource = get_datasource_for(datasource_suffix, datasources_with_relation)
     assert tester_datasource != {}
@@ -150,7 +150,8 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
     assert initial_dashboards == []
 
     await ops_test.model.add_relation(
-        f"{grafana_app_name}:grafana-dashboard", f"{tester_app_name}:grafana-dashboard"
+        "{}:grafana-dashboard".format(grafana_app_name),
+        "{}:grafana-dashboard".format(tester_app_name),
     )
     await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
 

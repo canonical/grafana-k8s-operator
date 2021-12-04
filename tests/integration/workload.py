@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
-import logging
 from typing import Optional
 
 import aiohttp
 from urllib3 import make_headers
-
-logger = logging.getLogger(__name__)
 
 
 class Grafana:
@@ -28,7 +25,7 @@ class Grafana:
             username: Optional username to connect with, defaults to `admin`
             pw: Optional password to connect with, defaults to `""`
         """
-        self.base_uri = f"http://{host}:{port}"
+        self.base_uri = "http://{}:{}".format(host, port)
         self.headers = make_headers(basic_auth="{}:{}".format(username, pw))
 
     async def is_ready(self) -> bool:
@@ -46,7 +43,8 @@ class Grafana:
         Returns:
           All the settings as a dict
         """
-        uri = f"{self.base_uri}/api/admin/settings"
+        api_path = "api/admin/settings"
+        uri = "{}/{}".format(self.base_uri, api_path)
         async with aiohttp.ClientSession(headers=self.headers) as session:
             async with session.get(uri) as response:
                 result = await response.json()
@@ -59,7 +57,7 @@ class Grafana:
             Empty :dict: if it is not up, otherwise a dict containing basic API health
         """
         api_path = "api/health"
-        uri = f"http://{self.base_uri}/{api_path}"
+        uri = "{}/{}".format(self.base_uri, api_path)
 
         async with aiohttp.ClientSession(headers=self.headers) as session:
             async with session.get(uri) as response:
@@ -72,7 +70,8 @@ class Grafana:
         Returns:
           Configured datasources, if any
         """
-        uri = f"{self.base_uri}/api/datasources"
+        api_path = "api/datasources"
+        uri = "{}/{}".format(self.base_uri, api_path)
         async with aiohttp.ClientSession(headers=self.headers) as session:
             async with session.get(uri) as response:
                 result = await response.json()
@@ -84,9 +83,10 @@ class Grafana:
         Returns:
           Found dashboards, if any
         """
-        uri = f"{self.base_uri}/api/search"
+        api_path = "api/search"
+        uri = "{}/{}".format(self.base_uri, api_path)
         async with aiohttp.ClientSession(headers=self.headers) as session:
-            async with session.get(uri, params={"starred": False}) as response:
+            async with session.get(uri, params={"starred": "false"}) as response:
                 result = await response.json()
                 return result if response.status == 200 else []
 
@@ -96,7 +96,8 @@ class Grafana:
         Returns:
           Found dashboards, if any
         """
-        uri = f"{self.base_uri}/api/search"
+        api_path = "api/search"
+        uri = "{}/{}".format(self.base_uri, api_path)
         async with aiohttp.ClientSession(headers=self.headers) as session:
             async with session.get(uri, params={"query": query_str}) as response:
                 result = await response.json()
@@ -108,7 +109,8 @@ class Grafana:
         Returns:
           A dashboard.
         """
-        uri = f"{self.base_uri}/api/dashboards/uid/{dashboard_uid}"
+        api_path = "api/dashboards/uid/{}".format(dashboard_uid)
+        uri = "{}/{}".format(self.base_uri, api_path)
         async with aiohttp.ClientSession(headers=self.headers) as session:
             async with session.get(uri) as response:
                 result = await response.json()
