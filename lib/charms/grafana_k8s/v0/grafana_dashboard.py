@@ -543,7 +543,7 @@ class GrafanaDashboardProvider(Object):
 
         # Use as id the first chars of the encoded dashboard, so that
         # it is predictable across units.
-        id = f"prog:{encoded_dashboard[-24:-16]}"
+        id = "prog:{}".format(encoded_dashboard[-24:-16])
         stored_dashboard_templates[id] = self._content_to_dashboard_object(encoded_dashboard)
 
         if self._charm.unit.is_leader():
@@ -790,6 +790,7 @@ class GrafanaDashboardConsumer(Object):
         other_app = relation.app
 
         raw_data = relation.data[other_app].get("dashboards", {})
+
         if not raw_data:
             logger.warning(
                 "No dashboard data found in the %s:%s relation",
