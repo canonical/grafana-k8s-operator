@@ -444,7 +444,7 @@ class GrafanaSourceConsumer(Object):
         for rel_id in sources.keys():
             for i in range(len(sources[rel_id])):
                 sources[rel_id][i].update(
-                    {k.replace("-", "_"): v for k, v in sources[rel_id].items()}
+                    {k.replace("-", "_"): v for k, v in sources[rel_id][i].items()}
                 )
 
         self._stored.sources = sources

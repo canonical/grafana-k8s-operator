@@ -152,8 +152,8 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`UpgradeCharmEvent` to signal the upgrade
         """
-        self._configure()
         self.source_consumer.upgrade_keys()
+        self._configure()
         self._on_dashboards_changed(event)
 
     def _on_stop(self, _) -> None:
