@@ -167,7 +167,7 @@ TEMPLATE_DROPDOWNS = [
     },
 ]
 
-REACTIVE_CONVERTER = {
+REACTIVE_CONVERTER = {  # type: ignore
     "allValue": None,
     "datasource": "${prometheusds}",
     "definition": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_application="$juju_application"},host)',
@@ -192,7 +192,7 @@ REACTIVE_CONVERTER = {
     "tagsQuery": "",
     "type": "query",
     "useTags": False,
-}  # type: ignore
+}
 
 
 class RelationNotFoundError(Exception):
