@@ -923,13 +923,20 @@ class GrafanaDashboardConsumer(Object):
 class GrafanaDashboardAggregator(Object):
     """API to retrieve Grafana dashboards from machine dashboards.
 
-    The :class:`GrafanaDashboardProvider` object provides a way to
+    The :class:`GrafanaDashboardAggregator` object provides a way to
     collate and aggregate Grafana dashboards from reactive/machine charms
     and transport them into Charmed Operators, using Juju topology.
 
     For detailed usage instructions, see the documentation for
     :module:`lma-proxy-operator`, as this class is intended for use as a
     single point of intersection rather than use in individual charms.
+
+    Since :class:`GrafanaDashboardAggregator` serves as a bridge between
+    Canonical Observability Stack Charmed Operators and Reactive Charms,
+    deployed in a Reactive Juju model, both a target relation which is
+    used to collect events from Reactive charms and a `grafana_relation`
+    which is used to send the collected data back to the Canonical
+    Observability Stack are required.
 
     In its most streamlined usage, :class:`GrafanaDashboardAggregator` is
     integrated in a charmed operator as follows:
@@ -1073,7 +1080,7 @@ class GrafanaDashboardAggregator(Object):
         template["dashboard"] = dash
         return template
 
-    def _handle_reactive_dashboards(self, event: RelationEvent) -> Dict:
+    def _handle_reactive_dashboards(self, event: RelationEvent) -> Optional[Dict]:
         """Look for a dashboard in relation data (during a reactive hook) or builtin by name."""
         templates = []
         id = ""
@@ -1085,12 +1092,11 @@ class GrafanaDashboardAggregator(Object):
             if k.startswith("request_"):
                 templates.append(json.loads(event.relation.data[event.unit][k])["dashboard"])
 
-        # Try app data if we haven't found it
         for k in event.relation.data[event.app].keys():
             if k.startswith("request_"):
-                templates.append(json.loads(event.relation.data[event.unit][k])["dashboard"])
+                templates.append(json.loads(event.relation.data[event.app][k])["dashboard"])
 
-        builtins = self._maybe_builtin_dashboards(event)
+        builtins = self._maybe_get_builtin_dashboards(event)
 
         if not templates and not builtins:
             return {}
@@ -1103,7 +1109,9 @@ class GrafanaDashboardAggregator(Object):
             # This seems ridiculous, too, but to get it from a "dashboards" key in serialized JSON
             # in the bucket back out to the actual "dashboard" we _need_, this is the way
             # This is not a mistake -- there's a double nesting in reactive charms, and
-            # Grafana won't load it
+            # Grafana won't load it. We have to unbox:
+            # event.relation.data[event.<type>]["request_*"]["dashboard"]["dashboard"],
+            # and the final unboxing is below.
             dash = json.dumps(t["dashboard"])
 
             # Replace the old-style datasource templates
@@ -1120,8 +1128,14 @@ class GrafanaDashboardAggregator(Object):
             dashboards[id] = content
         return {**builtins, **dashboards}
 
-    def _maybe_builtin_dashboards(self, event: RelationEvent) -> Dict:
-        """Scans the built-in dashboards and tries to match one with the event."""
+    def _maybe_get_builtin_dashboards(self, event: RelationEvent) -> Dict:
+        """Tries to match the event with an included dashboard.
+
+        Scans dashboards packed with the charm instantiating this class, and tries to match
+        one with the event. There is no guarantee that any given event will match a builtin,
+        since each charm instantiating this class may include a different set of dashboards,
+        or none.
+        """
         builtins = {}
         dashboards_path = None
 
