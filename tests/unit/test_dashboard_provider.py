@@ -75,7 +75,7 @@ class ProviderCharm(CharmBase):
 class TestDashboardProvider(unittest.TestCase):
     @patch(
         "charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path",
-        new=lambda x, *args, **kwargs: "./tests/dashboard_templates",
+        new=lambda x, *args, **kwargs: "./tests/unit/dashboard_templates",
     )
     @patch.object(uuid, "uuid4", new=lambda: "12345678")
     def setUp(self):

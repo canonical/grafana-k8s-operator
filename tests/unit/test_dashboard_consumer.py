@@ -80,7 +80,8 @@ class ConsumerCharm(CharmBase):
 @patch.object(base64, "b64decode", new=lambda x: x)
 class TestDashboardConsumer(unittest.TestCase):
     def setUp(self):
-        self.harness = Harness(ConsumerCharm)
+        meta = open("metadata.yaml")
+        self.harness = Harness(ConsumerCharm, meta=meta)
         self.harness.set_model_info(name=MODEL_INFO["name"], uuid=MODEL_INFO["uuid"])
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
