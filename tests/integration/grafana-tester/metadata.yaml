@@ -1,0 +1,23 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: grafana-tester
+description: |
+  This charm is nothing more than a dummy which can present itself to Grafana
+  to pass over dashboards and datasources which do nothing.
+summary: |
+  A charm to test the Grafana operator
+platforms:
+  - kubernetes
+containers:
+  grafana-tester:
+    resource: grafana-tester-image
+resources:
+  grafana-tester-image:
+    type: oci-image
+    description: upstream docker image for grafana-tester
+    upstream-source: k8s.gcr.io/pause:3.1
+provides:
+  grafana-source:
+    interface: grafana_datasource
+  grafana-dashboard:
+    interface: grafana_dashboard
