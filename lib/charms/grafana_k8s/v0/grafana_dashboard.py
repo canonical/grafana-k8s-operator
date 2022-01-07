@@ -8,6 +8,7 @@ import json
 import logging
 import lzma
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -18,6 +19,7 @@ from ops.charm import (
     RelationBrokenEvent,
     RelationChangedEvent,
     RelationCreatedEvent,
+    RelationEvent,
     RelationRole,
 )
 from ops.framework import (
@@ -46,6 +48,151 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_RELATION_NAME = "grafana-dashboard"
 RELATION_INTERFACE_NAME = "grafana_dashboard"
+
+TEMPLATE_DROPDOWNS = [
+    {
+        "allValue": None,
+        "datasource": "${prometheusds}",
+        "definition": "label_values(up,juju_model)",
+        "description": None,
+        "error": None,
+        "hide": 0,
+        "includeAll": False,
+        "label": "Juju model",
+        "multi": False,
+        "name": "juju_model",
+        "query": {
+            "query": "label_values(up,juju_model)",
+            "refId": "StandardVariableQuery",
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": False,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": False,
+    },
+    {
+        "allValue": None,
+        "datasource": "${prometheusds}",
+        "definition": 'label_values(up{juju_model="$juju_model"},juju_model_uuid)',
+        "description": None,
+        "error": None,
+        "hide": 0,
+        "includeAll": False,
+        "label": "Juju model uuid",
+        "multi": False,
+        "name": "juju_model_uuid",
+        "query": {
+            "query": 'label_values(up{juju_model="$juju_model"},juju_model_uuid)',
+            "refId": "StandardVariableQuery",
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": False,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": False,
+    },
+    {
+        "allValue": None,
+        "datasource": "${prometheusds}",
+        "definition": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid"},juju_application)',
+        "description": None,
+        "error": None,
+        "hide": 0,
+        "includeAll": False,
+        "label": "Juju application",
+        "multi": False,
+        "name": "juju_application",
+        "query": {
+            "query": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid"},juju_application)',
+            "refId": "StandardVariableQuery",
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": False,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": False,
+    },
+    {
+        "allValue": None,
+        "datasource": "${prometheusds}",
+        "definition": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_application="$juju_application"},juju_unit)',
+        "description": None,
+        "error": None,
+        "hide": 0,
+        "includeAll": False,
+        "label": "Juju unit",
+        "multi": False,
+        "name": "juju_unit",
+        "query": {
+            "query": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_application="$juju_application"},juju_unit)',
+            "refId": "StandardVariableQuery",
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": False,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": False,
+    },
+    {
+        "description": None,
+        "error": None,
+        "hide": 0,
+        "includeAll": False,
+        "label": None,
+        "multi": False,
+        "name": "prometheusds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": False,
+        "type": "datasource",
+    },
+]
+
+REACTIVE_CONVERTER = {  # type: ignore
+    "allValue": None,
+    "datasource": "${prometheusds}",
+    "definition": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_application="$juju_application"},host)',
+    "description": None,
+    "error": None,
+    "hide": 0,
+    "includeAll": False,
+    "label": "hosts",
+    "multi": True,
+    "name": "host",
+    "options": [],
+    "query": {
+        "query": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_application="$juju_application"},host)',
+        "refId": "StandardVariableQuery",
+    },
+    "refresh": 1,
+    "regex": "",
+    "skipUrlSync": False,
+    "sort": 1,
+    "tagValuesQuery": "",
+    "tags": [],
+    "tagsQuery": "",
+    "type": "query",
+    "useTags": False,
+}
 
 
 class RelationNotFoundError(Exception):
@@ -209,6 +356,19 @@ def _encode_dashboard_content(content: Union[str, bytes]) -> str:
 
 def _decode_dashboard_content(encoded_content: str) -> str:
     return lzma.decompress(base64.b64decode(encoded_content.encode("utf-8"))).decode()
+
+
+def _inject_dashboard_dropdowns(content: str) -> str:
+    """Make sure dropdowns are present for Juju topology."""
+    dict_content = json.loads(content)
+    if "templating" not in content:
+        dict_content["templating"] = {"list": [d for d in TEMPLATE_DROPDOWNS]}
+    else:
+        for d in TEMPLATE_DROPDOWNS:
+            if d not in dict_content["templating"]["list"]:
+                dict_content["templating"]["list"].insert(0, d)
+
+    return json.dumps(dict_content)
 
 
 def _type_convert_stored(obj):
@@ -381,9 +541,9 @@ class GrafanaDashboardProvider(Object):
 
         encoded_dashboard = _encode_dashboard_content(content)
 
-        # Use as id the first chars of the encoded dashboard, so that its
+        # Use as id the first chars of the encoded dashboard, so that
         # it is predictable across units.
-        id = "prog:{}".format(encoded_dashboard[0:7])
+        id = "prog:{}".format(encoded_dashboard[-24:-16])
         stored_dashboard_templates[id] = self._content_to_dashboard_object(encoded_dashboard)
 
         if self._charm.unit.is_leader():
@@ -481,6 +641,9 @@ class GrafanaDashboardProvider(Object):
             "juju_topology": self._juju_topology,
         }
 
+    # This is not actually used in the dashboards, but is present to provide a secondary
+    # salt to ensure uniqueness in the dict keys in case individual charm units provide
+    # dashboards
     @property
     def _juju_topology(self) -> Dict:
         return {
@@ -663,7 +826,8 @@ class GrafanaDashboardConsumer(Object):
             content = None
             error = None
             try:
-                content = _encode_dashboard_content(Template(decoded_content).render())
+                content = Template(decoded_content).render()
+                content = _encode_dashboard_content(_inject_dashboard_dropdowns(content))
             except TemplateSyntaxError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True
@@ -731,7 +895,6 @@ class GrafanaDashboardConsumer(Object):
             self.on.dashboards_changed.emit()
 
     def _to_external_object(self, relation_id, dashboard):
-        print(dashboard)
         return {
             "id": dashboard["original_id"],
             "relation_id": relation_id,
@@ -755,3 +918,262 @@ class GrafanaDashboardConsumer(Object):
                 dashboards.append(self._to_external_object(relation_id, dashboard))
 
         return dashboards
+
+
+class GrafanaDashboardAggregator(Object):
+    """API to retrieve Grafana dashboards from machine dashboards.
+
+    The :class:`GrafanaDashboardAggregator` object provides a way to
+    collate and aggregate Grafana dashboards from reactive/machine charms
+    and transport them into Charmed Operators, using Juju topology.
+
+    For detailed usage instructions, see the documentation for
+    :module:`lma-proxy-operator`, as this class is intended for use as a
+    single point of intersection rather than use in individual charms.
+
+    Since :class:`GrafanaDashboardAggregator` serves as a bridge between
+    Canonical Observability Stack Charmed Operators and Reactive Charms,
+    deployed in a Reactive Juju model, both a target relation which is
+    used to collect events from Reactive charms and a `grafana_relation`
+    which is used to send the collected data back to the Canonical
+    Observability Stack are required.
+
+    In its most streamlined usage, :class:`GrafanaDashboardAggregator` is
+    integrated in a charmed operator as follows:
+
+        self.grafana = GrafanaDashboardAggregator(self)
+
+    Args:
+        charm: a :class:`CharmBase` object which manages this
+            :class:`GrafanaProvider` object. Generally this is
+            `self` in the instantiating class.
+        target_relation: a :string: name of a relation managed by this
+            :class:`GrafanaDashboardAggregator`, which is used to communicate
+            with reactive/machine charms it defaults to "dashboards".
+        grafana_relation: a :string: name of a relation used by this
+            :class:`GrafanaDashboardAggregator`, which is used to communicate
+            with charmed grafana. It defaults to "downstream-grafana-dashboard"
+    """
+
+    _stored = StoredState()
+    on = GrafanaProviderEvents()
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        target_relation: str = "dashboards",
+        grafana_relation: str = "downstream-grafana-dashboard",
+    ):
+        super().__init__(charm, grafana_relation)
+        self._stored.set_default(
+            dashboard_templates={},
+            id_mappings={},
+        )
+
+        self._charm = charm
+        self._target_relation = target_relation
+        self._grafana_relation = grafana_relation
+
+        self.framework.observe(
+            self._charm.on[self._target_relation].relation_changed,
+            self.update_dashboards,
+        )
+        self.framework.observe(
+            self._charm.on[self._target_relation].relation_broken,
+            self.remove_dashboards,
+        )
+
+    def update_dashboards(self, event: RelationEvent) -> None:
+        """If we get a dashboard from a reactive charm, parse it out and update."""
+        if self._charm.unit.is_leader():
+            self._upset_dashboards_on_event(event)
+
+    def _upset_dashboards_on_event(self, event: RelationEvent) -> None:
+        """Update the dashboards in the relation data bucket."""
+        dashboards = self._handle_reactive_dashboards(event)
+
+        if not dashboards:
+            logger.warning(
+                "Could not find dashboard data after a relation change for {}".format(event.app)
+            )
+            return
+
+        self._stored.id_mappings[event.app.name] = dashboards
+
+        for id in dashboards:
+            self._stored.dashboard_templates[id] = self._content_to_dashboard_object(
+                dashboards[id], event
+            )
+
+        # It's still ridiculous to add a UUID here, but needed
+        stored_data = {
+            "templates": _type_convert_stored(self._stored.dashboard_templates),
+            "uuid": str(uuid.uuid4()),
+        }
+
+        for grafana_relation in self.model.relations[self._grafana_relation]:
+            grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
+
+    def remove_dashboards(self, event: RelationBrokenEvent) -> None:
+        """Remove a dashboard if the relation is broken."""
+        app_ids = _type_convert_stored(self._stored.id_mappings[event.app.name])
+
+        del self._stored.id_mappings[event.app.name]
+        for id in app_ids:
+            del self._stored.dashboard_templates[id]
+
+        stored_data = {
+            "templates": _type_convert_stored(self._stored.dashboard_templates),
+            "uuid": str(uuid.uuid4()),
+        }
+
+        for grafana_relation in self.model.relations[self._grafana_relation]:
+            grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
+
+    # Yes, this has a fair amount of branching. It's not that complex, though
+    def _strip_existing_datasources(self, template: dict) -> dict:  # noqa: C901
+        """Remove existing reactive charm datasource templating out.
+
+        This method iterates through *known* places where reactive charms may set
+        data in contributed dashboards and removes them.
+
+        `dashboard["__inputs"]` is a property sometimes set when exporting dashboards from
+        the Grafana UI. It is not present in earlier Grafana versions, and can be disabled
+        in 5.3.4 and above (optionally). If set, any values present will be substituted on
+        import. Some reactive charms use this for Prometheus. LMA2 uses dropdown selectors
+        for datasources, and leaving this present results in "default" datasource values
+        which are broken.
+
+        Similarly, `dashboard["templating"]["list"][N]["name"] == "host"` can be used to
+        set a `host` variable for use in dashboards which is not meaningful in the context
+        of Juju topology and will yield broken dashboards.
+
+        Further properties may be discovered.
+        """
+        dash = template["dashboard"]
+        try:
+            if "list" in dash["templating"]:
+                for i in range(len(dash["templating"]["list"])):
+                    if (
+                        "datasource" in dash["templating"]["list"][i]
+                        and "Juju" in dash["templating"]["list"][i]["datasource"]
+                    ):
+                        dash["templating"]["list"][i]["datasource"] = r"${prometheusds}"
+                    if (
+                        "name" in dash["templating"]["list"][i]
+                        and dash["templating"]["list"][i]["name"] == "host"
+                    ):
+                        dash["templating"]["list"][i] = REACTIVE_CONVERTER
+        except KeyError:
+            logger.debug("No existing templating data in dashboard")
+
+        if "__inputs" in dash:
+            inputs = dash
+            for i in range(len(dash["__inputs"])):
+                if dash["__inputs"][i]["pluginName"] == "Prometheus":
+                    del inputs["__inputs"][i]
+            if inputs:
+                dash["__inputs"] = inputs["__inputs"]
+            else:
+                del dash["__inputs"]
+
+        template["dashboard"] = dash
+        return template
+
+    def _handle_reactive_dashboards(self, event: RelationEvent) -> Optional[Dict]:
+        """Look for a dashboard in relation data (during a reactive hook) or builtin by name."""
+        templates = []
+        id = ""
+
+        # Reactive data can reliably be pulled out of events. In theory, if we got an event,
+        # it's on the bucket, but using event explicitly keeps the mental model in
+        # place for reactive
+        for k in event.relation.data[event.unit].keys():
+            if k.startswith("request_"):
+                templates.append(json.loads(event.relation.data[event.unit][k])["dashboard"])
+
+        for k in event.relation.data[event.app].keys():
+            if k.startswith("request_"):
+                templates.append(json.loads(event.relation.data[event.app][k])["dashboard"])
+
+        builtins = self._maybe_get_builtin_dashboards(event)
+
+        if not templates and not builtins:
+            return {}
+
+        dashboards = {}
+        for t in templates:
+            # Replace values with LMA-style templating
+            t = self._strip_existing_datasources(t)
+
+            # This seems ridiculous, too, but to get it from a "dashboards" key in serialized JSON
+            # in the bucket back out to the actual "dashboard" we _need_, this is the way
+            # This is not a mistake -- there's a double nesting in reactive charms, and
+            # Grafana won't load it. We have to unbox:
+            # event.relation.data[event.<type>]["request_*"]["dashboard"]["dashboard"],
+            # and the final unboxing is below.
+            dash = json.dumps(t["dashboard"])
+
+            # Replace the old-style datasource templates
+            dash = re.sub(r"<< datasource >>", r"${prometheusds}", dash)
+            dash = re.sub(r'"datasource": "prom.*?"', r'"datasource": "${prometheusds}"', dash)
+
+            from jinja2 import Template
+
+            content = _encode_dashboard_content(
+                Template(dash).render(host=event.unit.name, datasource="prometheus")
+            )
+            id = "prog:{}".format(content[-24:-16])
+
+            dashboards[id] = content
+        return {**builtins, **dashboards}
+
+    def _maybe_get_builtin_dashboards(self, event: RelationEvent) -> Dict:
+        """Tries to match the event with an included dashboard.
+
+        Scans dashboards packed with the charm instantiating this class, and tries to match
+        one with the event. There is no guarantee that any given event will match a builtin,
+        since each charm instantiating this class may include a different set of dashboards,
+        or none.
+        """
+        builtins = {}
+        dashboards_path = None
+
+        try:
+            dashboards_path = _resolve_dir_against_charm_path(
+                self._charm, "src/grafana_dashboards"
+            )
+        except InvalidDirectoryPathError as e:
+            logger.warning(
+                "Invalid Grafana dashboards folder at %s: %s",
+                e.grafana_dashboards_absolute_path,
+                e.message,
+            )
+
+        if dashboards_path:
+            for path in filter(Path.is_file, Path(dashboards_path).glob("*.tmpl")):
+                if event.app.name in path.name:
+                    id = "file:{}".format(path.stem)
+                    builtins[id] = self._content_to_dashboard_object(
+                        _encode_dashboard_content(path.read_bytes()), event
+                    )
+
+        return builtins
+
+    def _content_to_dashboard_object(self, content: str, event: RelationEvent) -> Dict:
+        return {
+            "charm": event.app.name,
+            "content": content,
+            "juju_topology": self._juju_topology(event),
+        }
+
+    # This is not actually used in the dashboards, but is present to provide a secondary
+    # salt to ensure uniqueness in the dict keys in case individual charm units provide
+    # dashboards
+    def _juju_topology(self, event: RelationEvent) -> Dict:
+        return {
+            "model": self._charm.model.name,
+            "model_uuid": self._charm.model.uuid,
+            "application": event.app.name,
+            "unit": event.unit.name,
+        }

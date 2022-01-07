@@ -8,7 +8,10 @@ import unittest
 import uuid
 from unittest.mock import patch
 
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
+from charms.grafana_k8s.v0.grafana_dashboard import (
+    TEMPLATE_DROPDOWNS,
+    GrafanaDashboardConsumer,
+)
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -19,9 +22,17 @@ if "unittest.util" in __import__("sys").modules:
 
 MODEL_INFO = {"name": "testing", "uuid": "abcdefgh-1234"}
 
-DASHBOARD_TMPL = {
+DASHBOARD_TEMPLATE = """
+{
+    "panels": {
+        "data": "label_values(up, juju_unit)"
+    }
+}
+"""
+
+DASHBOARD_DATA = {
     "charm": "grafana-k8s",
-    "content": "label_values(up, juju_unit)",
+    "content": DASHBOARD_TEMPLATE,
     "juju_topology": {
         "model": MODEL_INFO["name"],
         "model_uuid": MODEL_INFO["uuid"],
@@ -30,10 +41,16 @@ DASHBOARD_TMPL = {
     },
 }
 
-DASHBOARD_RENDERED = "label_values(up, juju_unit)"
+DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": {"data": "label_values(up, juju_unit)"},
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
 
 SOURCE_DATA = {
-    "templates": {"file:tester": DASHBOARD_TMPL},
+    "templates": {"file:tester": DASHBOARD_DATA},
     "uuid": "12345678",
 }
 
