@@ -63,7 +63,8 @@ class TestSourceConsumer(unittest.TestCase):
         self._caplog = caplog
 
     def setUp(self):
-        self.harness = Harness(GrafanaCharm)
+        meta = open("metadata.yaml")
+        self.harness = Harness(GrafanaCharm, meta=meta)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()

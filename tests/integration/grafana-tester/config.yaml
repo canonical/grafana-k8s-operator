@@ -1,0 +1,9 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+options:
+  log_level:
+    type: string
+    description: |
+      Really doesn't do anything at all. Makes Juju happy so it can
+      deploy
+    default: info
