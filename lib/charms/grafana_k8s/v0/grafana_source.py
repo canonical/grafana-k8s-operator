@@ -437,6 +437,19 @@ class GrafanaSourceConsumer(Object):
         """Remove a datasource by name."""
         self._stored.sources_to_delete.add(source_name)
 
+    def upgrade_keys(self) -> None:
+        """On upgrade, ensure stored data maintains compatibility."""
+        # self._stored.sources may have hyphens instead of underscores in key names.
+        # Make sure they reconcile.
+        sources = _type_convert_stored(self._stored.sources)
+        for rel_id in sources.keys():
+            for i in range(len(sources[rel_id])):
+                sources[rel_id][i].update(
+                    {k.replace("-", "_"): v for k, v in sources[rel_id][i].items()}
+                )
+
+        self._stored.sources = sources
+
     @property
     def sources(self) -> List[dict]:
         """Returns an array of sources the source_consumer knows about."""

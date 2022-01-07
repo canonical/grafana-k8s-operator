@@ -281,6 +281,38 @@ class TestSourceConsumer(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.source_delete_events, 0)
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources_to_delete), 0)
 
+    def test_consumer_data_is_usable_after_upgrade(self):
+        original_source_data = {
+            "rel_id": [
+                {
+                    "source-name": "shouldconvert",
+                    "source-type": "prometheus",
+                    "unit": "prometheus/0",
+                    "url": "1.2.3.4",
+                }
+            ]
+        }
+        compatible_source_data = {
+            "rel_id": [
+                {
+                    "source-name": "shouldconvert",
+                    "source_name": "shouldconvert",
+                    "source-type": "prometheus",
+                    "source_type": "prometheus",
+                    "unit": "prometheus/0",
+                    "url": "1.2.3.4",
+                }
+            ]
+        }
+        self.harness.set_leader(False)
+        self.harness.charm.grafana_consumer._stored.sources = original_source_data
+        self.harness.charm.grafana_consumer.upgrade_keys()
+        # GrafanaConsumer.sources() actually puts them into a list without rel_id, which is
+        # used only for tracking, so we don't check for an exact match in this lookup
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.sources, compatible_source_data["rel_id"]
+        )
+
     def test_consumer_noop_on_source_removal_if_bad_rel_id(self):
         self.harness.set_leader(False)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
