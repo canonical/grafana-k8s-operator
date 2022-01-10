@@ -20,7 +20,7 @@ app_name = METADATA["name"]
 async def test_config_values_are_retained_after_pod_upgraded(ops_test, grafana_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.info("deploy charm from charmhub")
-    resources = {"unused-image": METADATA["resources"]["unused-image"]["upstream-source"]}
+    resources = {"grafana-image": METADATA["resources"]["grafana-image"]["upstream-source"]}
     await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
 
     # set some custom configs to later check they persisted across the test

@@ -22,7 +22,7 @@ async def test_deploy_from_local_path(ops_test, grafana_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
 
-    resources = {"unused-image": METADATA["resources"]["unused-image"]["upstream-source"]}
+    resources = {"grafana-image": METADATA["resources"]["grafana-image"]["upstream-source"]}
     await ops_test.model.deploy(grafana_charm, application_name=app_name, resources=resources)
 
     # set some custom configs to later check they persisted across the test
