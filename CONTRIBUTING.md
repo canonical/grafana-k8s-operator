@@ -1,4 +1,4 @@
-## Development environemnt
+## Development environment
 
 Initial setup (ensure microk8s is a clean slate with `microk8s.reset` or a fresh install with `snap install microk8s --classic`:
 ```bash

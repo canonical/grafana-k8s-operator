@@ -1,13 +1,5 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
-[project]
-name = "grafana-operator"
-description = "Kubernetes charm for Grafana"
-license = "Apache 2.0"
-readme = "README.md"
-homepage = "https://charmhub.io/grafana-k8s"
-repository = "https://github.com/canonical/grafana-operator"
-documentation = "https://charmhub.io/grafana-k8s/docs"
 
 # Testing tools configuration
 [tool.coverage.run]
