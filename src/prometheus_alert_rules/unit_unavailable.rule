@@ -1,0 +1,10 @@
+alert: GrafanaUnitIsUnavailable
+expr: up{%%juju_topology%%} < 1
+for: 0m
+labels:
+  severity: critical
+annotations:
+  summary: Grafana unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} unavailable
+  description: >
+    The Grafana unit {{ $labels.juju_model }} {{ $labels.juju_unit }} is unavailable
+    LABELS = {{ $labels }}
