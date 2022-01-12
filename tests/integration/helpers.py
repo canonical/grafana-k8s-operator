@@ -203,3 +203,9 @@ def oci_image(metadata_file: str, image_name: str) -> str:
         raise ValueError("Upstream source not found")
 
     return upstream_source
+
+
+async def get_config_values(ops_test, app_name) -> dict:
+    """Return the app's config, but filter out keys that do not have a value."""
+    config = await ops_test.model.applications[app_name].get_config()
+    return {key: config[key]["value"] for key in config if "value" in config[key]}

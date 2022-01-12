@@ -7,7 +7,7 @@ observability toolkit.
 
 Grafana allows you to query, visualize, alert on, and visualize metrics from mixed datasources in configurable
 dashboards for observability. This repository contains a [Juju](https://jaas.ai/) Charm for deploying the visualization
-component of Grafana in a Kuberenetes cluster. 
+component of Grafana in a Kubernetes cluster. 
 
 The grafana-k8s charm provides an interface which can ingest data from a wide array of data sources, with Prometheus
 as a common input, then presents that data on configurable dashboards.
