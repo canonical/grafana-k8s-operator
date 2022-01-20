@@ -34,7 +34,8 @@ class TestServer(unittest.TestCase):
 
     @patch("src.grafana_server.urllib3.PoolManager.request")
     def test_grafana_server_max_retry_test(self, request):
-        request.side_effect = urllib3.exceptions.MaxRetryError(None, "/", "We shouldn't get here")
+        # Ignore mypy here so we don't have to mock out absolutely everything
+        request.side_effect = urllib3.exceptions.MaxRetryError(None, "/", "We shouldn't get here")  # type: ignore
         build_info = self.grafana.build_info
         self.assertEqual(build_info, {})
 
