@@ -444,6 +444,7 @@ class GrafanaDashboardProvider(Object):
         charm: CharmBase,
         relation_name: str = DEFAULT_RELATION_NAME,
         dashboards_path: str = "src/grafana_dashboards",
+        refresh_event: Optional[HookEvent] = None,
     ) -> None:
         """API to provide Grafana dashboard to a Grafana charmed operator.
 
@@ -494,6 +495,8 @@ class GrafanaDashboardProvider(Object):
                 where dashboard templates can be located. By default, the library
                 expects dashboard files to be in the `<charm-py-directory>/grafana_dashboards`
                 directory.
+            refresh_event: a :class:`HookEvent` event on which the dashboard path should
+                address should be refreshed.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
@@ -517,6 +520,9 @@ class GrafanaDashboardProvider(Object):
 
         self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)
         self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)
+
+        if refresh_event:
+            self.framework.observe(refresh_event, self._update_all_dashboards_from_dir)  # type: ignore[arg-type]
 
         self.framework.observe(
             self._charm.on[self._relation_name].relation_created,
