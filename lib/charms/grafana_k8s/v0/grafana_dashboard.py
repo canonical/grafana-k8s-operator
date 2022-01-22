@@ -522,8 +522,8 @@ class GrafanaDashboardProvider(Object):
         self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)
 
         refresh_events = refresh_events or []
-        for e in refresh_events:
-            self.framework.observe(e, self._update_all_dashboards_from_dir)  # type: ignore[arg-type]
+        for event in refresh_events:
+            self.framework.observe(event, self._update_all_dashboards_from_dir)  # type: ignore
 
         self.framework.observe(
             self._charm.on[self._relation_name].relation_created,
