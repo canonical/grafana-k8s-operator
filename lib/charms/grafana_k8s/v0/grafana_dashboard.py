@@ -577,21 +577,24 @@ class GrafanaDashboardProvider(Object):
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
                 self._upset_dashboards_on_relation(dashboard_relation)
 
-    def _update_all_dashboards_from_dir(self, _: HookEvent) -> None:
+    def _update_all_dashboards_from_dir(
+        self, _: Optional[HookEvent] = None, dir: Optional[str] = ""
+    ) -> None:
         """Scans the built-in dashboards and updates relations with changes."""
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
 
         # Ensure we do not leave outdated dashboards by removing from stored all
         # the encoded dashboards that start with "file/".
-        if self._dashboards_path:
+        dashboards_path = dir or self._dashboards_path
+        if dashboards_path:
             stored_dashboard_templates = self._stored.dashboard_templates
 
             for dashboard_id in list(stored_dashboard_templates.keys()):
                 if dashboard_id.startswith("file:"):
                     del stored_dashboard_templates[dashboard_id]
 
-            for path in filter(Path.is_file, Path(self._dashboards_path).glob("*.tmpl")):
+            for path in filter(Path.is_file, Path(dashboards_path).glob("*.tmpl")):
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
@@ -600,6 +603,24 @@ class GrafanaDashboardProvider(Object):
             if self._charm.unit.is_leader():
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
                     self._upset_dashboards_on_relation(dashboard_relation)
+
+    def reload_dashboards_from_dir(self, dir: Optional[Union[Path, str]] = None) -> None:
+        """Triggers a reload of dashboard outside of an eventing workflow.
+
+        Args:
+            dir: an optional `Path` or `str` specifying the directory to check.
+        """
+        dir = str(dir) if dir else self._dashboards_path
+        try:
+            _resolve_dir_against_charm_path(self._charm, dir)
+            self._update_all_dashboards_from_dir(dir=dir)
+
+        except InvalidDirectoryPathError as e:
+            logger.warning(
+                "Invalid Grafana dashboards folder at %s: %s",
+                e.grafana_dashboards_absolute_path,
+                e.message,
+            )
 
     def _on_grafana_dashboard_relation_created(self, event: RelationCreatedEvent) -> None:
         """Watch for a relation being created and automatically send dashboards.

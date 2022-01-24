@@ -5,7 +5,7 @@ import copy
 import json
 import unittest
 import uuid
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from ops.charm import CharmBase
@@ -72,12 +72,12 @@ class ProviderCharm(CharmBase):
             self._stored.invalid_events += 1
 
 
+@patch.object(uuid, "uuid4", new=lambda: "12345678")
 class TestDashboardProvider(unittest.TestCase):
     @patch(
         "charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path",
-        new=lambda x, *args, **kwargs: "./tests/unit/dashboard_templates",
+        MagicMock(return_value="./tests/unit/dashboard_templates"),
     )
-    @patch.object(uuid, "uuid4", new=lambda: "12345678")
     def setUp(self):
         self.harness = Harness(ProviderCharm, meta=CONSUMER_META)
         self.harness._backend.model_name = "testing"
@@ -86,7 +86,6 @@ class TestDashboardProvider(unittest.TestCase):
         self.harness.begin()
         self.harness.set_leader(True)
 
-    @patch.object(uuid, "uuid4", new=lambda: "12345678")
     def test_provider_sets_dashboard_data(self):
         rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
         self.harness.add_relation_unit(rel_id, "other_app/0")
@@ -102,7 +101,6 @@ class TestDashboardProvider(unittest.TestCase):
             data,
         )
 
-    @patch.object(uuid, "uuid4", new=lambda: "12345678")
     def test_provider_can_remove_programmatically_added_dashboards(self):
         self.harness.charm.provider.add_dashboard("third")
 
@@ -117,7 +115,6 @@ class TestDashboardProvider(unittest.TestCase):
             "uuid": "12345678",
         }
 
-        self.maxDiff = None
         expected_data = copy.deepcopy(expected_data_builtin_dashboards)
         expected_templates = expected_data["templates"]
         expected_templates["prog:uC2Arx+2"] = {  # type: ignore
@@ -140,7 +137,6 @@ class TestDashboardProvider(unittest.TestCase):
             ),
         )
 
-    @patch.object(uuid, "uuid4", new=lambda: "12345678")
     def test_provider_cannot_remove_builtin_dashboards(self):
         rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
         self.harness.add_relation_unit(rel_id, "other_app/0")
@@ -162,3 +158,48 @@ class TestDashboardProvider(unittest.TestCase):
                 self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
             ),
         )
+
+
+@patch.object(uuid, "uuid4", new=lambda: "12345678")
+class TestDashboardProviderEmptyDir(unittest.TestCase):
+    @patch(
+        "charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path",
+        MagicMock(return_value="./tests/unit/empty_dashboards"),
+    )
+    def setUp(self):
+        self.harness = Harness(ProviderCharm, meta=CONSUMER_META)
+        self.harness._backend.model_name = "testing"
+        self.harness._backend.model_uuid = "abcdefgh-1234"
+        self.addCleanup(self.harness.cleanup)
+        self.harness.begin()
+        self.harness.set_leader(True)
+
+    def test_provider_work_with_empty_dirs(self):
+        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
+        self.harness.add_relation_unit(rel_id, "other_app/0")
+        actual_data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+
+        expected_data = {
+            "templates": {},
+            "uuid": "12345678",
+        }
+
+        self.assertDictEqual(expected_data, actual_data)
+
+    def test_provider_can_rescan_dirs(self):
+        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
+        self.harness.add_relation_unit(rel_id, "other_app/0")
+        self.harness.charm.provider.reload_dashboards_from_dir("./tests/unit/manual_dashboards")
+
+        actual_data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+
+        expected_data = {
+            "templates": RELATION_TEMPLATES_DATA,
+            "uuid": "12345678",
+        }
+
+        self.assertDictEqual(expected_data, actual_data)
