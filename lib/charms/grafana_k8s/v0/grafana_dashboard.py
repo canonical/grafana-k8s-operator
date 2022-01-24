@@ -642,7 +642,7 @@ class GrafanaDashboardProvider(Object):
         """
         dir = str(dir) if dir else self._dashboards_path
         try:
-            _resolve_dir_against_charm_path(self._charm, dir)
+            dir = _resolve_dir_against_charm_path(self._charm, dir)
             self._update_all_dashboards_from_dir(dir=dir)
 
         except InvalidDirectoryPathError as e:
