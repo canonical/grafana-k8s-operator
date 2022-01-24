@@ -39,6 +39,19 @@ RELATION_TEMPLATES_DATA = {
     },
 }
 
+MANUAL_TEMPLATE_DATA = {
+    "file:manual": {
+        "charm": "provider-tester",
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
+        "juju_topology": {
+            "application": "provider-tester",
+            "model": "testing",
+            "model_uuid": "abcdefgh-1234",
+            "unit": "provider-tester/0",
+        },
+    }
+}
+
 
 CONSUMER_META = """
 name: provider-tester
@@ -159,6 +172,23 @@ class TestDashboardProvider(unittest.TestCase):
             ),
         )
 
+    def test_provider_can_rescan_dirs(self):
+        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
+        self.harness.add_relation_unit(rel_id, "other_app/0")
+        self.harness.charm.provider.reload_dashboards_from_dir("./tests/unit/manual_dashboards")
+
+        actual_data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+
+        expected_data = {
+            "templates": {**RELATION_TEMPLATES_DATA, **MANUAL_TEMPLATE_DATA},
+            "uuid": "12345678",
+        }
+
+        self.maxDiff = None
+        self.assertDictEqual(expected_data, actual_data)
+
 
 @patch.object(uuid, "uuid4", new=lambda: "12345678")
 class TestDashboardProviderEmptyDir(unittest.TestCase):
@@ -183,22 +213,6 @@ class TestDashboardProviderEmptyDir(unittest.TestCase):
 
         expected_data = {
             "templates": {},
-            "uuid": "12345678",
-        }
-
-        self.assertDictEqual(expected_data, actual_data)
-
-    def test_provider_can_rescan_dirs(self):
-        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
-        self.harness.add_relation_unit(rel_id, "other_app/0")
-        self.harness.charm.provider.reload_dashboards_from_dir("./tests/unit/manual_dashboards")
-
-        actual_data = json.loads(
-            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
-        )
-
-        expected_data = {
-            "templates": RELATION_TEMPLATES_DATA,
             "uuid": "12345678",
         }
 

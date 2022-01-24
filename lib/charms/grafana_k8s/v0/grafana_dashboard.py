@@ -519,7 +519,7 @@ class GrafanaDashboardProvider(Object):
         self._stored.set_default(dashboard_templates={})
 
         self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)
-        self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)
+        self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
 
         refresh_events = refresh_events or []
         for event in refresh_events:
@@ -533,6 +533,24 @@ class GrafanaDashboardProvider(Object):
             self._charm.on[self._relation_name].relation_changed,
             self._on_grafana_dashboard_relation_changed,
         )
+
+    def _on_upgrade_charm(self, event: HookEvent) -> None:
+        """Process any stored data changes on upgrades."""
+        templates = _type_convert_stored(self._stored.dashboard_templates)
+
+        for key, data in templates.items():
+            if "path" not in data:
+                tmp = {
+                    key: {
+                        "path": "",
+                        "template": data,
+                    }
+                }
+                del templates[key]
+                templates[key] = tmp
+
+        self._stored.dashboard_templates = templates
+        self._update_all_dashboards_from_dir(event)
 
     def add_dashboard(self, content: str) -> None:
         """Add a dashboard to the relation managed by this :class:`GrafanaDashboardProvider`.
@@ -551,7 +569,13 @@ class GrafanaDashboardProvider(Object):
         # Use as id the first chars of the encoded dashboard, so that
         # it is predictable across units.
         id = "prog:{}".format(encoded_dashboard[-24:-16])
-        stored_dashboard_templates[id] = self._content_to_dashboard_object(encoded_dashboard)
+        stored_dashboard_templates[id] = (
+            stored_dashboard_templates[id] if id in stored_dashboard_templates else {}
+        )
+        stored_dashboard_templates[id]["path"] = ""
+        stored_dashboard_templates[id]["template"] = self._content_to_dashboard_object(
+            encoded_dashboard
+        )
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -588,17 +612,23 @@ class GrafanaDashboardProvider(Object):
         # the encoded dashboards that start with "file/".
         dashboards_path = dir or self._dashboards_path
         if dashboards_path:
-            stored_dashboard_templates = self._stored.dashboard_templates
+            stored_dashboard_templates = _type_convert_stored(self._stored.dashboard_templates)
 
-            for dashboard_id in list(stored_dashboard_templates.keys()):
-                if dashboard_id.startswith("file:"):
+            for dashboard_id, data in list(stored_dashboard_templates.values()):
+                if dashboard_id.startswith("file:") and data["path"] in [dir, ""]:
                     del stored_dashboard_templates[dashboard_id]
 
             for path in filter(Path.is_file, Path(dashboards_path).glob("*.tmpl")):
                 id = "file:{}".format(path.stem)
-                stored_dashboard_templates[id] = self._content_to_dashboard_object(
+                stored_dashboard_templates[id] = (
+                    stored_dashboard_templates[id] if id in stored_dashboard_templates else {}
+                )
+                stored_dashboard_templates[id]["template"] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
                 )
+                stored_dashboard_templates[id]["path"] = dir
+
+            self._stored.dashboard_templates = stored_dashboard_templates
 
             if self._charm.unit.is_leader():
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -655,8 +685,10 @@ class GrafanaDashboardProvider(Object):
         """Update the dashboards in the relation data bucket."""
         # It's completely ridiculous to add a UUID, but if we don't have some
         # pseudo-random value, this never makes it across 'juju set-state'
+        templates = _type_convert_stored(self._stored.dashboard_templates)
+
         stored_data = {
-            "templates": _type_convert_stored(self._stored.dashboard_templates),
+            "templates": {fname: templates[fname]["template"] for fname in templates.keys()},
             "uuid": str(uuid.uuid4()),
         }
 
