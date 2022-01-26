@@ -499,6 +499,7 @@ class GrafanaDashboardProvider(Object):
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
         )
 
+        dashboards_path = ""
         try:
             dashboards_path = _resolve_dir_against_charm_path(charm, dashboards_path)
         except InvalidDirectoryPathError as e:
@@ -559,6 +560,7 @@ class GrafanaDashboardProvider(Object):
         for dashboard_id in list(stored_dashboard_templates.keys()):
             if dashboard_id.startswith("prog:"):
                 del stored_dashboard_templates[dashboard_id]
+        self._stored.dashboard_templates = stored_dashboard_templates
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -570,7 +572,7 @@ class GrafanaDashboardProvider(Object):
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
                 self._upset_dashboards_on_relation(dashboard_relation)
 
-    def _update_all_dashboards_from_dir(self, _: HookEvent) -> None:
+    def _update_all_dashboards_from_dir(self, _: Optional[HookEvent] = None) -> None:
         """Scans the built-in dashboards and updates relations with changes."""
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
@@ -590,6 +592,36 @@ class GrafanaDashboardProvider(Object):
                     _encode_dashboard_content(path.read_bytes())
                 )
 
+            self._stored.dashboard_templates = stored_dashboard_templates
+
+            if self._charm.unit.is_leader():
+                for dashboard_relation in self._charm.model.relations[self._relation_name]:
+                    self._upset_dashboards_on_relation(dashboard_relation)
+
+    def _reinitialize_dashboard_data(self) -> None:
+        """Triggers a reload of dashboard outside of an eventing workflow.
+
+        This will destroy any existing relation data.
+        """
+        try:
+            _resolve_dir_against_charm_path(self._charm, self._dashboards_path)
+            self._update_all_dashboards_from_dir()
+
+        except InvalidDirectoryPathError as e:
+            logger.warning(
+                "Invalid Grafana dashboards folder at %s: %s",
+                e.grafana_dashboards_absolute_path,
+                e.message,
+            )
+            stored_dashboard_templates = self._stored.dashboard_templates
+
+            for dashboard_id in list(stored_dashboard_templates.keys()):
+                if dashboard_id.startswith("file:"):
+                    del stored_dashboard_templates[dashboard_id]
+            self._stored.dashboard_templates = stored_dashboard_templates
+
+            # With all of the file-based dashboards cleared out, force a refresh
+            # of relation data
             if self._charm.unit.is_leader():
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
                     self._upset_dashboards_on_relation(dashboard_relation)
