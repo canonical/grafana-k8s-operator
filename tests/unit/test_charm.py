@@ -5,12 +5,11 @@ import hashlib
 import json
 import re
 import unittest
-from unittest.mock import patch
 
 import yaml
 from ops.testing import Harness
 
-from charm import GrafanaCharm
+from charm import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH, GrafanaCharm
 
 MINIMAL_CONFIG = {"grafana-image-path": "grafana/grafana", "port": 3000}
 
@@ -44,7 +43,7 @@ DASHBOARD_CONFIG = {
         {
             "name": "Default",
             "type": "file",
-            "options": {"path": "dashboards"},
+            "options": {"path": "/etc/grafana/provisioning/dashboards"},
         }
     ],
 }
@@ -71,20 +70,17 @@ url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
 
 
 def datasource_config(config):
-    config_yaml = config[1]
-    config_dict = yaml.safe_load(config_yaml)
+    config_dict = yaml.safe_load(config)
     return config_dict
 
 
 def dashboard_config(config):
-    config_yaml = config[1]
-    config_dict = yaml.safe_load(config_yaml)
+    config_dict = yaml.safe_load(config)
     return config_dict
 
 
 def global_config(config):
-    config_yaml = config[1]
-    config_dict = yaml.safe_load(config_yaml)
+    config_dict = yaml.safe_load(config)
     return config_dict["global"]
 
 
@@ -110,8 +106,7 @@ class TestCharm(unittest.TestCase):
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
         ).hexdigest()
 
-    @patch("ops.testing._TestingPebbleClient.push")
-    def test_datasource_config_is_updated_by_raw_grafana_source_relation(self, push):
+    def test_datasource_config_is_updated_by_raw_grafana_source_relation(self):
         self.harness.set_leader(True)
 
         # check datasource config is updated when a grafana-source joins
@@ -124,11 +119,10 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = push.call_args[0]
-        self.assertEqual(datasource_config(config).get("datasources"), BASIC_DATASOURCES)
+        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
 
-    @patch("ops.testing._TestingPebbleClient.push")
-    def test_datasource_config_is_updated_by_grafana_source_removal(self, push):
+    def test_datasource_config_is_updated_by_grafana_source_removal(self):
         self.harness.set_leader(True)
 
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
@@ -140,21 +134,20 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = push.call_args[0]
-        self.assertEqual(datasource_config(config).get("datasources"), BASIC_DATASOURCES)
+        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
 
         rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
         self.harness.charm.on["grafana-source"].relation_departed.emit(rel)
 
-        config = push.call_args[0]
-        self.assertEqual(datasource_config(config).get("datasources"), [])
+        config = yaml.safe_load(self.harness.charm.container.pull(DATASOURCES_PATH))
+        self.assertEqual(config.get("datasources"), [])
         self.assertEqual(
-            datasource_config(config).get("deleteDatasources"),
+            config.get("deleteDatasources"),
             [{"name": "juju_test-model_abcdef_prometheus_0", "orgId": 1}],
         )
 
-    @patch("ops.testing._TestingPebbleClient.push")
-    def test_config_is_updated_with_database_relation(self, push):
+    def test_config_is_updated_with_database_relation(self):
         self.harness.set_leader(True)
 
         rel_id = self.harness.add_relation("database", "mysql")
@@ -165,17 +158,17 @@ class TestCharm(unittest.TestCase):
             DB_CONFIG,
         )
 
-        config = push.call_args_list[0][0][1]
-        self.assertEqual(config, DATABASE_CONFIG_INI)
+        config = self.harness.charm.container.pull(CONFIG_PATH)
+        self.assertEqual(config.read(), DATABASE_CONFIG_INI)
 
-    @patch("ops.testing._TestingPebbleClient.push")
-    def test_dashboard_path_is_initialized(self, push):
+    def test_dashboard_path_is_initialized(self):
         self.harness.set_leader(True)
 
-        self.harness.charm.init_dashboard_provisioning("dashboards")
+        self.harness.charm.init_dashboard_provisioning(PROVISIONING_PATH + "/dashboards")
 
-        config = push.call_args[0]
-        self.assertEqual(dashboard_config(config), DASHBOARD_CONFIG)
+        dashboards_dir_path = PROVISIONING_PATH + "/dashboards/default.yaml"
+        config = self.harness.charm.container.pull(dashboards_dir_path)
+        self.assertEqual(yaml.safe_load(config), DASHBOARD_CONFIG)
 
     def can_get_password(self):
         self.harness.set_leader(True)
