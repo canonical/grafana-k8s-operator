@@ -620,7 +620,7 @@ class GrafanaDashboardProvider(Object):
                     del stored_dashboard_templates[dashboard_id]
             self._stored.dashboard_templates = stored_dashboard_templates
 
-            # With al of the file-based dashboards cleared out, force a refresh
+            # With all of the file-based dashboards cleared out, force a refresh
             # of relation data
             if self._charm.unit.is_leader():
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
