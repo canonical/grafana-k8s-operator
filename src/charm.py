@@ -43,7 +43,7 @@ from ops.charm import (
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
-from ops.pebble import ConnectionError, Layer
+from ops.pebble import ConnectionError, Layer, PathError, ProtocolError
 
 from grafana_server import Grafana
 from kubernetes_service import K8sServicePatch, PatchFailed
@@ -61,7 +61,8 @@ REQUIRED_DATABASE_FIELDS = {
 VALID_DATABASE_TYPES = {"mysql", "postgres", "sqlite3"}
 
 CONFIG_PATH = "/etc/grafana/grafana-config.ini"
-DATASOURCE_PATH = "/etc/grafana/provisioning"
+PROVISIONING_PATH = "/etc/grafana/provisioning"
+DATASOURCES_PATH = "/etc/grafana/provisioning/datasources/datasources.yaml"
 PEER = "grafana-peers"
 
 PORT = 3000
@@ -86,8 +87,8 @@ class GrafanaCharm(CharmBase):
         self.name = "grafana"
         self.container = self.unit.get_container(self.name)
         self.grafana_service = Grafana("localhost", PORT)
-        self.grafana_config_ini_hash = None
-        self.grafana_datasources_hash = None
+        self._grafana_config_ini_hash = None
+        self._grafana_datasources_hash = None
         self._stored.set_default(
             database=dict(), pebble_ready=False, k8s_service_patched=False, admin_password=""
         )
@@ -202,9 +203,8 @@ class GrafanaCharm(CharmBase):
         """
         container = self.unit.get_container(self.name)
 
-        datasources_path = os.path.join(DATASOURCE_PATH, "datasources", "datasources.yaml")
         try:
-            container.push(datasources_path, config)
+            container.push(DATASOURCES_PATH, config, make_dirs=True)
         except ConnectionError:
             logger.error(
                 "Could not push datasource config. Pebble refused connection. Shutting down?"
@@ -217,7 +217,7 @@ class GrafanaCharm(CharmBase):
             config: A :str: containing the datasource configuration
         """
         try:
-            self.container.push(CONFIG_PATH, config)
+            self.container.push(CONFIG_PATH, config, make_dirs=True)
         except ConnectionError:
             logger.error(
                 "Could not push datasource config. Pebble refused connection. Shutting down?"
@@ -267,7 +267,7 @@ class GrafanaCharm(CharmBase):
     def _on_dashboards_changed(self, event) -> None:
         """Handle dashboard events."""
         container = self.unit.get_container(self.name)
-        dashboards_dir_path = os.path.join(DATASOURCE_PATH, "dashboards")
+        dashboards_dir_path = os.path.join(PROVISIONING_PATH, "dashboards")
 
         self.init_dashboard_provisioning(dashboards_dir_path)
 
@@ -293,7 +293,7 @@ class GrafanaCharm(CharmBase):
                 dashboards_file_to_be_kept[path] = True
 
                 logger.debug("New dashboard %s", path)
-                container.push(path, dashboard_content_bytes)
+                container.push(path, dashboard_content_bytes, make_dirs=True)
 
             for dashboard_file_path, to_be_kept in dashboards_file_to_be_kept.items():
                 if not to_be_kept:
@@ -481,7 +481,7 @@ class GrafanaCharm(CharmBase):
                         "environment": {
                             "GF_SERVER_HTTP_PORT": PORT,
                             "GF_LOG_LEVEL": self.model.config["log_level"],
-                            "GF_PATHS_PROVISIONING": DATASOURCE_PATH,
+                            "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
                             **dbinfo,
@@ -500,6 +500,46 @@ class GrafanaCharm(CharmBase):
         if info:
             return info.get("version", None)
         return None
+
+    @property
+    def grafana_config_ini_hash(self) -> str:
+        """Returns the hash for the Grafana ini file."""
+        return self._grafana_config_ini_hash or self._get_hash_for_file(CONFIG_PATH)
+
+    @grafana_config_ini_hash.setter
+    def grafana_config_ini_hash(self, hash: str) -> None:
+        """Sets the Grafana config ini hash."""
+        self._grafana_config_ini_hash = hash
+
+    @property
+    def grafana_datasources_hash(self) -> str:
+        """Returns the hash for the Grafana ini file."""
+        return self._grafana_datasources_hash or self._get_hash_for_file(DATASOURCES_PATH)
+
+    @grafana_datasources_hash.setter
+    def grafana_datasources_hash(self, hash: str) -> None:
+        """Sets the Grafana config ini hash."""
+        self._grafana_datasources_hash = hash
+
+    def _get_hash_for_file(self, file: str) -> str:
+        """Tries to connect to the container and hash a file.
+
+        Args:
+            file: a `str` filepath to read
+        """
+        if self.container.can_connect():
+            try:
+                content = self.container.pull(file)
+                hash = hashlib.sha256(str(content.read()).encode("utf-8")).hexdigest()
+                return hash
+            except (FileNotFoundError, ProtocolError, PathError) as e:
+                logger.warning(
+                    "Could not read configuration from the Grafana workload container: {}".format(
+                        e
+                    )
+                )
+
+        return ""
 
     @property
     def build_info(self) -> dict:
