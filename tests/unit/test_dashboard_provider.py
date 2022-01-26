@@ -5,9 +5,12 @@ import copy
 import json
 import unittest
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.grafana_k8s.v0.grafana_dashboard import (
+    GrafanaDashboardProvider,
+    InvalidDirectoryPathError,
+)
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -87,11 +90,12 @@ class ProviderCharm(CharmBase):
 
 @patch.object(uuid, "uuid4", new=lambda: "12345678")
 class TestDashboardProvider(unittest.TestCase):
-    @patch(
-        "charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path",
-        MagicMock(return_value="./tests/unit/dashboard_templates"),
-    )
     def setUp(self):
+        patcher = patch("charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path")
+        self.mock_resolve_dir = patcher.start()
+        self.addCleanup(patcher.stop)
+
+        self.mock_resolve_dir.return_value = "./tests/unit/dashboard_templates"
         self.harness = Harness(ProviderCharm, meta=CONSUMER_META)
         self.harness._backend.model_name = "testing"
         self.harness._backend.model_uuid = "abcdefgh-1234"
@@ -172,48 +176,71 @@ class TestDashboardProvider(unittest.TestCase):
             ),
         )
 
-    def test_provider_can_rescan_dirs(self):
+    def test_provider_destroys_old_data_on_rescan(self):
         rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
         self.harness.add_relation_unit(rel_id, "other_app/0")
-        self.harness.charm.provider.reload_dashboards_from_dir("./tests/unit/manual_dashboards")
-
         actual_data = json.loads(
             self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
-
         expected_data = {
-            "templates": {**RELATION_TEMPLATES_DATA, **MANUAL_TEMPLATE_DATA},
+            "templates": RELATION_TEMPLATES_DATA,
             "uuid": "12345678",
         }
-
-        self.maxDiff = None
         self.assertDictEqual(expected_data, actual_data)
 
+        self.harness.charm.provider._dashboards_path = "./tests/unit/manual_dashboards"
+        self.harness.charm.provider._reinitialize_dashboard_data()
+        actual_data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+        expected_data = {
+            "templates": MANUAL_TEMPLATE_DATA,
+            "uuid": "12345678",
+        }
+        self.assertDictEqual(expected_data, actual_data)
 
-@patch.object(uuid, "uuid4", new=lambda: "12345678")
-class TestDashboardProviderEmptyDir(unittest.TestCase):
-    @patch(
-        "charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path",
-        MagicMock(return_value="./tests/unit/empty_dashboards"),
-    )
-    def setUp(self):
-        self.harness = Harness(ProviderCharm, meta=CONSUMER_META)
-        self.harness._backend.model_name = "testing"
-        self.harness._backend.model_uuid = "abcdefgh-1234"
-        self.addCleanup(self.harness.cleanup)
-        self.harness.begin()
-        self.harness.set_leader(True)
-
-    def test_provider_work_with_empty_dirs(self):
+    def test_provider_empties_data_on_exception(self):
         rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
         self.harness.add_relation_unit(rel_id, "other_app/0")
         actual_data = json.loads(
             self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
         )
-
         expected_data = {
+            "templates": RELATION_TEMPLATES_DATA,
+            "uuid": "12345678",
+        }
+        self.assertDictEqual(expected_data, actual_data)
+
+        self.mock_resolve_dir.side_effect = InvalidDirectoryPathError("foo", "bar")
+        self.harness.charm.provider._reinitialize_dashboard_data()
+        actual_data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+        empty_data = {
             "templates": {},
             "uuid": "12345678",
         }
+        self.assertDictEqual(empty_data, actual_data)
 
+    def test_provider_clears_data_on_empty_dir(self):
+        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
+        self.harness.add_relation_unit(rel_id, "other_app/0")
+        actual_data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+        expected_data = {
+            "templates": RELATION_TEMPLATES_DATA,
+            "uuid": "12345678",
+        }
         self.assertDictEqual(expected_data, actual_data)
+
+        self.harness.charm.provider._dashboards_path = "./tests/unit/empty_dashboards"
+        self.harness.charm.provider._reinitialize_dashboard_data()
+        actual_data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+        empty_data = {
+            "templates": {},
+            "uuid": "12345678",
+        }
+        self.assertDictEqual(empty_data, actual_data)

@@ -444,7 +444,6 @@ class GrafanaDashboardProvider(Object):
         charm: CharmBase,
         relation_name: str = DEFAULT_RELATION_NAME,
         dashboards_path: str = "src/grafana_dashboards",
-        refresh_events: Optional[List[HookEvent]] = None,
     ) -> None:
         """API to provide Grafana dashboard to a Grafana charmed operator.
 
@@ -495,13 +494,12 @@ class GrafanaDashboardProvider(Object):
                 where dashboard templates can be located. By default, the library
                 expects dashboard files to be in the `<charm-py-directory>/grafana_dashboards`
                 directory.
-            refresh_events: an optional list of :class:`HookEvent` event(s) on which the
-                dashboard path should be refreshed.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
         )
 
+        dashboards_path = ""
         try:
             dashboards_path = _resolve_dir_against_charm_path(charm, dashboards_path)
         except InvalidDirectoryPathError as e:
@@ -519,11 +517,7 @@ class GrafanaDashboardProvider(Object):
         self._stored.set_default(dashboard_templates={})
 
         self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
-
-        refresh_events = refresh_events or []
-        for event in refresh_events:
-            self.framework.observe(event, self._update_all_dashboards_from_dir)  # type: ignore
+        self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)
 
         self.framework.observe(
             self._charm.on[self._relation_name].relation_created,
@@ -533,24 +527,6 @@ class GrafanaDashboardProvider(Object):
             self._charm.on[self._relation_name].relation_changed,
             self._on_grafana_dashboard_relation_changed,
         )
-
-    def _on_upgrade_charm(self, event: HookEvent) -> None:
-        """Process any stored data changes on upgrades."""
-        templates = _type_convert_stored(self._stored.dashboard_templates)
-
-        for key, data in templates.items():
-            if "path" not in data:
-                tmp = {
-                    key: {
-                        "path": "",
-                        "template": data,
-                    }
-                }
-                del templates[key]
-                templates[key] = tmp
-
-        self._stored.dashboard_templates = templates
-        self._update_all_dashboards_from_dir(event)
 
     def add_dashboard(self, content: str) -> None:
         """Add a dashboard to the relation managed by this :class:`GrafanaDashboardProvider`.
@@ -569,13 +545,7 @@ class GrafanaDashboardProvider(Object):
         # Use as id the first chars of the encoded dashboard, so that
         # it is predictable across units.
         id = "prog:{}".format(encoded_dashboard[-24:-16])
-        stored_dashboard_templates[id] = (
-            stored_dashboard_templates[id] if id in stored_dashboard_templates else {}
-        )
-        stored_dashboard_templates[id]["path"] = ""
-        stored_dashboard_templates[id]["template"] = self._content_to_dashboard_object(
-            encoded_dashboard
-        )
+        stored_dashboard_templates[id] = self._content_to_dashboard_object(encoded_dashboard)
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -590,6 +560,7 @@ class GrafanaDashboardProvider(Object):
         for dashboard_id in list(stored_dashboard_templates.keys()):
             if dashboard_id.startswith("prog:"):
                 del stored_dashboard_templates[dashboard_id]
+        self._stored.dashboard_templates = stored_dashboard_templates
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -601,32 +572,25 @@ class GrafanaDashboardProvider(Object):
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
                 self._upset_dashboards_on_relation(dashboard_relation)
 
-    def _update_all_dashboards_from_dir(
-        self, _: Optional[HookEvent] = None, dir: Optional[str] = ""
-    ) -> None:
+    def _update_all_dashboards_from_dir(self, _: Optional[HookEvent] = None) -> None:
         """Scans the built-in dashboards and updates relations with changes."""
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
 
         # Ensure we do not leave outdated dashboards by removing from stored all
         # the encoded dashboards that start with "file/".
-        dashboards_path = dir or self._dashboards_path
-        if dashboards_path:
-            stored_dashboard_templates = _type_convert_stored(self._stored.dashboard_templates)
+        if self._dashboards_path:
+            stored_dashboard_templates = self._stored.dashboard_templates
 
-            for dashboard_id, data in list(stored_dashboard_templates.values()):
-                if dashboard_id.startswith("file:") and data["path"] in [dir, ""]:
+            for dashboard_id in list(stored_dashboard_templates.keys()):
+                if dashboard_id.startswith("file:"):
                     del stored_dashboard_templates[dashboard_id]
 
-            for path in filter(Path.is_file, Path(dashboards_path).glob("*.tmpl")):
+            for path in filter(Path.is_file, Path(self._dashboards_path).glob("*.tmpl")):
                 id = "file:{}".format(path.stem)
-                stored_dashboard_templates[id] = (
-                    stored_dashboard_templates[id] if id in stored_dashboard_templates else {}
-                )
-                stored_dashboard_templates[id]["template"] = self._content_to_dashboard_object(
+                stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
                 )
-                stored_dashboard_templates[id]["path"] = dir
 
             self._stored.dashboard_templates = stored_dashboard_templates
 
@@ -634,16 +598,14 @@ class GrafanaDashboardProvider(Object):
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
                     self._upset_dashboards_on_relation(dashboard_relation)
 
-    def reload_dashboards_from_dir(self, dir: Optional[Union[Path, str]] = None) -> None:
+    def _reinitialize_dashboard_data(self) -> None:
         """Triggers a reload of dashboard outside of an eventing workflow.
 
-        Args:
-            dir: an optional `Path` or `str` specifying the directory to check.
+        This will destroy any existing relation data.
         """
-        dir = str(dir) if dir else self._dashboards_path
         try:
-            dir = _resolve_dir_against_charm_path(self._charm, dir)
-            self._update_all_dashboards_from_dir(dir=dir)
+            _resolve_dir_against_charm_path(self._charm, self._dashboards_path)
+            self._update_all_dashboards_from_dir()
 
         except InvalidDirectoryPathError as e:
             logger.warning(
@@ -651,6 +613,18 @@ class GrafanaDashboardProvider(Object):
                 e.grafana_dashboards_absolute_path,
                 e.message,
             )
+            stored_dashboard_templates = self._stored.dashboard_templates
+
+            for dashboard_id in list(stored_dashboard_templates.keys()):
+                if dashboard_id.startswith("file:"):
+                    del stored_dashboard_templates[dashboard_id]
+            self._stored.dashboard_templates = stored_dashboard_templates
+
+            # With al of the file-based dashboards cleared out, force a refresh
+            # of relation data
+            if self._charm.unit.is_leader():
+                for dashboard_relation in self._charm.model.relations[self._relation_name]:
+                    self._upset_dashboards_on_relation(dashboard_relation)
 
     def _on_grafana_dashboard_relation_created(self, event: RelationCreatedEvent) -> None:
         """Watch for a relation being created and automatically send dashboards.
@@ -685,10 +659,8 @@ class GrafanaDashboardProvider(Object):
         """Update the dashboards in the relation data bucket."""
         # It's completely ridiculous to add a UUID, but if we don't have some
         # pseudo-random value, this never makes it across 'juju set-state'
-        templates = _type_convert_stored(self._stored.dashboard_templates)
-
         stored_data = {
-            "templates": {fname: templates[fname]["template"] for fname in templates.keys()},
+            "templates": _type_convert_stored(self._stored.dashboard_templates),
             "uuid": str(uuid.uuid4()),
         }
 
