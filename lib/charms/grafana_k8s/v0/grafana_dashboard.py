@@ -1007,6 +1007,14 @@ class GrafanaDashboardAggregator(Object):
         self._grafana_relation = grafana_relation
 
         self.framework.observe(
+            self._charm.on[self._grafana_relation].relation_joined,
+            self._update_remote_grafana,
+        )
+        self.framework.observe(
+            self._charm.on[self._grafana_relation].relation_changed,
+            self._update_remote_grafana,
+        )
+        self.framework.observe(
             self._charm.on[self._target_relation].relation_changed,
             self.update_dashboards,
         )
@@ -1030,13 +1038,16 @@ class GrafanaDashboardAggregator(Object):
             )
             return
 
-        self._stored.id_mappings[event.app.name] = dashboards
-
         for id in dashboards:
             self._stored.dashboard_templates[id] = self._content_to_dashboard_object(
                 dashboards[id], event
             )
 
+        self._stored.id_mappings[event.app.name] = dashboards
+        self._update_remote_grafana(event)
+
+    def _update_remote_grafana(self, _: Optional[RelationEvent] = None) -> None:
+        """Push dashboards to the downstream Grafana relation."""
         # It's still ridiculous to add a UUID here, but needed
         stored_data = {
             "templates": _type_convert_stored(self._stored.dashboard_templates),
