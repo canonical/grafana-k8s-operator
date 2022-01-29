@@ -499,7 +499,6 @@ class GrafanaDashboardProvider(Object):
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
         )
 
-        dashboards_path = ""
         try:
             dashboards_path = _resolve_dir_against_charm_path(charm, dashboards_path)
         except InvalidDirectoryPathError as e:

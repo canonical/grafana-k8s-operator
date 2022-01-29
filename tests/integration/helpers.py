@@ -136,7 +136,6 @@ async def get_grafana_dashboards(ops_test: OpsTest, app_name: str, unit_num: int
 
     Args:
         app_name: string name of Grafana application
-        query_string: the search string to use
 
     Returns:
         a list of dashboards
