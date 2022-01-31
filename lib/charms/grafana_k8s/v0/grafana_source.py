@@ -6,7 +6,7 @@
 This document explains how to integrate with the Grafana charm
 for the purpose of providing a datasource which can be used by
 Grafana dashboards. It also explains the structure of the data
-expected by the `grafana-dashboard` interface, and may provide a
+expected by the `grafana-source` interface, and may provide a
 mechanism or reference point for providing a compatible interface
 or library by providing a definitive reference guide to the
 structure of relation data which is shared between the Grafana

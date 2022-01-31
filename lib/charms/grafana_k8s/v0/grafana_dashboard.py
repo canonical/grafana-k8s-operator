@@ -64,7 +64,7 @@ Provided dashboards will be checked by Grafana, and a series of dropdown menus
 providing the ability to select query targets by Juju Model, application instance,
 and unit will be added if they do not exist.
 
-To avoid requiring `jinja` in `GrafanaDashboardProvider` users, templte validation
+To avoid requiring `jinja` in `GrafanaDashboardProvider` users, template validation
 and rendering occurs on the other side of the relation, and relation data in
 the form of:
 
