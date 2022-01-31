@@ -311,7 +311,7 @@ class GrafanaSourceProvider(Object):
         self,
         charm: CharmBase,
         refresh_event: Optional[BoundEvent] = None,
-        relation_name: Optional[str] = DEFAULT_RELATION_NAME,
+        relation_name: str = DEFAULT_RELATION_NAME,
         source_type: Optional[str] = "prometheus",
         source_port: Optional[str] = "9090",
     ) -> None:
