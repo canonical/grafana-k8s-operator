@@ -1,7 +1,166 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""A library for integrating Grafana dashboards in charmed operators."""
+"""## Overview.
+
+This document explains how to integrate with the Grafana charm
+for the purpose of providing a dashboard which can be used by
+end users. It also explains the structure of the data
+expected by the `grafana-dashboard` interface, and may provide a
+mechanism or reference point for providing a compatible interface
+or library by providing a definitive reference guide to the
+structure of relation data which is shared between the Grafana
+charm and any charm providing datasource information.
+
+## Provider Library Usage
+
+The Grafana charm interacts with its dashboards using its charm
+library. The goal of this library is to be as simple to use as
+possible, and instantiation of the class with or without changing
+the default arguments provides a complete use case. For the simplest
+use case of a charm which bundles dashboards and provides a
+`provides: grafana-dashboard` interface, creation of a
+`GrafanaDashboardProvider` object with the default arguments is
+sufficient.
+
+:class:`GrafanaDashboardProvider` expects that bundled dashboards should
+be included in your charm with a default path of:
+
+    path/to/charm.py
+    path/to/src/grafana_dashboards/*.tmpl
+
+Where the `*.tmpl` files are Grafana dashboard JSON data either from the
+Grafana marketplace, or directly exported from a a Grafana instance.
+
+The default arguments are:
+
+    `charm`: `self` from the charm instantiating this library
+    `relation_name`: grafana-dashboard
+    `dashboards_path`: "/src/grafana_dashboards"
+
+If your configuration requires any changes from these defaults, they
+may be set from the class constructor. It may be instantiated as
+follows:
+
+    from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+
+    class FooCharm:
+        def __init__(self, *args):
+            super().__init__(*args, **kwargs)
+            ...
+            self.grafana_dashboard_provider = GrafanaDashboardProvider(self)
+            ...
+
+The first argument (`self`) should be a reference to the parent (providing
+dashboards), as this charm's lifecycle events will be used to re-submit
+dashboard information if a charm is upgraded, the pod is restarted, or other.
+
+An instantiated `GrafanaDashboardProvider` validates that the path specified
+in the constructor (or the default) exists, reads the file contents, then
+compresses them with LZMA and adds them to the application relation data
+when a relation is established with Grafana.
+
+Provided dashboards will be checked by Grafana, and a series of dropdown menus
+providing the ability to select query targets by Juju Model, application instance,
+and unit will be added if they do not exist.
+
+To avoid requiring `jinja` in `GrafanaDashboardProvider` users, template validation
+and rendering occurs on the other side of the relation, and relation data in
+the form of:
+
+    {
+        "event": {
+            "valid": `true|false`,
+            "errors": [],
+        }
+    }
+
+Will be returned if rendering or validation fails. In this case, the
+`GrafanaDashboardProvider` object will emit a `dashboard_status_changed` event
+of the type :class:`GrafanaDashboardEvent`, which will contain information
+about the validation error.
+
+This information is added to the relation data for the charms as serialized JSON
+from a dict, with a structure of:
+```
+{
+    "application": {
+        "dashboards": {
+            "uuid": a uuid generated to ensure a relation event triggers,
+            "templates": {
+                "file:{hash}": {
+                    "content": `{compressed_template_data}`,
+                    "charm": `charm.meta.name`,
+                    "juju_topology": {
+                        "model": `charm.model.name`,
+                        "model_uuid": `charm.model.uuid`,
+                        "application": `charm.app.name`,
+                        "unit": `charm.unit.name`,
+                    }
+                },
+                "file:{other_file_hash}": {
+                    ...
+                },
+            },
+        },
+    },
+}
+```
+
+This is ingested by :class:`GrafanaDashboardConsumer`, and is sufficient for configuration.
+
+The [COS Configuration Charm](https://charmhub.io/cos-configuration-k8s) can be used to
+add dashboards which are bundled with charms.
+
+## Consumer Library Usage
+
+The `GrafanaDashboardConsumer` object may be used by Grafana
+charms to manage relations with available dashboards. For this
+purpose, a charm consuming Grafana dashboard information should do
+the following things:
+
+1. Instantiate the `GrafanaDashboardConsumer` object by providing it a
+reference to the parent (Grafana) charm and, optionally, the name of
+the relation that the Grafana charm uses to interact with dashboards.
+This relation must confirm to the `grafana-dashboard` interface.
+
+For example a Grafana charm may instantiate the
+`GrafanaDashboardConsumer` in its constructor as follows
+
+    from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        ...
+        self.grafana_dashboard_consumer = GrafanaDashboardConsumer(self)
+        ...
+
+2. A Grafana charm also needs to listen to the
+`GrafanaDashboardConsumer` events emitted by the `GrafanaDashboardConsumer`
+by adding itself as an observer for these events:
+
+    self.framework.observe(
+        self.grafana_source_consumer.on.sources_changed,
+        self._on_dashboards_changed,
+    )
+
+Dashboards can be retrieved the :meth:`dashboards`:
+
+It will be returned in the format of:
+
+```
+[
+    {
+        "id": unique_id,
+        "relation_id": relation_id,
+        "charm": the name of the charm which provided the dashboard,
+        "content": compressed_template_data
+    },
+]
+```
+
+The consuming charm should decompress the dashboard.
+"""
 
 import base64
 import json
@@ -41,7 +200,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 logger = logging.getLogger(__name__)
 
@@ -499,7 +658,6 @@ class GrafanaDashboardProvider(Object):
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
         )
 
-        dashboards_path = ""
         try:
             dashboards_path = _resolve_dir_against_charm_path(charm, dashboards_path)
         except InvalidDirectoryPathError as e:
@@ -1007,6 +1165,14 @@ class GrafanaDashboardAggregator(Object):
         self._grafana_relation = grafana_relation
 
         self.framework.observe(
+            self._charm.on[self._grafana_relation].relation_joined,
+            self._update_remote_grafana,
+        )
+        self.framework.observe(
+            self._charm.on[self._grafana_relation].relation_changed,
+            self._update_remote_grafana,
+        )
+        self.framework.observe(
             self._charm.on[self._target_relation].relation_changed,
             self.update_dashboards,
         )
@@ -1030,13 +1196,16 @@ class GrafanaDashboardAggregator(Object):
             )
             return
 
-        self._stored.id_mappings[event.app.name] = dashboards
-
         for id in dashboards:
             self._stored.dashboard_templates[id] = self._content_to_dashboard_object(
                 dashboards[id], event
             )
 
+        self._stored.id_mappings[event.app.name] = dashboards
+        self._update_remote_grafana(event)
+
+    def _update_remote_grafana(self, _: Optional[RelationEvent] = None) -> None:
+        """Push dashboards to the downstream Grafana relation."""
         # It's still ridiculous to add a UUID here, but needed
         stored_data = {
             "templates": _type_convert_stored(self._stored.dashboard_templates),
