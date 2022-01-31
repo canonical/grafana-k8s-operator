@@ -3,6 +3,7 @@
 name: grafana-k8s
 display-name: Grafana
 summary: Data visualization and observability with Grafana
+docs: https://discourse.charmhub.io/t/grafana-operator-k8s-docs-index/5612
 maintainers:
   - Ryan Barry <ryan.barry@canonical.com>
 description: |
