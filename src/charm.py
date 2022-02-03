@@ -24,6 +24,7 @@ import os
 import secrets
 import string
 from io import StringIO
+from urllib.parse import ParseResult, urlparse
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
@@ -190,6 +191,9 @@ class GrafanaCharm(CharmBase):
             self._update_datasource_config(grafana_datasources)
             logger.info("Updated Grafana's datasource configuration")
 
+            restart = True
+
+        if self.container.get_plan().services != self._build_layer().services:
             restart = True
 
         if restart:
@@ -463,10 +467,56 @@ class GrafanaCharm(CharmBase):
                 "not exist or is not responsive"
             )
 
+    def _parse_grafana_path(self, parts: ParseResult) -> dict:
+        """Convert web_external_url into a usable path."""
+        ret = {}
+
+        # urlparse.path parsing is absolutely horrid and only
+        # guarantees any kind of sanity if there is a scheme
+        if parts.scheme:
+            ret["scheme"] = parts.scheme
+            ret["host"] = "0.0.0.0"
+            ret["port"] = parts.netloc.split(":")[1] if ":" in parts.netloc else "3000"
+            ret["path"] = parts.path
+        elif parts.path.startswith("/"):
+            ret["scheme"] = "http"
+            ret["host"] = "0.0.0.0"
+            ret["port"] = "3000"
+            ret["path"] = parts.path
+        else:
+            # This could really be anything!
+            logger.warning(
+                "Could not determine web_external_url for Grafana. Please "
+                "use a fully-qualified path or a bare subpath"
+            )
+
+        return ret
+
     def _build_layer(self) -> Layer:
         """Construct the pebble layer information."""
         # Placeholder for when we add "proper" mysql support for HA
-        dbinfo = {"GF_DATABASE_TYPE": "sqlite3"}
+        extra_info = {
+            "GF_DATABASE_TYPE": "sqlite3",
+        }
+
+        grafana_path = self.model.config.get("web_external_url", "")
+
+        # We have to do this dance because urlparse() doesn't have any good
+        # truthiness, and parsing an empty string is still 'true'
+        if grafana_path:
+            parts = self._parse_grafana_path(urlparse(grafana_path))
+
+            # It doesn't matter unless there's a subpath, since the
+            # redirect to login is fine with a bare hostname
+            if parts and parts["path"]:
+                extra_info.update(
+                    {
+                        "GF_SERVER_SERVE_FROM_SUB_PATH": "true",
+                        "GF_SERVER_ROOT_URL": "{}://{}:{}{}".format(
+                            parts["scheme"], parts["host"], parts["port"], parts["path"]
+                        ),
+                    }
+                )
 
         layer = Layer(
             {
@@ -484,7 +534,7 @@ class GrafanaCharm(CharmBase):
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
-                            **dbinfo,
+                            **extra_info,
                         },
                     }
                 },
