@@ -30,7 +30,7 @@ be included in your charm with a default path of:
     path/to/src/grafana_dashboards/*.tmpl
 
 Where the `*.tmpl` files are Grafana dashboard JSON data either from the
-Grafana marketplace, or directly exported from a a Grafana instance.
+Grafana marketplace, or directly exported from a Grafana instance.
 
 The default arguments are:
 
@@ -110,7 +110,7 @@ from a dict, with a structure of:
 This is ingested by :class:`GrafanaDashboardConsumer`, and is sufficient for configuration.
 
 The [COS Configuration Charm](https://charmhub.io/cos-configuration-k8s) can be used to
-add dashboards which are bundled with charms.
+add dashboards which are not bundled with charms.
 
 ## Consumer Library Usage
 
