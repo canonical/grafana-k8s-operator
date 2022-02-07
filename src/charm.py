@@ -453,11 +453,7 @@ class GrafanaCharm(CharmBase):
             plan = self.container.get_plan()
             if plan.services != layer.services:
                 self.container.add_layer(self.name, layer, combine=True)
-
-                if self.container.get_service(self.name).is_running():
-                    self.container.stop(self.name)
-
-                self.container.start(self.name)
+                self.container.replan()
                 logger.info("Restarted grafana-k8s")
 
             self.unit.status = ActiveStatus()
@@ -469,28 +465,22 @@ class GrafanaCharm(CharmBase):
 
     def _parse_grafana_path(self, parts: ParseResult) -> dict:
         """Convert web_external_url into a usable path."""
-        ret = {}
-
         # urlparse.path parsing is absolutely horrid and only
         # guarantees any kind of sanity if there is a scheme
-        if parts.scheme:
-            ret["scheme"] = parts.scheme
-            ret["host"] = "0.0.0.0"
-            ret["port"] = parts.netloc.split(":")[1] if ":" in parts.netloc else "3000"
-            ret["path"] = parts.path
-        elif parts.path.startswith("/"):
-            ret["scheme"] = "http"
-            ret["host"] = "0.0.0.0"
-            ret["port"] = "3000"
-            ret["path"] = parts.path
-        else:
+        if not parts.scheme and not parts.path.startswith("/"):
             # This could really be anything!
             logger.warning(
                 "Could not determine web_external_url for Grafana. Please "
                 "use a fully-qualified path or a bare subpath"
             )
+            return {}
 
-        return ret
+        return {
+            "scheme": parts.scheme or "http",
+            "host": "0.0.0.0",
+            "port": parts.netloc.split(":")[1] if ":" in parts.netloc else "3000",
+            "path": parts.path
+        }
 
     def _build_layer(self) -> Layer:
         """Construct the pebble layer information."""
@@ -511,7 +501,7 @@ class GrafanaCharm(CharmBase):
             if parts and parts["path"]:
                 extra_info.update(
                     {
-                        "GF_SERVER_SERVE_FROM_SUB_PATH": "true",
+                        "GF_SERVER_SERVE_FROM_SUB_PATH": True,
                         "GF_SERVER_ROOT_URL": "{}://{}:{}{}".format(
                             parts["scheme"], parts["host"], parts["port"], parts["path"]
                         ),
