@@ -479,7 +479,7 @@ class GrafanaCharm(CharmBase):
             "scheme": parts.scheme or "http",
             "host": "0.0.0.0",
             "port": parts.netloc.split(":")[1] if ":" in parts.netloc else "3000",
-            "path": parts.path
+            "path": parts.path,
         }
 
     def _build_layer(self) -> Layer:
