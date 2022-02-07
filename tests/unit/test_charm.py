@@ -180,7 +180,6 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(True)
 
         self.harness.update_config({"web_external_url": "/grafana"})
-        self.harness.charm.on.config_changed.emit()
 
         services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
         self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
