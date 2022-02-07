@@ -501,7 +501,7 @@ class GrafanaCharm(CharmBase):
             if parts and parts["path"]:
                 extra_info.update(
                     {
-                        "GF_SERVER_SERVE_FROM_SUB_PATH": True,
+                        "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
                         "GF_SERVER_ROOT_URL": "{}://{}:{}{}".format(
                             parts["scheme"], parts["host"], parts["port"], parts["path"]
                         ),
