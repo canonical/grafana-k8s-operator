@@ -481,7 +481,7 @@ class GrafanaCharm(CharmBase):
         return {
             "scheme": parts.scheme or "http",
             "host": "0.0.0.0",
-            "port": parts.netloc.split(":")[1] if ":" in parts.netloc else "3000",
+            "port": parts.netloc.split(":")[1] if ":" in parts.netloc else PORT,
             "path": parts.path,
         }
 
