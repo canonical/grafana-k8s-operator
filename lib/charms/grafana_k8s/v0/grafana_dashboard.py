@@ -32,7 +32,13 @@ be included in your charm with a default path of:
 Where the `*.tmpl` files are Grafana dashboard JSON data either from the
 Grafana marketplace, or directly exported from a Grafana instance.
 
-The default arguments are:
+When constructing a dashboard that is intended to be consumed by COS, make sure to use variables
+for your datasources, and name them "prometheusds" and "lokids". You can also use the following
+juju topology variables in your dashboards: $juju_model, $juju_model_uuid, $juju_application
+and $juju_unit. Note, however, that if metrics are coming via peripheral charms (scrape-config
+or cos-config) then topology labels would not exist.
+
+The default constructor arguments are:
 
     `charm`: `self` from the charm instantiating this library
     `relation_name`: grafana-dashboard

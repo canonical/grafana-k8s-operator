@@ -57,3 +57,14 @@ The tests are run with `tox`; the following `tox` targets are available:
 * `lint` runs the linting checks based on [`pflake8`](https://flake8.pycqa.org/en/latest/), [`isort`](https://pypi.org/project/isort/) and [`black`](https://github.com/psf/black), in order; the first to fail interrupts the `tox -e lint` run.
 * `static` runs static checks with [`mypy`](http://mypy-lang.org/).
 * `unit` runs the unit tests.
+
+## Debugging
+### Data sources
+When data sources are related to grafana, they should appear in the
+`datasources.yaml` file. This can be manually verified by ssh-ing into the
+grafana container:
+
+```shell
+juju ssh --container grafana grafana/0
+cat /etc/grafana/provisioning/datasources/datasources.yaml
+```
