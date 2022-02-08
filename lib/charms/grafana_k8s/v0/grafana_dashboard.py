@@ -35,6 +35,8 @@ be included in your charm with a default path of:
 
 Where the `*.tmpl` files are Grafana dashboard JSON data either from the
 Grafana marketplace, or directly exported from a Grafana instance.
+Dashboards obtain via export or via the marketplace would need to be renamed to have the `*.tmpl`
+suffix, otherwise they will not be read.
 
 When constructing a dashboard that is intended to be consumed by COS, make sure to use variables
 for your datasources, and name them "prometheusds" and "lokids". You can also use the following
