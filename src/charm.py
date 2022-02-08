@@ -446,7 +446,14 @@ class GrafanaCharm(CharmBase):
         self._configure()
 
     def restart_grafana(self) -> None:
-        """Restart the pebble container."""
+        """Restart the pebble container.
+
+        `container.replan()` is intentionally avoided, since if no environment
+        variables are changed, this will not actually restart Grafana, which is
+        necessary to reload the provisioning files.
+
+        Note that Grafana does not support SIGHUP, so a full restart is needed.
+        """
         layer = self._build_layer()
 
         try:
