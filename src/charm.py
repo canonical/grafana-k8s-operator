@@ -453,7 +453,10 @@ class GrafanaCharm(CharmBase):
             plan = self.container.get_plan()
             if plan.services != layer.services:
                 self.container.add_layer(self.name, layer, combine=True)
-                self.container.replan()
+                if self.container.get_service(self.name).is_running():
+                    self.container.stop(self.name)
+
+                self.container.start(self.name)
                 logger.info("Restarted grafana-k8s")
 
             self.unit.status = ActiveStatus()
