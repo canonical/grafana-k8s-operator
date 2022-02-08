@@ -21,5 +21,11 @@ options:
       prefix all HTTP endpoints served by Grafana.
 
       If omitted, relevant URL components will be derived automatically.
+
+      If provided, this should be a complete URI, including scheme, or a
+      fully qualified subpath starting with `/`.
+
+      If Grafana is being served directly from the root of a fully-qualified
+      host or a bare A record, this may be omitted.
     type: string
     default: ""

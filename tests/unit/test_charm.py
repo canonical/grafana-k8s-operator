@@ -175,3 +175,12 @@ class TestCharm(unittest.TestCase):
 
         # Harness doesn't quite support actions yet...
         self.assertTrue(re.match(r"[A-Za-z0-9]{12}", self.harness.charm._get_admin_password()))
+
+    def test_config_is_updated_with_subpath(self):
+        self.harness.set_leader(True)
+
+        self.harness.update_config({"web_external_url": "/grafana"})
+
+        services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
+        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
+        self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
