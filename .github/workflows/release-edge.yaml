@@ -120,7 +120,7 @@ jobs:
       - name: Get Revision ID
         id: revision
         run: |
-          echo "::set-output name=rev::$(charmcraft status grafana-k8s | grep edge | awk '{printf "%s", $NF}')"
+          echo "::set-output name=rev::$(charmcraft status grafana-k8s | grep edge | awk '{print $2}')"
       - name: Create tag
         uses: actions/create-release@v1
         with:
