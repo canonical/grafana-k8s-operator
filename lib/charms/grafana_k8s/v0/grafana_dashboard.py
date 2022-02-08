@@ -19,8 +19,12 @@ library. The goal of this library is to be as simple to use as
 possible, and instantiation of the class with or without changing
 the default arguments provides a complete use case. For the simplest
 use case of a charm which bundles dashboards and provides a
-`provides: grafana-dashboard` interface, creation of a
-`GrafanaDashboardProvider` object with the default arguments is
+`provides: grafana-dashboard` interface,
+
+    grafana-dashboard:
+      interface: grafana_dashboard
+
+creation of a `GrafanaDashboardProvider` object with the default arguments is
 sufficient.
 
 :class:`GrafanaDashboardProvider` expects that bundled dashboards should
