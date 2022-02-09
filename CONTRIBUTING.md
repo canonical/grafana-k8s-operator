@@ -68,3 +68,9 @@ grafana container:
 juju ssh --container grafana grafana/0
 cat /etc/grafana/provisioning/datasources/datasources.yaml
 ```
+
+or querying the
+[grafana HTTP API](https://grafana.com/docs/grafana/latest/http_api/):
+```shell
+curl --user admin:password http://IP_ADDRESS:3000/api/datasources/
+```
