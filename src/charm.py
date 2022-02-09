@@ -193,7 +193,10 @@ class GrafanaCharm(CharmBase):
 
             restart = True
 
-        if self.container.get_plan().services != self._build_layer().services:
+        if (
+            self.container.can_connect()
+            and self.container.get_plan().services != self._build_layer().services
+        ):
             restart = True
 
         if restart:
