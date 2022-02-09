@@ -6,7 +6,7 @@ The Grafana Operator provides a data visualization solution using [Grafana](http
 observability toolkit.
 
 Grafana allows you to query, visualize, alert on, and visualize metrics from mixed datasources in configurable
-dashboards for observability. This repository contains a [Juju](https://jaas.ai/) Charm for deploying the visualization component of Grafana in a Kubernetes cluster.
+dashboards for observability. This repository contains a [Juju](https://juju.is/) Charm for deploying the visualization component of Grafana in a Kubernetes cluster.
 
 The grafana-k8s charm provides an interface which can ingest data from a wide array of data sources, with Prometheus as a common input, then presents that data on configurable dashboards. It is the primary user-facing entrypoint for the Canonical Observability Stack Lite. See the [COS Lite Bundle](https://charmhub.io/cos-lite) for more information.
 
