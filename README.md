@@ -42,10 +42,8 @@ View the dashboard in a browser:
 2. Navigate to `http://IP_ADDRESS:3000`
 3. Log in with the credentials username=admin, password=<from run-action> (these credentials are configurable at deploy time)
 
-To manually set the admin password:
-```bash
-microk8s.kubectl exec -n MODEL_NAME grafana-0 -c grafana -- grafana-cli admin reset-admin-password new_password
-```
+To manually set the admin password, see the
+[official docs](https://grafana.com/docs/grafana/latest/administration/cli/#reset-admin-password).
 
 Additionally, Grafana can be accessed via the Kubernetes service matching the Juju application name in the namespace matching the Juju model's name.
 
