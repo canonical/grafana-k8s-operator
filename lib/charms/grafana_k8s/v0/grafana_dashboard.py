@@ -526,11 +526,16 @@ def _convert_dashboard_fields(content: str) -> str:
     dict_content = json.loads(content)
     datasources = {}
     existing_templates = False
-    if "templating" not in content:
+
+    # If no existing template variables exist, just insert our own
+    if "templating" not in dict_content:
         dict_content["templating"] = {"list": [d for d in TEMPLATE_DROPDOWNS]}
     else:
+        # Otherwise, set a flag so we can go back later
         existing_templates = True
         for maybe in dict_content["templating"]["list"]:
+            # Build a list of `datasource_name`: `datasource_type` mappings
+            # The "query" field is actually "prometheus", "loki", "influxdb", etc
             if "type" in maybe and maybe["type"] == "datasource":
                 datasources[maybe["name"]] = maybe["query"]
 
@@ -560,6 +565,12 @@ def _replace_template_fields(
     if datasources or not existing_templates:
         panels = dict_content["panels"]
 
+        # Go through all of the panels. If they have a datasource set, AND it's one
+        # that we can convert to ${lokids} or ${prometheusds}, by stripping off the
+        # ${} templating and comparing the name to the list we built, replace it,
+        # otherwise, leave it alone.
+        #
+        # COS only knows about Prometheus and Loki.
         for panel in panels:
             if "datasource" not in panel:
                 continue
