@@ -40,7 +40,7 @@ juju run-action grafana-k8s/0 get-admin-password --wait
 View the dashboard in a browser:
 1. `juju status` to check the IP of the running Grafana application
 2. Navigate to `http://IP_ADDRESS:3000`
-3. Log in with the credentials username=admin, password=<from run-action> (these credentials are configurable at deploy time)
+3. Log in with the username `admin`, and the password you got from the `get-admin-password` action.
 
 To manually set the admin password, see the
 [official docs](https://grafana.com/docs/grafana/latest/administration/cli/#reset-admin-password).
