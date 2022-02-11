@@ -19,8 +19,12 @@ library. The goal of this library is to be as simple to use as
 possible, and instantiation of the class with or without changing
 the default arguments provides a complete use case. For the simplest
 use case of a charm which bundles dashboards and provides a
-`provides: grafana-dashboard` interface, creation of a
-`GrafanaDashboardProvider` object with the default arguments is
+`provides: grafana-dashboard` interface,
+
+    grafana-dashboard:
+      interface: grafana_dashboard
+
+creation of a `GrafanaDashboardProvider` object with the default arguments is
 sufficient.
 
 :class:`GrafanaDashboardProvider` expects that bundled dashboards should
@@ -30,9 +34,19 @@ be included in your charm with a default path of:
     path/to/src/grafana_dashboards/*.tmpl
 
 Where the `*.tmpl` files are Grafana dashboard JSON data either from the
-Grafana marketplace, or directly exported from a a Grafana instance.
+Grafana marketplace, or directly exported from a Grafana instance.
+Dashboards obtain via export or via the marketplace would need to be renamed to have the `*.tmpl`
+suffix, otherwise they will not be read.
+Refer to the [official docs](https://grafana.com/tutorials/provision-dashboards-and-data-sources/)
+for more information.
 
-The default arguments are:
+When constructing a dashboard that is intended to be consumed by COS, make sure to use variables
+for your datasources, and name them "prometheusds" and "lokids". You can also use the following
+juju topology variables in your dashboards: $juju_model, $juju_model_uuid, $juju_application
+and $juju_unit. Note, however, that if metrics are coming via peripheral charms (scrape-config
+or cos-config) then topology labels would not exist.
+
+The default constructor arguments are:
 
     `charm`: `self` from the charm instantiating this library
     `relation_name`: grafana-dashboard
@@ -110,7 +124,7 @@ from a dict, with a structure of:
 This is ingested by :class:`GrafanaDashboardConsumer`, and is sufficient for configuration.
 
 The [COS Configuration Charm](https://charmhub.io/cos-configuration-k8s) can be used to
-add dashboards which are bundled with charms.
+add dashboards which are not bundled with charms.
 
 ## Consumer Library Usage
 

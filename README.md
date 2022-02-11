@@ -6,7 +6,7 @@ The Grafana Operator provides a data visualization solution using [Grafana](http
 observability toolkit.
 
 Grafana allows you to query, visualize, alert on, and visualize metrics from mixed datasources in configurable
-dashboards for observability. This repository contains a [Juju](https://jaas.ai/) Charm for deploying the visualization component of Grafana in a Kubernetes cluster. 
+dashboards for observability. This repository contains a [Juju](https://juju.is/) Charm for deploying the visualization component of Grafana in a Kubernetes cluster.
 
 The grafana-k8s charm provides an interface which can ingest data from a wide array of data sources, with Prometheus as a common input, then presents that data on configurable dashboards. It is the primary user-facing entrypoint for the Canonical Observability Stack Lite. See the [COS Lite Bundle](https://charmhub.io/cos-lite) for more information.
 
@@ -35,12 +35,15 @@ This unit and its IP address can be retrieved using the `juju status` command.
 The default password is randomized at first install, and can be retrieved with:
 ```bash
 juju run-action grafana-k8s/0 get-admin-password --wait
-View the dashboard in a browser:
-1. `juju status` to check the IP of the of the running Grafana application
-2. Navigate to `http://IP_ADDRESS:3000`
-3. Log in with the default credentials username=admin, password=admin (these credentials are configurable at deploy time)
-
 ```
+
+View the dashboard in a browser:
+1. `juju status` to check the IP of the running Grafana application
+2. Navigate to `http://IP_ADDRESS:3000`
+3. Log in with the username `admin`, and the password you got from the `get-admin-password` action.
+
+To manually set the admin password, see the
+[official docs](https://grafana.com/docs/grafana/latest/administration/cli/#reset-admin-password).
 
 Additionally, Grafana can be accessed via the Kubernetes service matching the Juju application name in the namespace matching the Juju model's name.
 
@@ -52,7 +55,7 @@ Dashboards which are not bundled as part of a charm can be added to grafana-k8s 
 
 ## To Bundle Dashboards As Part of Your Charm
 
-See the documentation for the `charm.grafana_k8s.v0.grafana_dashboard` library. Generally, this only requires adding a `grafana-dashboard` interface to your charm and putting the dashboard templates into a configurable path.
+See the documentation for the [`charm.grafana_k8s.v0.grafana_dashboard`](https://charmhub.io/grafana-k8s/libraries/grafana_dashboard) library. Generally, this only requires adding a `grafana-dashboard` interface to your charm and putting the dashboard templates into a configurable path.
 
 ## High Availability Grafana
 
