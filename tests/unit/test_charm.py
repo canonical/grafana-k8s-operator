@@ -107,45 +107,55 @@ class TestCharm(unittest.TestCase):
         ).hexdigest()
 
     def test_datasource_config_is_updated_by_raw_grafana_source_relation(self):
-        self.harness.set_leader(True)
+        for as_leader in [True, False]:
+            self.harness.set_leader(as_leader)
 
-        # check datasource config is updated when a grafana-source joins
-        rel_id = self.harness.add_relation("grafana-source", "prometheus")
-        self.harness.update_relation_data(
-            rel_id, "prometheus", {"grafana_source_data": json.dumps(SOURCE_DATA)}
-        )
-        self.harness.add_relation_unit(rel_id, "prometheus/0")
-        self.harness.update_relation_data(
-            rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
-        )
+            # check datasource config is updated when a grafana-source joins
+            rel_id = self.harness.add_relation("grafana-source", "prometheus")
+            self.harness.update_relation_data(
+                rel_id, "prometheus", {"grafana_source_data": json.dumps(SOURCE_DATA)}
+            )
+            self.harness.add_relation_unit(rel_id, "prometheus/0")
+            self.harness.update_relation_data(
+                rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
+            )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
-        self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
+            config = self.harness.charm.container.pull(DATASOURCES_PATH)
+            self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
+
+            self.harness.remove_relation_unit(rel_id, "prometheus/0")
+            self.harness.remove_relation(rel_id)
 
     def test_datasource_config_is_updated_by_grafana_source_removal(self):
-        self.harness.set_leader(True)
+        for as_leader in [True, False]:
+            self.harness.set_leader(True)
 
-        rel_id = self.harness.add_relation("grafana-source", "prometheus")
-        self.harness.update_relation_data(
-            rel_id, "prometheus", {"grafana_source_data": json.dumps(SOURCE_DATA)}
-        )
-        self.harness.add_relation_unit(rel_id, "prometheus/0")
-        self.harness.update_relation_data(
-            rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
-        )
+            rel_id = self.harness.add_relation("grafana-source", "prometheus")
+            self.harness.update_relation_data(
+                rel_id, "prometheus", {"grafana_source_data": json.dumps(SOURCE_DATA)}
+            )
+            self.harness.add_relation_unit(rel_id, "prometheus/0")
+            self.harness.update_relation_data(
+                rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
+            )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
-        self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
+            config = self.harness.charm.container.pull(DATASOURCES_PATH)
+            self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
 
-        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
-        self.harness.charm.on["grafana-source"].relation_departed.emit(rel)
+            rel = self.harness.charm.framework.model.get_relation(
+                "grafana-source", rel_id
+            )
+            self.harness.charm.on["grafana-source"].relation_departed.emit(rel)
 
-        config = yaml.safe_load(self.harness.charm.container.pull(DATASOURCES_PATH))
-        self.assertEqual(config.get("datasources"), [])
-        self.assertEqual(
-            config.get("deleteDatasources"),
-            [{"name": "juju_test-model_abcdef_prometheus_0", "orgId": 1}],
-        )
+            config = yaml.safe_load(self.harness.charm.container.pull(DATASOURCES_PATH))
+            self.assertEqual(config.get("datasources"), [])
+            self.assertEqual(
+                config.get("deleteDatasources"),
+                [{"name": "juju_test-model_abcdef_prometheus_0", "orgId": 1}],
+            )
+
+            self.harness.remove_relation_unit(rel_id, "prometheus/0")
+            self.harness.remove_relation(rel_id)
 
     def test_config_is_updated_with_database_relation(self):
         self.harness.set_leader(True)

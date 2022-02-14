@@ -370,9 +370,6 @@ class GrafanaSourceProvider(Object):
         """Inform the consumer about the source configuration."""
         self._set_unit_ip(event)
 
-        if not self._charm.unit.is_leader():
-            return
-
         logger.debug("Setting Grafana data sources: %s", self._scrape_data)
         event.relation.data[self._charm.app]["grafana_source_data"] = json.dumps(self._scrape_data)
 
@@ -458,9 +455,6 @@ class GrafanaSourceConsumer(Object):
         The Grafana charm can then respond to the event to update its
         configuration.
         """
-        if not self._charm.unit.is_leader():
-            return
-
         sources = {}
 
         for rel in self._charm.model.relations[self._relation_name]:
@@ -528,9 +522,6 @@ class GrafanaSourceConsumer(Object):
         added to a list of sources to remove, and other providers
         are informed through a :class:`GrafanaSourcesChanged` event.
         """
-        if not self._charm.unit.is_leader():
-            return
-
         self._remove_source_from_datastore(event)
 
     def _remove_source_from_datastore(self, event: RelationDepartedEvent) -> None:
