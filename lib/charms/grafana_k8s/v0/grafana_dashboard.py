@@ -1090,7 +1090,7 @@ class GrafanaDashboardConsumer(Object):
             self.on.dashboards_changed.emit()
         else:
             stored_data = rendered_dashboards
-            currently_stored_data = self._get_stored_dashboards(relation.id) or {}
+            currently_stored_data = self._get_stored_dashboards(relation.id) or {}  # type: ignore
 
             coerced_data = (
                 _type_convert_stored(currently_stored_data) if currently_stored_data else {}
@@ -1141,7 +1141,7 @@ class GrafanaDashboardConsumer(Object):
 
     def _set_default_data(self) -> None:
         """Set defaults if they are not in peer relation data."""
-        data = {"dashboards": {}}
+        data = {"dashboards": {}}  # type: ignore
         for k, v in data.items():
             if not self.get_peer_data(k):
                 self.set_peer_data({k: v})
@@ -1149,11 +1149,11 @@ class GrafanaDashboardConsumer(Object):
     def set_peer_data(self, data: dict) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
         for k, v in data.items():
-            self._charm.peers.data[self._charm.app][k] = json.dumps(v)
+            self._charm.peers.data[self._charm.app][k] = json.dumps(v)  # type: ignore
 
     def get_peer_data(self, key: str) -> Any:
         """Put information into the peer data bucket instead of `StoredState`."""
-        data = self._charm.peers.data[self._charm.app].get(key, "")
+        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore
         return json.loads(data) if data else {}
 
 
