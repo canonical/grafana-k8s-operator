@@ -72,6 +72,11 @@ class ConsumerCharm(CharmBase):
     def version(self):
         return "2.0.0"
 
+    @property
+    def peers(self):
+        """Fetch the peer relation."""
+        return self.model.get_relation("grafana")
+
 
 @patch.object(lzma, "compress", new=lambda x, *args, **kwargs: x)
 @patch.object(lzma, "decompress", new=lambda x, *args, **kwargs: x)
@@ -86,6 +91,7 @@ class TestDashboardConsumer(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
+        self.harness.add_relation("grafana", "grafana")
 
     def setup_charm_relations(self):
         """Create relations used by test cases.
@@ -112,7 +118,7 @@ class TestDashboardConsumer(unittest.TestCase):
         return rel_ids
 
     def test_consumer_notifies_on_new_dashboards(self):
-        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         self.setup_charm_relations()
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
@@ -122,7 +128,7 @@ class TestDashboardConsumer(unittest.TestCase):
             [
                 {
                     "id": "file:tester",
-                    "relation_id": 1,
+                    "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED,
                 }
@@ -130,7 +136,7 @@ class TestDashboardConsumer(unittest.TestCase):
         )
 
     def test_consumer_error_on_bad_template(self):
-        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         rels = self.setup_charm_relations()
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)

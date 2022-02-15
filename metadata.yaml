@@ -34,7 +34,7 @@ requires:
     interface: db
     limit: 1
 peers:
-  grafana-peers:
+  grafana:
     interface: grafana_peers
 resources:
   grafana-image:

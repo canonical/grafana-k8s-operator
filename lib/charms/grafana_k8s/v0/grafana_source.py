@@ -120,7 +120,7 @@ events may not be needed.
 
 import json
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ops.charm import (
     CharmBase,
@@ -305,8 +305,6 @@ class GrafanaSourceEvents(ObjectEvents):
 class GrafanaSourceProvider(Object):
     """A provider object for Grafana datasources."""
 
-    _stored = StoredState()
-
     def __init__(
         self,
         charm: CharmBase,
@@ -416,7 +414,11 @@ class GrafanaSourceConsumer(Object):
     on = GrafanaSourceEvents()
     _stored = StoredState()
 
-    def __init__(self, charm: CharmBase, relation_name: str = DEFAULT_RELATION_NAME) -> None:
+    def __init__(
+        self,
+        charm: CharmBase,
+        relation_name: str = DEFAULT_RELATION_NAME,
+    ) -> None:
         """A Grafana based Monitoring service consumer, i.e., the charm that uses a datasource.
 
         Args:
@@ -437,6 +439,8 @@ class GrafanaSourceConsumer(Object):
         self._charm = charm
         events = self._charm.on[relation_name]
 
+        # We're stuck with this forever now so upgrades work, or until such point as we can
+        # break compatibility
         self._stored.set_default(
             sources=dict(),
             sources_to_delete=set(),
@@ -468,7 +472,7 @@ class GrafanaSourceConsumer(Object):
             if source:
                 sources[rel.id] = source
 
-        self._stored.sources = sources
+        self.set_peer_data({"sources": sources})
 
         self.on.sources_changed.emit()
 
@@ -480,6 +484,7 @@ class GrafanaSourceConsumer(Object):
 
         data = []
 
+        sources_to_delete = self.get_peer_data("sources_to_delete")
         for unit_name, host_addr in self._relation_hosts(rel).items():
             unique_source_name = "juju_{}_{}_{}_{}".format(
                 source_data["model"],
@@ -495,10 +500,11 @@ class GrafanaSourceConsumer(Object):
                 "url": "http://{}".format(host_addr),
             }
 
-            if host_data["source_name"] in self._stored.sources_to_delete:
-                self._stored.sources_to_delete.remove(host_data["source_name"])
+            if host_data["source_name"] in sources_to_delete:
+                sources_to_delete.remove(host_data["source_name"])
 
             data.append(host_data)
+        self.set_peer_data({"sources_to_delete": list(sources_to_delete)})
         return data
 
     def _relation_hosts(self, rel: Relation) -> Dict:
@@ -541,7 +547,9 @@ class GrafanaSourceConsumer(Object):
         rel_id = event.relation.id
         logger.debug("Removing all data for relation: {}".format(rel_id))
 
-        removed_source = self._stored.sources.pop(rel_id, None)
+        stored_sources = self.get_peer_data("sources")
+
+        removed_source = stored_sources.pop(str(rel_id), None)
         if removed_source:
             if event.unit:
                 # Remove one unit only
@@ -549,23 +557,28 @@ class GrafanaSourceConsumer(Object):
                 self._remove_source(dead_unit["source_name"])
 
                 # Re-update the list of stored sources
-                self._stored.sources[rel_id] = [
+                stored_sources[rel_id] = [
                     dict(s) for s in removed_source if s["unit"] != event.unit.name
                 ]
             else:
                 for host in removed_source:
                     self._remove_source(host["source_name"])
 
+            self.set_peer_data({"sources": stored_sources})
             self.on.sources_to_delete_changed.emit()
 
     def _remove_source(self, source_name: str) -> None:
         """Remove a datasource by name."""
-        self._stored.sources_to_delete.add(source_name)
+        sources_to_delete = self.get_peer_data("sources_to_delete")
+        if source_name not in sources_to_delete:
+            sources_to_delete.append(source_name)
+            self.set_peer_data({"sources_to_delete": sources_to_delete})
 
     def upgrade_keys(self) -> None:
         """On upgrade, ensure stored data maintains compatibility."""
         # self._stored.sources may have hyphens instead of underscores in key names.
         # Make sure they reconcile.
+        self._set_default_data()
         sources = _type_convert_stored(self._stored.sources)
         for rel_id in sources.keys():
             for i in range(len(sources[rel_id])):
@@ -573,13 +586,26 @@ class GrafanaSourceConsumer(Object):
                     {k.replace("-", "_"): v for k, v in sources[rel_id][i].items()}
                 )
 
-        self._stored.sources = sources
+        # If there's stored data, merge it and purge it
+        if self._stored.sources:
+            self._stored.sources = {}
+            peer_sources = self.get_peer_data("sources")
+            sources = {**sources, **peer_sources}
+            self.set_peer_data({"sources": sources})
+
+        if self._stored.sources_to_delete:
+            old_sources_to_delete = _type_convert_stored(self._stored.sources_to_delete)
+            self._stored.sources_to_delete = set()
+            peer_sources_to_delete = set(self.get_peer_data("sources_to_delete"))
+            sources_to_delete = set.union(old_sources_to_delete, peer_sources_to_delete)
+            self.set_peer_data({"sources_to_delete": sources_to_delete})
 
     @property
     def sources(self) -> List[dict]:
         """Returns an array of sources the source_consumer knows about."""
         sources = []
-        for source in self._stored.sources.values():
+        stored_sources = self.get_peer_data("sources")
+        for source in stored_sources.values():
             sources.extend([host for host in _type_convert_stored(source)])
 
         return sources
@@ -587,4 +613,21 @@ class GrafanaSourceConsumer(Object):
     @property
     def sources_to_delete(self) -> List[str]:
         """Returns an array of source names which have been removed."""
-        return [_type_convert_stored(source) for source in self._stored.sources_to_delete]
+        return self.get_peer_data("sources_to_delete")
+
+    def _set_default_data(self) -> None:
+        """Set defaults if they are not in peer relation data."""
+        data = {"sources": {}, "sources_to_delete": []}
+        for k, v in data.items():
+            if not self.get_peer_data(k):
+                self.set_peer_data({k: v})
+
+    def set_peer_data(self, data: dict) -> None:
+        """Put information into the peer data bucket instead of `StoredState`."""
+        for k, v in data.items():
+            self._charm.peers.data[self._charm.app][k] = json.dumps(v)
+
+    def get_peer_data(self, key: str) -> Any:
+        """Put information into the peer data bucket instead of `StoredState`."""
+        data = self._charm.peers.data[self._charm.app].get(key, "")
+        return json.loads(data) if data else {}

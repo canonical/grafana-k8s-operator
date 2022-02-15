@@ -19,11 +19,13 @@
 
 import configparser
 import hashlib
+import json
 import logging
 import os
 import secrets
 import string
 from io import StringIO
+from typing import Any
 from urllib.parse import ParseResult, urlparse
 
 import yaml
@@ -64,7 +66,8 @@ VALID_DATABASE_TYPES = {"mysql", "postgres", "sqlite3"}
 CONFIG_PATH = "/etc/grafana/grafana-config.ini"
 PROVISIONING_PATH = "/etc/grafana/provisioning"
 DATASOURCES_PATH = "/etc/grafana/provisioning/datasources/datasources.yaml"
-PEER = "grafana-peers"
+DATABASE = "database"
+PEER = "grafana"
 
 PORT = 3000
 
@@ -90,9 +93,7 @@ class GrafanaCharm(CharmBase):
         self.grafana_service = Grafana("localhost", PORT)
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
-        self._stored.set_default(
-            database=dict(), pebble_ready=False, k8s_service_patched=False, admin_password=""
-        )
+        self._stored.set_default(k8s_service_patched=False, admin_password="")
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
@@ -120,8 +121,8 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- database relation observations
-        self.framework.observe(self.on["database"].relation_changed, self._on_database_changed)
-        self.framework.observe(self.on["database"].relation_broken, self._on_database_broken)
+        self.framework.observe(self.on[DATABASE].relation_changed, self._on_database_changed)
+        self.framework.observe(self.on[DATABASE].relation_broken, self._on_database_broken)
 
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
@@ -232,9 +233,24 @@ class GrafanaCharm(CharmBase):
 
     @property
     def has_peers(self) -> bool:
-        """Check whether or nto there are any other Grafanas as peers."""
-        rel = self.model.get_relation(PEER)
+        """Check whether or not there are any other Grafanas as peers."""
+        rel = self.model.get_relation(self.app)
         return len(rel.units) > 0 if rel is not None else False
+
+    @property
+    def peers(self):
+        """Fetch the peer relation."""
+        return self.model.get_relation(PEER)
+
+    def set_peer_data(self, data: dict) -> None:
+        """Put information into the peer data bucket instead of `StoredState`."""
+        for k, v in data.items():
+            self.peers.data[self.app][k] = json.dumps(v)
+
+    def get_peer_data(self, key: str) -> Any:
+        """Put information into the peer data bucket instead of `StoredState`."""
+        data = self.peers.data[self.app].get(key, "")
+        return json.loads(data) if data else {}
 
     ############################
     # DASHBOARD IMPORT
@@ -340,7 +356,8 @@ class GrafanaCharm(CharmBase):
     @property
     def has_db(self) -> bool:
         """Only consider a DB connection if we have config info."""
-        return len(self._stored.database) > 0
+        rel = self.model.get_relation(DATABASE)
+        return len(rel.units) > 0 if rel is not None else False
 
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
         """Sets configuration information for database connection.
@@ -366,9 +383,8 @@ class GrafanaCharm(CharmBase):
             )
 
         # add the new database relation data to the datastore
-        self._stored.database.update(
-            {field: value for field, value in database_fields.items() if value is not None}
-        )
+        db_info = {field: value for field, value in database_fields.items() if value}
+        self.set_peer_data({"database": db_info})
 
         self._configure()
 
@@ -386,7 +402,7 @@ class GrafanaCharm(CharmBase):
             return
 
         # remove the existing database info from datastore
-        self._stored.database = dict()
+        self.set_peer_data({"database": {}})
         logger.info("Removing the grafana-k8s database backend config")
 
         # Cleanup the config file
@@ -408,7 +424,10 @@ class GrafanaCharm(CharmBase):
             A string containing the required database information to be stubbed into the config
             file.
         """
-        db_config = self._stored.database
+        db_config = self.get_peer_data("database")
+        if not db_config:
+            return ""
+
         config_ini = configparser.ConfigParser()
         db_type = "mysql"
 
@@ -445,7 +464,6 @@ class GrafanaCharm(CharmBase):
 
     def _on_pebble_ready(self, event) -> None:
         """When Pebble is ready, start everything up."""
-        self._stored.pebble_ready = True
         self._configure()
 
     def restart_grafana(self) -> None:

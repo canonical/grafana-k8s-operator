@@ -46,6 +46,10 @@ class GrafanaCharm(CharmBase):
             self.source_delete_events,
         )
 
+    def source_by_rel_id(self, rel_id):
+        d = self.grafana_consumer.get_peer_data("sources")
+        return d[str(rel_id)]
+
     def source_events(self, _):
         self._stored.source_events += 1
 
@@ -55,6 +59,11 @@ class GrafanaCharm(CharmBase):
     @property
     def version(self):
         return "2.0.0"
+
+    @property
+    def peers(self):
+        """Fetch the peer relation."""
+        return self.model.get_relation("grafana")
 
 
 class TestSourceConsumer(unittest.TestCase):
@@ -68,6 +77,7 @@ class TestSourceConsumer(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
+        self.harness.add_relation("grafana", "grafana")
 
     def setup_charm_relations(self, multi=False):
         """Create relations used by test cases.
@@ -118,7 +128,7 @@ class TestSourceConsumer(unittest.TestCase):
             self.assertIn("url", source)
 
     def test_consumer_notifies_on_new_sources(self):
-        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.sources), 0)
+        self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
@@ -135,14 +145,15 @@ class TestSourceConsumer(unittest.TestCase):
             "url": "http://1.2.3.4:9090",
             "unit": "prometheus/0",
         }
-        sources = self.harness.charm.grafana_consumer._stored.sources[rel_id][0]
+
+        sources = self.harness.charm.source_by_rel_id(rel_id)[0]
 
         self.assertIsNotNone(sources)
         self.assertEqual(dict(sources), completed_data)
         self.assertEqual(self.harness.charm._stored.source_events, 2)
 
     def test_consumer_noop_if_not_leader_on_new_sources(self):
-        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.sources), 0)
+        self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
         self.harness.set_leader(False)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
@@ -155,22 +166,22 @@ class TestSourceConsumer(unittest.TestCase):
         )
 
         with pytest.raises(KeyError):
-            self.harness.charm.grafana_consumer._stored.sources[rel_id]
+            self.harness.charm.source_by_rel_id(rel_id)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
 
     def test_consumer_noop_if_data_is_empty_sources(self):
-        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.sources), 0)
+        self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
 
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
         self.harness.update_relation_data(rel_id, "prometheus", {"sources": "{}"})
 
         with pytest.raises(KeyError):
-            self.harness.charm.grafana_consumer._stored.sources[rel_id]
+            self.harness.charm.source_by_rel_id(rel_id)
         self.assertEqual(self.harness.charm._stored.source_events, 1)
 
     def test_consumer_handles_multiple_relations(self):
-        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.sources), 0)
+        self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
@@ -187,7 +198,7 @@ class TestSourceConsumer(unittest.TestCase):
             "url": "http://1.2.3.4:9090",
             "unit": "prometheus/0",
         }
-        sources = self.harness.charm.grafana_consumer._stored.sources[rel_id][0]
+        sources = self.harness.charm.source_by_rel_id(rel_id)[0]
 
         self.assertIsNotNone(sources)
         self.assertEqual(dict(sources), completed_data)
@@ -209,16 +220,15 @@ class TestSourceConsumer(unittest.TestCase):
             "url": "http://2.3.4.5:9090",
             "unit": "other-source/0",
         }
-        sources = self.harness.charm.grafana_consumer._stored.sources[other_rel_id][0]
+        sources = self.harness.charm.source_by_rel_id(other_rel_id)[0]
 
         self.assertIsNotNone(sources)
         self.assertEqual(dict(sources), completed_data)
-        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.sources), 2)
         self.assertEqual(self.harness.charm._stored.source_events, 4)
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 2)
 
     def test_consumer_handles_source_removal(self):
-        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.sources), 0)
+        self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
@@ -235,7 +245,7 @@ class TestSourceConsumer(unittest.TestCase):
             "url": "http://1.2.3.4:9090",
             "unit": "prometheus/0",
         }
-        sources = self.harness.charm.grafana_consumer._stored.sources[rel_id][0]
+        sources = self.harness.charm.source_by_rel_id(rel_id)[0]
 
         self.assertIsNotNone(sources)
         self.assertEqual(dict(sources), completed_data)
@@ -257,11 +267,10 @@ class TestSourceConsumer(unittest.TestCase):
             "url": "http://2.3.4.5:9090",
             "unit": "other-source/0",
         }
-        sources = self.harness.charm.grafana_consumer._stored.sources[other_rel_id][0]
+        sources = self.harness.charm.source_by_rel_id(other_rel_id)[0]
 
         self.assertIsNotNone(sources)
         self.assertEqual(dict(sources), completed_data)
-        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.sources), 2)
         self.assertEqual(self.harness.charm._stored.source_events, 4)
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 2)
 
@@ -304,7 +313,7 @@ class TestSourceConsumer(unittest.TestCase):
                 }
             ]
         }
-        self.harness.set_leader(False)
+        self.harness.set_leader(True)
         self.harness.charm.grafana_consumer._stored.sources = original_source_data
         self.harness.charm.grafana_consumer.upgrade_keys()
         # GrafanaConsumer.sources() actually puts them into a list without rel_id, which is
