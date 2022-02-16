@@ -244,7 +244,7 @@ class GrafanaCharm(CharmBase):
 
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        self.peers.data[self.app][key] = json.dumps(data)  # type: ignore
+        self.peers.data[self.app][key] = json.dumps(data)
 
     def get_peer_data(self, key: str) -> Any:
         """Put information into the peer data bucket instead of `StoredState`."""
