@@ -1090,7 +1090,7 @@ class GrafanaDashboardConsumer(Object):
             self.on.dashboards_changed.emit()
         else:
             stored_data = rendered_dashboards
-            currently_stored_data = self._get_stored_dashboards(relation.id) or {}  # type: ignore
+            currently_stored_data = self._get_stored_dashboards(relation.id)  # type: ignore
 
             coerced_data = (
                 _type_convert_stored(currently_stored_data) if currently_stored_data else {}
@@ -1099,7 +1099,7 @@ class GrafanaDashboardConsumer(Object):
             if not coerced_data == stored_data:
                 stored_dashboards = self.get_peer_data("dashboards")
                 stored_dashboards[relation.id] = stored_data
-                self.set_peer_data({"dashboards": stored_dashboards})
+                self.set_peer_data("dashboards", stored_dashboards)
                 self.on.dashboards_changed.emit()
 
     def _remove_all_dashboards_for_relation(self, relation: Relation) -> None:
@@ -1107,7 +1107,7 @@ class GrafanaDashboardConsumer(Object):
         if self._get_stored_dashboards(relation.id):
             stored_dashboards = self.get_peer_data("dashboards")
             stored_dashboards.pop(relation.id)
-            self.set_peer_data({"dashboards": stored_dashboards})
+            self.set_peer_data("dashboards", stored_dashboards)
             self.on.dashboards_changed.emit()
 
     def _to_external_object(self, relation_id, dashboard):
@@ -1144,12 +1144,11 @@ class GrafanaDashboardConsumer(Object):
         data = {"dashboards": {}}  # type: ignore
         for k, v in data.items():
             if not self.get_peer_data(k):
-                self.set_peer_data({k: v})
+                self.set_peer_data(k, v)
 
-    def set_peer_data(self, data: dict) -> None:
+    def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        for k, v in data.items():
-            self._charm.peers.data[self._charm.app][k] = json.dumps(v)  # type: ignore
+        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore
 
     def get_peer_data(self, key: str) -> Any:
         """Put information into the peer data bucket instead of `StoredState`."""

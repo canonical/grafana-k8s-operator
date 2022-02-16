@@ -472,7 +472,7 @@ class GrafanaSourceConsumer(Object):
             if source:
                 sources[rel.id] = source
 
-        self.set_peer_data({"sources": sources})
+        self.set_peer_data("sources", sources)
 
         self.on.sources_changed.emit()
 
@@ -504,7 +504,7 @@ class GrafanaSourceConsumer(Object):
                 sources_to_delete.remove(host_data["source_name"])
 
             data.append(host_data)
-        self.set_peer_data({"sources_to_delete": list(sources_to_delete)})
+        self.set_peer_data("sources_to_delete", list(sources_to_delete))
         return data
 
     def _relation_hosts(self, rel: Relation) -> Dict:
@@ -564,7 +564,7 @@ class GrafanaSourceConsumer(Object):
                 for host in removed_source:
                     self._remove_source(host["source_name"])
 
-            self.set_peer_data({"sources": stored_sources})
+            self.set_peer_data("sources", stored_sources)
             self.on.sources_to_delete_changed.emit()
 
     def _remove_source(self, source_name: str) -> None:
@@ -572,7 +572,7 @@ class GrafanaSourceConsumer(Object):
         sources_to_delete = self.get_peer_data("sources_to_delete")
         if source_name not in sources_to_delete:
             sources_to_delete.append(source_name)
-            self.set_peer_data({"sources_to_delete": sources_to_delete})
+            self.set_peer_data("sources_to_delete", sources_to_delete)
 
     def upgrade_keys(self) -> None:
         """On upgrade, ensure stored data maintains compatibility."""
@@ -591,14 +591,14 @@ class GrafanaSourceConsumer(Object):
             self._stored.sources = {}
             peer_sources = self.get_peer_data("sources")
             sources = {**sources, **peer_sources}
-            self.set_peer_data({"sources": sources})
+            self.set_peer_data("sources", sources)
 
         if self._stored.sources_to_delete:
             old_sources_to_delete = _type_convert_stored(self._stored.sources_to_delete)
             self._stored.sources_to_delete = set()
             peer_sources_to_delete = set(self.get_peer_data("sources_to_delete"))
             sources_to_delete = set.union(old_sources_to_delete, peer_sources_to_delete)
-            self.set_peer_data({"sources_to_delete": sources_to_delete})
+            self.set_peer_data("sources_to_delete", sources_to_delete)
 
     @property
     def sources(self) -> List[dict]:
@@ -620,12 +620,11 @@ class GrafanaSourceConsumer(Object):
         data = {"sources": {}, "sources_to_delete": []}  # type: ignore
         for k, v in data.items():
             if not self.get_peer_data(k):
-                self.set_peer_data({k: v})
+                self.set_peer_data(k, v)
 
-    def set_peer_data(self, data: dict) -> None:
+    def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        for k, v in data.items():
-            self._charm.peers.data[self._charm.app][k] = json.dumps(v)  # type: ignore
+        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore
 
     def get_peer_data(self, key: str) -> Any:
         """Put information into the peer data bucket instead of `StoredState`."""

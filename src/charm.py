@@ -242,10 +242,9 @@ class GrafanaCharm(CharmBase):
         """Fetch the peer relation."""
         return self.model.get_relation(PEER)
 
-    def set_peer_data(self, data: dict) -> None:
+    def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        for k, v in data.items():
-            self.peers.data[self.app][k] = json.dumps(v)
+        self.peers.data[self.app][key] = json.dumps(data)  # type: ignore
 
     def get_peer_data(self, key: str) -> Any:
         """Put information into the peer data bucket instead of `StoredState`."""
@@ -384,7 +383,7 @@ class GrafanaCharm(CharmBase):
 
         # add the new database relation data to the datastore
         db_info = {field: value for field, value in database_fields.items() if value}
-        self.set_peer_data({"database": db_info})
+        self.set_peer_data("database", db_info)
 
         self._configure()
 
@@ -402,7 +401,7 @@ class GrafanaCharm(CharmBase):
             return
 
         # remove the existing database info from datastore
-        self.set_peer_data({"database": {}})
+        self.set_peer_data("database", {})
         logger.info("Removing the grafana-k8s database backend config")
 
         # Cleanup the config file
