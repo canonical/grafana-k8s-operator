@@ -1090,7 +1090,7 @@ class GrafanaDashboardConsumer(Object):
             self.on.dashboards_changed.emit()
         else:
             stored_data = rendered_dashboards
-            currently_stored_data = self._get_stored_dashboards(relation.id)  # type: ignore
+            currently_stored_data = self._get_stored_dashboards(relation.id)
 
             coerced_data = (
                 _type_convert_stored(currently_stored_data) if currently_stored_data else {}
