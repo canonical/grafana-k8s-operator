@@ -462,17 +462,15 @@ class GrafanaSourceConsumer(Object):
         The Grafana charm can then respond to the event to update its
         configuration.
         """
-        if not self._charm.unit.is_leader():
-            return
+        if self._charm.unit.is_leader():
+            sources = {}
 
-        sources = {}
+            for rel in self._charm.model.relations[self._relation_name]:
+                source = self._get_source_config(rel)
+                if source:
+                    sources[rel.id] = source
 
-        for rel in self._charm.model.relations[self._relation_name]:
-            source = self._get_source_config(rel)
-            if source:
-                sources[rel.id] = source
-
-        self.set_peer_data("sources", sources)
+            self.set_peer_data("sources", sources)
 
         self.on.sources_changed.emit()
 
@@ -534,15 +532,19 @@ class GrafanaSourceConsumer(Object):
         added to a list of sources to remove, and other providers
         are informed through a :class:`GrafanaSourcesChanged` event.
         """
-        if not self._charm.unit.is_leader():
-            return
+        removed_source = False
+        if self._charm.unit.is_leader():
+            removed_source = self._remove_source_from_datastore(event)
 
-        self._remove_source_from_datastore(event)
+        if removed_source:
+            self.on.sources_to_delete_changed.emit()
 
-    def _remove_source_from_datastore(self, event: RelationDepartedEvent) -> None:
+    def _remove_source_from_datastore(self, event: RelationDepartedEvent) -> bool:
         """Remove the grafana-source from the datastore.
 
         Add the name to the list of sources to remove when a relation is broken.
+
+        Returns a boolean indicating whether an event should be emitted.
         """
         rel_id = event.relation.id
         logger.debug("Removing all data for relation: {}".format(rel_id))
@@ -565,7 +567,8 @@ class GrafanaSourceConsumer(Object):
                     self._remove_source(host["source_name"])
 
             self.set_peer_data("sources", stored_sources)
-            self.on.sources_to_delete_changed.emit()
+            return True
+        return False
 
     def _remove_source(self, source_name: str) -> None:
         """Remove a datasource by name."""

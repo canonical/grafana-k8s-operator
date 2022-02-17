@@ -951,12 +951,12 @@ class GrafanaDashboardConsumer(Object):
         available in the app's datastore object. The Grafana charm can
         then respond to the event to update its configuration.
         """
-        # TODO Are we sure this is right? It sounds like every Grafana unit
-        # should create files with the dashboards in its container.
-        if not self._charm.unit.is_leader():
-            return
+        changes = False
+        if self._charm.unit.is_leader():
+            changes = self._render_dashboards_and_signal_changed(event.relation)
 
-        self._render_dashboards_and_emit_event(event.relation)
+        if changes:
+            self.on.dashboards_changed.emit()
 
     def update_dashboards(self, relation: Optional[Relation] = None) -> None:
         """Re-establish dashboards on one or more relations.
@@ -969,13 +969,17 @@ class GrafanaDashboardConsumer(Object):
                 updated. If not specified, all relations managed by this
                 :class:`GrafanaDashboardConsumer` will be updated.
         """
-        if not self._charm.unit.is_leader():
-            return
+        changes = False
+        if self._charm.unit.is_leader():
+            relations = (
+                [relation] if relation else self._charm.model.relations[self._relation_name]
+            )
 
-        relations = [relation] if relation else self._charm.model.relations[self._relation_name]
+            for relation in relations:
+                self._render_dashboards_and_signal_changed(relation)
 
-        for relation in relations:
-            self._render_dashboards_and_emit_event(relation)
+        if changes:
+            self.on.dashboards_changed.emit()
 
     def _on_grafana_dashboard_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Update job config when providers depart.
@@ -988,7 +992,7 @@ class GrafanaDashboardConsumer(Object):
 
         self._remove_all_dashboards_for_relation(event.relation)
 
-    def _render_dashboards_and_emit_event(self, relation: Relation) -> None:
+    def _render_dashboards_and_signal_changed(self, relation: Relation) -> bool:
         """Validate a given dashboard.
 
         Verify that the passed dashboard data is able to be found in our list
@@ -997,6 +1001,9 @@ class GrafanaDashboardConsumer(Object):
 
         Args:
             relation: Relation; The relation the dashboard is associated with.
+
+        Returns:
+            a boolean indicating whether an event should be emitted
         """
         other_app = relation.app
 
@@ -1008,7 +1015,7 @@ class GrafanaDashboardConsumer(Object):
                 self._relation_name,
                 str(relation.id),
             )
-            return
+            return False
 
         data = json.loads(raw_data)
 
@@ -1087,7 +1094,7 @@ class GrafanaDashboardConsumer(Object):
             )
 
             # Dropping dashboards for a relation needs to be signalled
-            self.on.dashboards_changed.emit()
+            return True
         else:
             stored_data = rendered_dashboards
             currently_stored_data = self._get_stored_dashboards(relation.id)
@@ -1100,7 +1107,7 @@ class GrafanaDashboardConsumer(Object):
                 stored_dashboards = self.get_peer_data("dashboards")
                 stored_dashboards[relation.id] = stored_data
                 self.set_peer_data("dashboards", stored_dashboards)
-                self.on.dashboards_changed.emit()
+                return True
 
     def _remove_all_dashboards_for_relation(self, relation: Relation) -> None:
         """If an errored dashboard is in stored data, remove it and trigger a deletion."""

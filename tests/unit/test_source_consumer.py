@@ -152,23 +152,6 @@ class TestSourceConsumer(unittest.TestCase):
         self.assertEqual(dict(sources), completed_data)
         self.assertEqual(self.harness.charm._stored.source_events, 2)
 
-    def test_consumer_noop_if_not_leader_on_new_sources(self):
-        self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
-        self.assertEqual(self.harness.charm._stored.source_events, 0)
-        self.harness.set_leader(False)
-        rel_id = self.harness.add_relation("grafana-source", "prometheus")
-        self.harness.update_relation_data(
-            rel_id, "prometheus", {"grafana_source_data": json.dumps(SOURCE_DATA)}
-        )
-        self.harness.add_relation_unit(rel_id, "prometheus/0")
-        self.harness.update_relation_data(
-            rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
-        )
-
-        with pytest.raises(KeyError):
-            self.harness.charm.source_by_rel_id(rel_id)
-        self.assertEqual(self.harness.charm._stored.source_events, 0)
-
     def test_consumer_noop_if_data_is_empty_sources(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
@@ -283,10 +266,12 @@ class TestSourceConsumer(unittest.TestCase):
     def test_consumer_noop_on_source_removal_if_not_leader(self):
         self.harness.set_leader(False)
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.update_relation_data(
+            rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
+        )
 
-        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
-
-        self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
+        self.harness.charm.on["grafana-source"].relation_broken.emit(rel_id)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 0)
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources_to_delete), 0)
 
