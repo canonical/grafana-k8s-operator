@@ -926,6 +926,10 @@ class GrafanaDashboardConsumer(Object):
             self._charm.on[self._relation_name].relation_broken,
             self._on_grafana_dashboard_relation_broken,
         )
+        self.framework.observe(
+            self._charm.on[DEFAULT_PEER_NAME].relation_changed,
+            self._on_grafana_peer_changed,
+        )
 
     def get_dashboards_from_relation(self, relation_id: int) -> List:
         """Get a list of known dashboards for one instance of the monitored relation.
@@ -957,6 +961,12 @@ class GrafanaDashboardConsumer(Object):
 
         if changes:
             self.on.dashboards_changed.emit()
+
+    def _on_grafana_peer_changed(self, _: RelationChangedEvent) -> None:
+        """Emit dashboard events on peer events so secondary charm data updates."""
+        if self._charm.unit.is_leader():
+            return
+        self.on.dashboards_changed.emit()
 
     def update_dashboards(self, relation: Optional[Relation] = None) -> None:
         """Re-establish dashboards on one or more relations.
@@ -1113,7 +1123,7 @@ class GrafanaDashboardConsumer(Object):
         """If an errored dashboard is in stored data, remove it and trigger a deletion."""
         if self._get_stored_dashboards(relation.id):
             stored_dashboards = self.get_peer_data("dashboards")
-            stored_dashboards.pop(relation.id)
+            stored_dashboards.pop(str(relation.id))
             self.set_peer_data("dashboards", stored_dashboards)
             self.on.dashboards_changed.emit()
 
@@ -1144,7 +1154,7 @@ class GrafanaDashboardConsumer(Object):
 
     def _get_stored_dashboards(self, relation_id: int) -> list:
         """Pull stored dashboards out of the peer data bucket."""
-        return self.get_peer_data("dashboards").get(relation_id, {})
+        return self.get_peer_data("dashboards").get(str(relation_id), {})
 
     def _set_default_data(self) -> None:
         """Set defaults if they are not in peer relation data."""

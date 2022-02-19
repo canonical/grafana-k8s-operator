@@ -170,7 +170,7 @@ class GrafanaCharm(CharmBase):
         already stored in the charm. If either the base Grafana config
         or the datasource config differs, restart Grafana.
         """
-        logger.debug("Handling grafana-k8a configuration change")
+        logger.debug("Handling grafana-k8s configuration change")
         restart = False
 
         # Generate a new base config and see if it differs from what we have.

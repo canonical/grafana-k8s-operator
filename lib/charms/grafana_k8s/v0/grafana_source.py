@@ -125,6 +125,7 @@ from typing import Any, Dict, List, Optional, Union
 from ops.charm import (
     CharmBase,
     CharmEvents,
+    RelationChangedEvent,
     RelationDepartedEvent,
     RelationEvent,
     RelationJoinedEvent,
@@ -155,6 +156,7 @@ LIBPATCH = 8
 logger = logging.getLogger(__name__)
 
 DEFAULT_RELATION_NAME = "grafana-source"
+DEFAULT_PEER_NAME = "grafana"
 RELATION_INTERFACE_NAME = "grafana_datasource"
 
 
@@ -448,6 +450,10 @@ class GrafanaSourceConsumer(Object):
 
         self.framework.observe(events.relation_changed, self._on_grafana_source_relation_changed)
         self.framework.observe(events.relation_departed, self._on_grafana_source_relation_departed)
+        self.framework.observe(
+            self._charm.on[DEFAULT_PEER_NAME].relation_changed,
+            self._on_grafana_peer_changed,
+        )
 
     def _on_grafana_source_relation_changed(self, event: CharmEvents) -> None:
         """Handle relation changes in related providers.
@@ -473,6 +479,13 @@ class GrafanaSourceConsumer(Object):
             self.set_peer_data("sources", sources)
 
         self.on.sources_changed.emit()
+
+    def _on_grafana_peer_changed(self, _: RelationChangedEvent) -> None:
+        """Emit source events on peer events so secondary charm data updates."""
+        if self._charm.unit.is_leader():
+            return
+        self.on.sources_changed.emit()
+        self.on.sources_to_delete_changed.emit()
 
     def _get_source_config(self, rel: Relation):
         """Generate configuration from data stored in relation data by providers."""
