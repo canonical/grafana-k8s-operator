@@ -214,7 +214,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 9
+LIBPATCH = 10
 
 logger = logging.getLogger(__name__)
 
@@ -532,17 +532,86 @@ def _decode_dashboard_content(encoded_content: str) -> str:
     return lzma.decompress(base64.b64decode(encoded_content.encode("utf-8"))).decode()
 
 
-def _inject_dashboard_dropdowns(content: str) -> str:
-    """Make sure dropdowns are present for Juju topology."""
+def _convert_dashboard_fields(content: str) -> str:
+    """Make sure values are present for Juju topology.
+
+    Inserts Juju topology variables and selectors into the template, as well as
+    a variable for Prometheus.
+    """
     dict_content = json.loads(content)
-    if "templating" not in content:
+    datasources = {}
+    existing_templates = False
+
+    # If no existing template variables exist, just insert our own
+    if "templating" not in dict_content:
         dict_content["templating"] = {"list": [d for d in TEMPLATE_DROPDOWNS]}
     else:
+        # Otherwise, set a flag so we can go back later
+        existing_templates = True
+        for maybe in dict_content["templating"]["list"]:
+            # Build a list of `datasource_name`: `datasource_type` mappings
+            # The "query" field is actually "prometheus", "loki", "influxdb", etc
+            if "type" in maybe and maybe["type"] == "datasource":
+                datasources[maybe["name"]] = maybe["query"]
+
+        # Put our own variables in the template
         for d in TEMPLATE_DROPDOWNS:
             if d not in dict_content["templating"]["list"]:
                 dict_content["templating"]["list"].insert(0, d)
 
+    dict_content = _replace_template_fields(dict_content, datasources, existing_templates)
+
     return json.dumps(dict_content)
+
+
+def _replace_template_fields(
+    dict_content: dict, datasources: dict, existing_templates: bool
+) -> dict:
+    """Make templated fields get cleaned up afterwards.
+
+    If existing datasource variables are present, try to substitute them, otherwise
+    assume they are all for Prometheus and put the prometheus variable there.
+    """
+    replacements = {"loki": "${lokids}", "prometheus": "${prometheusds}"}
+    used_replacements = []
+
+    # If any existing datasources match types we know, or we didn't find
+    # any templating variables at all, template them.
+    if datasources or not existing_templates:
+        panels = dict_content["panels"]
+
+        # Go through all of the panels. If they have a datasource set, AND it's one
+        # that we can convert to ${lokids} or ${prometheusds}, by stripping off the
+        # ${} templating and comparing the name to the list we built, replace it,
+        # otherwise, leave it alone.
+        #
+        # COS only knows about Prometheus and Loki.
+        for panel in panels:
+            if "datasource" not in panel:
+                continue
+            if not existing_templates:
+                panel["datasource"] = "${prometheusds}"
+            else:
+                # Strip out variable characters and maybe braces
+                ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
+                replacement = replacements.get(datasources[ds], "")
+                if replacement:
+                    used_replacements.append(ds)
+                panel["datasource"] = replacement or panel["datasource"]
+
+        # Put our substitutions back
+        dict_content["panels"] = panels
+
+    # Finally, go back and pop off the templates we stubbed out
+    deletions = []
+    for tmpl in dict_content["templating"]["list"]:
+        if tmpl["name"] and tmpl["name"] in used_replacements:
+            deletions.append(tmpl)
+
+    for d in deletions:
+        dict_content["templating"]["list"].remove(d)
+
+    return dict_content
 
 
 def _type_convert_stored(obj):
@@ -1055,7 +1124,10 @@ class GrafanaDashboardConsumer(Object):
             error = None
             try:
                 content = Template(decoded_content).render()
-                content = _encode_dashboard_content(_inject_dashboard_dropdowns(content))
+                content = _encode_dashboard_content(_convert_dashboard_fields(content))
+            except json.JSONDecodeError as e:
+                error = str(e.msg)
+                relation_has_invalid_dashboards = True
             except TemplateSyntaxError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True

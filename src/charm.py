@@ -170,7 +170,10 @@ class GrafanaCharm(CharmBase):
         already stored in the charm. If either the base Grafana config
         or the datasource config differs, restart Grafana.
         """
-        logger.debug("Handling grafana-k8s configuration change")
+        if not self.container.can_connect():
+            return
+
+        logger.debug("Handling grafana-k8a configuration change")
         restart = False
 
         # Generate a new base config and see if it differs from what we have.
@@ -194,10 +197,7 @@ class GrafanaCharm(CharmBase):
 
             restart = True
 
-        if (
-            self.container.can_connect()
-            and self.container.get_plan().services != self._build_layer().services
-        ):
+        if self.container.get_plan().services != self._build_layer().services:
             restart = True
 
         if restart:

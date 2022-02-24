@@ -54,6 +54,78 @@ SOURCE_DATA = {
     "uuid": "12345678",
 }
 
+VARIABLE_DASHBOARD_TEMPLATE = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "$replace_me"
+        }
+    ]
+}
+"""
+
+VARIABLE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
+EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "${replace_me_too}"
+        },
+        {
+            "data": "label_values(up, juju_application)",
+            "datasource": "$replace_me_also"
+        },
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "${leave_me_alone}"
+        }
+    ],
+    "templating": {
+        "list": [
+            {
+                "name": "replace_me_too",
+                "query": "prometheus",
+                "type": "datasource"
+            },
+            {
+                "name": "replace_me_also",
+                "query": "prometheus",
+                "type": "datasource"
+            },
+            {
+                "name": "leave_me_alone",
+                "query": "influxdb",
+                "type": "datasource"
+            }
+        ]
+    }
+}
+"""
+
+EXISTING_VARIABLE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
+            {"data": "label_values(up, juju_application)", "datasource": "${prometheusds}"},
+            {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
+        ],
+        "templating": {
+            "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
+            + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
+        },
+    }
+)
+
 
 class ConsumerCharm(CharmBase):
     _stored = StoredState()
@@ -93,13 +165,8 @@ class TestDashboardConsumer(unittest.TestCase):
         self.harness.begin()
         self.harness.add_relation("grafana", "grafana")
 
-    def setup_charm_relations(self):
-        """Create relations used by test cases.
-
-        Args:
-            multi: a boolean indicating if multiple relations must be
-            created.
-        """
+    def setup_charm_relations(self) -> list:
+        """Create relations used by test cases."""
         rel_ids = []
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         source_rel_id = self.harness.add_relation("grafana-source", "source")
@@ -112,6 +179,34 @@ class TestDashboardConsumer(unittest.TestCase):
             "provider",
             {
                 "dashboards": json.dumps(SOURCE_DATA),
+            },
+        )
+
+        return rel_ids
+
+    def setup_different_dashboard(self, template: str) -> list:
+        """Create relations used by test cases with alternate templates."""
+        rel_ids = []
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        source_rel_id = self.harness.add_relation("grafana-source", "source")
+        self.harness.add_relation_unit(source_rel_id, "source/0")
+        rel_id = self.harness.add_relation("grafana-dashboard", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        rel_ids.append(rel_id)
+
+        d = DASHBOARD_DATA
+        d["content"] = template
+
+        data = {
+            "templates": {"file:tester": d},
+            "uuid": "12345678",
+        }
+
+        self.harness.update_relation_data(
+            rel_id,
+            "provider",
+            {
+                "dashboards": json.dumps(data),
             },
         )
 
@@ -174,6 +269,85 @@ class TestDashboardConsumer(unittest.TestCase):
                 {
                     "dashboard_id": "file:tester",
                     "error": "expected token 'end of print statement', got 'variable'",
+                }
+            ],
+        )
+
+    def test_consumer_error_on_bad_json(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        rels = self.setup_charm_relations()
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        bad_data = {
+            "templates": {
+                "file:tester": {
+                    "charm": "grafana-k8s",
+                    "content": '{ "foo": "bar",,},',
+                    "juju_topology": {
+                        "model": MODEL_INFO["name"],
+                        "model_uuid": MODEL_INFO["uuid"],
+                        "application": "provider-tester",
+                        "unit": "provider-tester/0",
+                    },
+                }
+            },
+            "uuid": "12345678",
+        }
+
+        self.harness.update_relation_data(
+            rels[0],
+            "provider",
+            {
+                "dashboards": json.dumps(bad_data),
+            },
+        )
+
+        data = json.loads(
+            self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
+        )
+        self.assertEqual(
+            data["errors"],
+            [
+                {
+                    "dashboard_id": "file:tester",
+                    "error": "Expecting property name enclosed in double quotes",
+                }
+            ],
+        )
+
+    def test_consumer_templates_datasource(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(VARIABLE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": 1,
+                    "charm": "grafana-k8s",
+                    "content": VARIABLE_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    def test_consumer_templates_dashboard_and_keeps_variables(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(EXISTING_VARIABLE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": 1,
+                    "charm": "grafana-k8s",
+                    "content": EXISTING_VARIABLE_DASHBOARD_RENDERED,
                 }
             ],
         )
