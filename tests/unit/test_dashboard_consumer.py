@@ -327,7 +327,7 @@ class TestDashboardConsumer(unittest.TestCase):
             [
                 {
                     "id": "file:tester",
-                    "relation_id": 1,
+                    "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": VARIABLE_DASHBOARD_RENDERED,
                 }
@@ -345,7 +345,7 @@ class TestDashboardConsumer(unittest.TestCase):
             [
                 {
                     "id": "file:tester",
-                    "relation_id": 1,
+                    "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": EXISTING_VARIABLE_DASHBOARD_RENDERED,
                 }

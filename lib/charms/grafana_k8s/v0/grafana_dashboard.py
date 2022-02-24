@@ -1055,7 +1055,7 @@ class GrafanaDashboardConsumer(Object):
             )
 
             for relation in relations:
-                self._render_dashboards_and_signal_changed(relation)
+                self._render_dashboards_and_signal_changed(relation)  # type: ignore
 
         if changes:
             self.on.dashboards_changed.emit()
