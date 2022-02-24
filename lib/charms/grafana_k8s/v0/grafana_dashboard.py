@@ -1071,7 +1071,7 @@ class GrafanaDashboardConsumer(Object):
 
         self._remove_all_dashboards_for_relation(event.relation)
 
-    def _render_dashboards_and_signal_changed(self, relation: Relation) -> bool:
+    def _render_dashboards_and_signal_changed(self, relation: Relation) -> bool:  # type: ignore
         """Validate a given dashboard.
 
         Verify that the passed dashboard data is able to be found in our list
