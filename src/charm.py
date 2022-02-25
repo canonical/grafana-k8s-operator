@@ -234,7 +234,7 @@ class GrafanaCharm(CharmBase):
     @property
     def has_peers(self) -> bool:
         """Check whether or not there are any other Grafanas as peers."""
-        rel = self.model.get_relation(self.app)
+        rel = self.model.get_relation(PEER)
         return len(rel.units) > 0 if rel is not None else False
 
     @property
@@ -247,7 +247,7 @@ class GrafanaCharm(CharmBase):
         self.peers.data[self.app][key] = json.dumps(data)
 
     def get_peer_data(self, key: str) -> Any:
-        """Put information into the peer data bucket instead of `StoredState`."""
+        """Retrieve information from the peer data bucket instead of `StoredState`."""
         data = self.peers.data[self.app].get(key, "")
         return json.loads(data) if data else {}
 

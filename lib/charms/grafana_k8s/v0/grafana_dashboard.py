@@ -1240,7 +1240,7 @@ class GrafanaDashboardConsumer(Object):
         self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore
 
     def get_peer_data(self, key: str) -> Any:
-        """Put information into the peer data bucket instead of `StoredState`."""
+        """Retrieve information from the peer data bucket instead of `StoredState`."""
         data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore
         return json.loads(data) if data else {}
 

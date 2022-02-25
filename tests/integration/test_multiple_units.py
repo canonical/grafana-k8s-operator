@@ -43,8 +43,7 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
         ),
     )
     await asyncio.gather(
-        ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active"),
-        ops_test.model.wait_for_idle(apps=[tester_app_name], status="active"),
+        ops_test.model.wait_for_idle(apps=[grafana_app_name, tester_app_name], status="active"),
     )
     await ops_test.model.applications[grafana_app_name].scale(scale=2)
     await asyncio.gather(
@@ -56,7 +55,7 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
         ),
     )
 
-    # Idle again to ensure the second unit has an ddress
+    # Idle again to ensure the second unit has an address
     await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
 
     assert ops_test.model.applications[grafana_app_name].units[0].workload_status == "active"

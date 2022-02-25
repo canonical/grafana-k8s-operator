@@ -606,7 +606,7 @@ class GrafanaSourceConsumer(Object):
         if self._stored.sources:
             self._stored.sources = {}
             peer_sources = self.get_peer_data("sources")
-            sources = {**sources, **peer_sources}
+            sources.update(peer_sources)
             self.set_peer_data("sources", sources)
 
         if self._stored.sources_to_delete:
@@ -643,6 +643,6 @@ class GrafanaSourceConsumer(Object):
         self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore
 
     def get_peer_data(self, key: str) -> Any:
-        """Put information into the peer data bucket instead of `StoredState`."""
+        """Retrieve information from the peer data bucket instead of `StoredState`."""
         data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore
         return json.loads(data) if data else {}
