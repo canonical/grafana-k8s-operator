@@ -101,6 +101,7 @@ class TestCharm(unittest.TestCase):
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
+        self.harness.add_relation("grafana", "grafana")
 
         self.minimal_datasource_hash = hashlib.sha256(
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")

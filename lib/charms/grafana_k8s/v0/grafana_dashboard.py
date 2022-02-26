@@ -220,6 +220,7 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_RELATION_NAME = "grafana-dashboard"
+DEFAULT_PEER_NAME = "grafana"
 RELATION_INTERFACE_NAME = "grafana_dashboard"
 
 TEMPLATE_DROPDOWNS = [
@@ -755,6 +756,8 @@ class GrafanaDashboardProvider(Object):
         self._charm = charm
         self._relation_name = relation_name
         self._dashboards_path = dashboards_path
+
+        # No peer relation bucket we can rely on providers, keep StoredState here, too
         self._stored.set_default(dashboard_templates={})
 
         self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)
@@ -938,7 +941,11 @@ class GrafanaDashboardConsumer(Object):
     on = GrafanaDashboardEvents()
     _stored = StoredState()
 
-    def __init__(self, charm: CharmBase, relation_name: str = DEFAULT_RELATION_NAME) -> None:
+    def __init__(
+        self,
+        charm: CharmBase,
+        relation_name: str = DEFAULT_RELATION_NAME,
+    ) -> None:
         """API to receive Grafana dashboards from charmed operators.
 
         The :class:`GrafanaDashboardConsumer` object provides an API
@@ -988,6 +995,10 @@ class GrafanaDashboardConsumer(Object):
             self._charm.on[self._relation_name].relation_broken,
             self._on_grafana_dashboard_relation_broken,
         )
+        self.framework.observe(
+            self._charm.on[DEFAULT_PEER_NAME].relation_changed,
+            self._on_grafana_peer_changed,
+        )
 
     def get_dashboards_from_relation(self, relation_id: int) -> List:
         """Get a list of known dashboards for one instance of the monitored relation.
@@ -1000,7 +1011,7 @@ class GrafanaDashboardConsumer(Object):
         """
         return [
             self._to_external_object(relation_id, dashboard)
-            for dashboard in self._stored.dashboards.get(relation_id, [])
+            for dashboard in self._get_stored_dashboards(relation_id)
         ]
 
     def _on_grafana_dashboard_relation_changed(self, event: RelationChangedEvent) -> None:
@@ -1013,12 +1024,18 @@ class GrafanaDashboardConsumer(Object):
         available in the app's datastore object. The Grafana charm can
         then respond to the event to update its configuration.
         """
-        # TODO Are we sure this is right? It sounds like every Grafana unit
-        # should create files with the dashboards in its container.
-        if not self._charm.unit.is_leader():
-            return
+        changes = False
+        if self._charm.unit.is_leader():
+            changes = self._render_dashboards_and_signal_changed(event.relation)
 
-        self._render_dashboards_and_emit_event(event.relation)
+        if changes:
+            self.on.dashboards_changed.emit()
+
+    def _on_grafana_peer_changed(self, _: RelationChangedEvent) -> None:
+        """Emit dashboard events on peer events so secondary charm data updates."""
+        if self._charm.unit.is_leader():
+            return
+        self.on.dashboards_changed.emit()
 
     def update_dashboards(self, relation: Optional[Relation] = None) -> None:
         """Re-establish dashboards on one or more relations.
@@ -1031,13 +1048,17 @@ class GrafanaDashboardConsumer(Object):
                 updated. If not specified, all relations managed by this
                 :class:`GrafanaDashboardConsumer` will be updated.
         """
-        if not self._charm.unit.is_leader():
-            return
+        changes = False
+        if self._charm.unit.is_leader():
+            relations = (
+                [relation] if relation else self._charm.model.relations[self._relation_name]
+            )
 
-        relations = [relation] if relation else self._charm.model.relations[self._relation_name]
+            for relation in relations:
+                self._render_dashboards_and_signal_changed(relation)  # type: ignore
 
-        for relation in relations:
-            self._render_dashboards_and_emit_event(relation)
+        if changes:
+            self.on.dashboards_changed.emit()
 
     def _on_grafana_dashboard_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Update job config when providers depart.
@@ -1050,7 +1071,7 @@ class GrafanaDashboardConsumer(Object):
 
         self._remove_all_dashboards_for_relation(event.relation)
 
-    def _render_dashboards_and_emit_event(self, relation: Relation) -> None:
+    def _render_dashboards_and_signal_changed(self, relation: Relation) -> bool:  # type: ignore
         """Validate a given dashboard.
 
         Verify that the passed dashboard data is able to be found in our list
@@ -1059,6 +1080,9 @@ class GrafanaDashboardConsumer(Object):
 
         Args:
             relation: Relation; The relation the dashboard is associated with.
+
+        Returns:
+            a boolean indicating whether an event should be emitted
         """
         other_app = relation.app
 
@@ -1070,7 +1094,7 @@ class GrafanaDashboardConsumer(Object):
                 self._relation_name,
                 str(relation.id),
             )
-            return
+            return False
 
         data = json.loads(raw_data)
 
@@ -1152,22 +1176,27 @@ class GrafanaDashboardConsumer(Object):
             )
 
             # Dropping dashboards for a relation needs to be signalled
-            self.on.dashboards_changed.emit()
+            return True
         else:
             stored_data = rendered_dashboards
-            currently_stored_data = self._stored.dashboards.get(relation.id, {})
+            currently_stored_data = self._get_stored_dashboards(relation.id)
 
             coerced_data = (
                 _type_convert_stored(currently_stored_data) if currently_stored_data else {}
             )
 
             if not coerced_data == stored_data:
-                self._stored.dashboards[relation.id] = stored_data
-                self.on.dashboards_changed.emit()
+                stored_dashboards = self.get_peer_data("dashboards")
+                stored_dashboards[relation.id] = stored_data
+                self.set_peer_data("dashboards", stored_dashboards)
+                return True
 
     def _remove_all_dashboards_for_relation(self, relation: Relation) -> None:
         """If an errored dashboard is in stored data, remove it and trigger a deletion."""
-        if self._stored.dashboards.pop(relation.id, None):
+        if self._get_stored_dashboards(relation.id):
+            stored_dashboards = self.get_peer_data("dashboards")
+            stored_dashboards.pop(str(relation.id))
+            self.set_peer_data("dashboards", stored_dashboards)
             self.on.dashboards_changed.emit()
 
     def _to_external_object(self, relation_id, dashboard):
@@ -1188,12 +1217,32 @@ class GrafanaDashboardConsumer(Object):
         dashboards = []
 
         for _, (relation_id, dashboards_for_relation) in enumerate(
-            self._stored.dashboards.items()
+            self.get_peer_data("dashboards").items()
         ):
             for dashboard in dashboards_for_relation:
                 dashboards.append(self._to_external_object(relation_id, dashboard))
 
         return dashboards
+
+    def _get_stored_dashboards(self, relation_id: int) -> list:
+        """Pull stored dashboards out of the peer data bucket."""
+        return self.get_peer_data("dashboards").get(str(relation_id), {})
+
+    def _set_default_data(self) -> None:
+        """Set defaults if they are not in peer relation data."""
+        data = {"dashboards": {}}  # type: ignore
+        for k, v in data.items():
+            if not self.get_peer_data(k):
+                self.set_peer_data(k, v)
+
+    def set_peer_data(self, key: str, data: Any) -> None:
+        """Put information into the peer data bucket instead of `StoredState`."""
+        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore
+
+    def get_peer_data(self, key: str) -> Any:
+        """Retrieve information from the peer data bucket instead of `StoredState`."""
+        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore
+        return json.loads(data) if data else {}
 
 
 class GrafanaDashboardAggregator(Object):
@@ -1241,6 +1290,9 @@ class GrafanaDashboardAggregator(Object):
         grafana_relation: str = "downstream-grafana-dashboard",
     ):
         super().__init__(charm, grafana_relation)
+
+        # Reactive charms may be RPC-ish and not leave reliable data around. Keep
+        # StoredState here
         self._stored.set_default(
             dashboard_templates={},
             id_mappings={},
