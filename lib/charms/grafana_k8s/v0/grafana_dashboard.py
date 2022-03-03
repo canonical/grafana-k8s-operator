@@ -592,6 +592,9 @@ def _replace_template_fields(
             if not existing_templates:
                 panel["datasource"] = "${prometheusds}"
             else:
+                if panel["datasource"] in replacements.values():
+                    # Already a known template variable
+                    continue
                 # Strip out variable characters and maybe braces
                 ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
                 replacement = replacements.get(datasources[ds], "")

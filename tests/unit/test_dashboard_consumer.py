@@ -126,6 +126,58 @@ EXISTING_VARIABLE_DASHBOARD_RENDERED = json.dumps(
     }
 )
 
+EXISTING_DATASOURCE_DASHBOARD_TEMPLATE = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "${prometheusds}"
+        },
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "${leave_me_alone}"
+        }
+    ],
+    "templating": {
+        "list": [
+            {
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": false,
+                "label": null,
+                "multi": false,
+                "name": "prometheusds",
+                "options": [],
+                "query": "prometheus",
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "type": "datasource"
+            },
+            {
+                "name": "leave_me_alone",
+                "query": "influxdb",
+                "type": "datasource"
+            }
+        ]
+    }
+}
+"""
+
+EXISTING_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
+            {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
+        ],
+        "templating": {
+            "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
+            + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
+        },
+    }
+)
+
 
 class ConsumerCharm(CharmBase):
     _stored = StoredState()
