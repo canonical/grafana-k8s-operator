@@ -595,6 +595,9 @@ def _replace_template_fields(
                 if panel["datasource"] in replacements.values():
                     # Already a known template variable
                     continue
+                if not panel["datasource"]:
+                    # Don't worry about null values
+                    continue
                 # Strip out variable characters and maybe braces
                 ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
                 replacement = replacements.get(datasources[ds], "")
