@@ -564,7 +564,7 @@ def _convert_dashboard_fields(content: str) -> str:
     return json.dumps(dict_content)
 
 
-def _replace_template_fields(
+def _replace_template_fields(  # noqa: C901
     dict_content: dict, datasources: dict, existing_templates: bool
 ) -> dict:
     """Make templated fields get cleaned up afterwards.
