@@ -651,6 +651,7 @@ class GrafanaCharm(CharmBase):
         """Returns the password for the admin user as an action response."""
         if not self.grafana_service.is_ready:
             event.fail("Grafana is not reachable yet. Please try again in a few minutes")
+            return
         if self.grafana_service.password_has_been_changed(
             self.model.config["admin_user"], self._get_admin_password()
         ):

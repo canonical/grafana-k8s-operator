@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import unittest
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import yaml
 from ops.testing import Harness
@@ -171,11 +172,31 @@ class TestCharm(unittest.TestCase):
         config = self.harness.charm.container.pull(dashboards_dir_path)
         self.assertEqual(yaml.safe_load(config), DASHBOARD_CONFIG)
 
-    def can_get_password(self):
+    def test_can_get_password(self):
         self.harness.set_leader(True)
 
         # Harness doesn't quite support actions yet...
         self.assertTrue(re.match(r"[A-Za-z0-9]{12}", self.harness.charm._get_admin_password()))
+
+    @patch("grafana_server.Grafana.is_ready", new_callable=PropertyMock)
+    def test_sane_message_for_password_when_grafana_down(self, mock_ready):
+        mock_ready.return_value = False
+        event = MagicMock()
+        self.harness.charm._on_get_admin_password(event)
+        event.fail.assert_called_with(
+            "Grafana is not reachable yet. Please try again in a few minutes"
+        )
+
+    @patch("grafana_server.Grafana.password_has_been_changed")
+    @patch("grafana_server.Grafana.is_ready", new_callable=PropertyMock)
+    def test_returns_password_changed_message(self, mock_ready, mock_pw_changed):
+        mock_ready.return_value = True
+        mock_pw_changed.return_value = True
+        event = MagicMock()
+        self.harness.charm._on_get_admin_password(event)
+        event.set_results.assert_called_with(
+            {"admin-password": "Admin password has been changed by an administrator"}
+        )
 
     def test_config_is_updated_with_subpath(self):
         self.harness.set_leader(True)
