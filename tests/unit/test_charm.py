@@ -187,6 +187,16 @@ class TestCharm(unittest.TestCase):
         self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
         self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
 
+    def test_given_no_config_when_update_config_then_grafana_config_file_is_empty(self):
+        self.harness.set_leader(True)
+
+        self.harness.update_config()
+
+        config = self.harness.charm.container.pull(CONFIG_PATH)
+        config_parser = configparser.ConfigParser()
+        config_parser.read_file(config)  # type: ignore[arg-type]
+        assert len(config_parser.sections()) == 0
+
     def test_given_auth_proxy_config_is_enabled_when_update_config_then_grafana_config_file_contains_auth_proxy_data(
         self,
     ):

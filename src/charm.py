@@ -418,7 +418,7 @@ class GrafanaCharm(CharmBase):
         Creates the configuration file content depending on the various configurations either set
         by users or through relationship data.
         """
-        config = configparser.ConfigParser()
+        config = {}
         if self.has_db:
             config["database"] = self._generate_database_config()
         if self.auth_proxy_enabled:
@@ -426,8 +426,11 @@ class GrafanaCharm(CharmBase):
         return self._generate_config_ini_string(config)
 
     @staticmethod
-    def _generate_config_ini_string(config: configparser.ConfigParser) -> str:
+    def _generate_config_ini_string(config_dict: dict) -> str:
         """Converts configparser data to string."""
+        config = configparser.ConfigParser()
+        for key, value in config_dict.items():
+            config[key] = value
         data = StringIO()
         config.write(data)
         data.seek(0)
