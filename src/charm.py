@@ -358,6 +358,11 @@ class GrafanaCharm(CharmBase):
         rel = self.model.get_relation(DATABASE)
         return len(rel.units) > 0 if rel is not None else False
 
+    @property
+    def auth_proxy_enabled(self) -> bool:
+        """Returns whether or not enable_auth_proxy config is set."""
+        return self.model.config.get("enable_auth_proxy", False)
+
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
         """Sets configuration information for database connection.
 
@@ -408,26 +413,39 @@ class GrafanaCharm(CharmBase):
         self._configure()
 
     def _generate_grafana_config(self) -> str:
-        """Generate a database configuration for Grafana.
+        """Creates configuration file content.
 
-        For now, this only creates database information, since everything else
-        can be set in ENV variables, but leave for expansion later so we can
-        hide auth secrets
+        Creates the configuration file content depending on the various configurations either set
+        by users or through relationship data.
         """
-        return self._generate_database_config() if self.has_db else ""
+        config = configparser.ConfigParser()
+        if self.has_db:
+            config["database"] = self._generate_database_config()
+        if self.auth_proxy_enabled:
+            config["auth.proxy"] = self._generate_auth_proxy_config()
+        return self._generate_config_ini_string(config)
 
-    def _generate_database_config(self) -> str:
+    @staticmethod
+    def _generate_config_ini_string(config: configparser.ConfigParser) -> str:
+        """Converts configparser data to string."""
+        data = StringIO()
+        config.write(data)
+        data.seek(0)
+        ret = data.read()
+        data.close()
+        return ret
+
+    def _generate_database_config(self) -> dict:
         """Generate a database configuration.
 
         Returns:
-            A string containing the required database information to be stubbed into the config
+            A dict containing the required database information to be stubbed into the config
             file.
         """
         db_config = self.get_peer_data("database")
         if not db_config:
-            return ""
+            return {}
 
-        config_ini = configparser.ConfigParser()
         db_type = "mysql"
 
         db_url = "{0}://{1}:{2}@{3}/{4}".format(
@@ -437,7 +455,7 @@ class GrafanaCharm(CharmBase):
             db_config.get("host"),
             db_config.get("name"),
         )
-        config_ini["database"] = {
+        return {
             "type": db_type,
             "host": db_config.get("host"),
             "name": db_config.get("name", ""),
@@ -446,14 +464,21 @@ class GrafanaCharm(CharmBase):
             "url": db_url,
         }
 
-        # This is silly, but a ConfigParser() handles this nicer than
-        # raw string manipulation
-        data = StringIO()
-        config_ini.write(data)
-        data.seek(0)
-        ret = data.read()
-        data.close()
-        return ret
+    @staticmethod
+    def _generate_auth_proxy_config() -> dict:
+        """Configuration for Grafana to let a HTTP reverse proxy handle authentication.
+
+        enabled: Set to true to enable this feature
+        header_name: HTTP Header name
+        header_property: HTTP Header property
+        auto_sign_up: Set to `true` to enable auto sign up of users who do not exist in Grafana DB
+        """
+        return {
+            "enabled": "true",
+            "header_name": "X-WEBAUTH-USER",
+            "header_property": "username",
+            "auto_sign_up": "false",
+        }
 
     #####################################
 
