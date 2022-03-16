@@ -192,12 +192,25 @@ class TestCharm(unittest.TestCase):
     ):
         self.harness.set_leader(True)
 
-        self.harness.update_config({"enable_auth_proxy": "True"})
+        self.harness.update_config({"enable_auth_proxy": True})  # type: ignore[dict-item]
 
         config = self.harness.charm.container.pull(CONFIG_PATH)
         config_parser = configparser.ConfigParser()
         config_parser.read_file(config)  # type: ignore[arg-type]
+        assert "auth.proxy" in config_parser
         assert config_parser["auth.proxy"]["enabled"] == "true"
         assert config_parser["auth.proxy"]["header_name"] == "X-WEBAUTH-USER"
         assert config_parser["auth.proxy"]["header_property"] == "username"
         assert config_parser["auth.proxy"]["auto_sign_up"] == "false"
+
+    def test_given_auth_proxy_config_is_disabled_when_update_config_then_grafana_config_file_doesnt_contain_auth_proxy_data(
+        self,
+    ):
+        self.harness.set_leader(True)
+
+        self.harness.update_config({"enable_auth_proxy": False})  # type: ignore[dict-item]
+
+        config = self.harness.charm.container.pull(CONFIG_PATH)
+        config_parser = configparser.ConfigParser()
+        config_parser.read_file(config)  # type: ignore[arg-type]
+        assert "auth.proxy" not in config_parser
