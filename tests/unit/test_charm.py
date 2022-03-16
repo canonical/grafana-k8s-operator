@@ -192,11 +192,11 @@ class TestCharm(unittest.TestCase):
     ):
         self.harness.set_leader(True)
 
-        self.harness.update_config({"enable_auth_proxy": True})
+        self.harness.update_config({"enable_auth_proxy": "True"})
 
         config = self.harness.charm.container.pull(CONFIG_PATH)
         config_parser = configparser.ConfigParser()
-        config_parser.read_file(config)
+        config_parser.read_file(config)  # type: ignore[arg-type]
         assert config_parser["auth.proxy"]["enabled"] == "true"
         assert config_parser["auth.proxy"]["header_name"] == "X-WEBAUTH-USER"
         assert config_parser["auth.proxy"]["header_property"] == "username"
