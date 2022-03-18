@@ -295,26 +295,18 @@ class TestDashboardConsumer(unittest.TestCase):
             "uuid": "12345678",
         }
 
-        self.harness.update_relation_data(
-            rels[0],
-            "provider",
-            {
-                "dashboards": json.dumps(bad_data),
-            },
-        )
-
-        data = json.loads(
-            self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
-        )
-        self.assertEqual(
-            data["errors"],
-            [
+        with self.assertLogs(level="WARNING") as cm:
+            self.harness.update_relation_data(
+                rels[0],
+                "provider",
                 {
-                    "dashboard_id": "file:tester",
-                    "error": "Expecting property name enclosed in double quotes",
-                }
-            ],
-        )
+                    "dashboards": json.dumps(bad_data),
+                },
+            )
+            print(cm.output)
+            self.assertTrue(
+                any(["Invalid JSON in Grafana dashboard: file:tester" in msg for msg in cm.output])
+            )
 
     def test_consumer_templates_datasource(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)

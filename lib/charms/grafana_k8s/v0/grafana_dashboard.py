@@ -21,8 +21,9 @@ the default arguments provides a complete use case. For the simplest
 use case of a charm which bundles dashboards and provides a
 `provides: grafana-dashboard` interface,
 
-    grafana-dashboard:
-      interface: grafana_dashboard
+    requires:
+      grafana-dashboard:
+        interface: grafana_dashboard
 
 creation of a `GrafanaDashboardProvider` object with the default arguments is
 sufficient.
@@ -31,12 +32,10 @@ sufficient.
 be included in your charm with a default path of:
 
     path/to/charm.py
-    path/to/src/grafana_dashboards/*.tmpl
+    path/to/src/grafana_dashboards/*
 
-Where the `*.tmpl` files are Grafana dashboard JSON data either from the
+Where the files are Grafana dashboard JSON data either from the
 Grafana marketplace, or directly exported from a Grafana instance.
-Dashboards obtain via export or via the marketplace would need to be renamed to have the `*.tmpl`
-suffix, otherwise they will not be read.
 Refer to the [official docs](https://grafana.com/tutorials/provision-dashboards-and-data-sources/)
 for more information.
 
@@ -214,7 +213,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 logger = logging.getLogger(__name__)
 
@@ -830,7 +829,7 @@ class GrafanaDashboardProvider(Object):
                 if dashboard_id.startswith("file:"):
                     del stored_dashboard_templates[dashboard_id]
 
-            for path in filter(Path.is_file, Path(self._dashboards_path).glob("*.tmpl")):
+            for path in filter(Path.is_file, Path(self._dashboards_path).glob("*")):
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
@@ -1127,7 +1126,8 @@ class GrafanaDashboardConsumer(Object):
                 content = _encode_dashboard_content(_convert_dashboard_fields(content))
             except json.JSONDecodeError as e:
                 error = str(e.msg)
-                relation_has_invalid_dashboards = True
+                logger.warning("Invalid JSON in Grafana dashboard: {}".format(fname))
+                continue
             except TemplateSyntaxError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True
@@ -1490,7 +1490,7 @@ class GrafanaDashboardAggregator(Object):
             )
 
         if dashboards_path:
-            for path in filter(Path.is_file, Path(dashboards_path).glob("*.tmpl")):
+            for path in filter(Path.is_file, Path(dashboards_path).glob("*")):
                 if event.app.name in path.name:
                     id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
