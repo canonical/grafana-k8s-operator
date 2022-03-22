@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import secrets
+import socket
 import string
 from io import StringIO
 from typing import Any
@@ -89,7 +90,10 @@ class GrafanaCharm(CharmBase):
 
         # -- initialize states --
         self.name = "grafana"
-        self.container = self.unit.get_container(self.name)
+        self.containers = {
+            "workload": self.unit.get_container(self.name),
+            "replication": self.unit.get_container("litestream"),
+        }
         self.grafana_service = Grafana("localhost", PORT)
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
@@ -120,6 +124,9 @@ class GrafanaCharm(CharmBase):
             self.dashboard_consumer.on.dashboards_changed, self._on_dashboards_changed
         )
 
+        # -- Peer relation observations
+        self.framework.observe(self.on[PEER].relation_changed, self._on_peer_data_changed)
+
         # -- database relation observations
         self.framework.observe(self.on[DATABASE].relation_changed, self._on_database_changed)
         self.framework.observe(self.on[DATABASE].relation_broken, self._on_database_broken)
@@ -140,6 +147,29 @@ class GrafanaCharm(CharmBase):
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
         self._configure()
+        if self.unit.is_leader():
+            self._configure_replication(True)
+
+    def _configure_replication(self, leader: bool) -> None:
+        """Checks to ensure that the leader is streaming DB changes, and others are listening.
+
+        If a leader election event through `config-changed` would result in a new primary, start
+        it. If the address provided by the leader in peer data changes, `leader` will be false,
+        and replicas will be started.
+
+        Args:
+            leader: a boolean indicating the leader status
+        """
+        restart = False
+
+        if (
+            self.containers["replication"].get_plan().services
+            != self._build_replication(leader).services
+        ):
+            restart = True
+
+        if restart:
+            self.restart_litestream(leader)
 
     def _on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
         """When a grafana-source is added or modified, update the config.
@@ -170,7 +200,7 @@ class GrafanaCharm(CharmBase):
         already stored in the charm. If either the base Grafana config
         or the datasource config differs, restart Grafana.
         """
-        if not self.container.can_connect():
+        if not self.containers["workload"].can_connect():
             return
 
         logger.debug("Handling grafana-k8a configuration change")
@@ -197,7 +227,7 @@ class GrafanaCharm(CharmBase):
 
             restart = True
 
-        if self.container.get_plan().services != self._build_layer().services:
+        if self.containers["workload"].get_plan().services != self._build_layer().services:
             restart = True
 
         if restart:
@@ -225,7 +255,7 @@ class GrafanaCharm(CharmBase):
             config: A :str: containing the datasource configuration
         """
         try:
-            self.container.push(CONFIG_PATH, config, make_dirs=True)
+            self.containers["workload"].push(CONFIG_PATH, config, make_dirs=True)
         except ConnectionError:
             logger.error(
                 "Could not push datasource config. Pebble refused connection. Shutting down?"
@@ -358,6 +388,17 @@ class GrafanaCharm(CharmBase):
         rel = self.model.get_relation(DATABASE)
         return len(rel.units) > 0 if rel is not None else False
 
+    def _on_peer_data_changed(self, event: RelationChangedEvent) -> None:
+        """Get the replica primary address from peer data so we can check whether to restart.
+
+        Args:
+            event: A :class:`RelationChangedEvent` from a `grafana` source
+        """
+        primary_addr = self.get_peer_data("replica_primary")
+
+        if primary_addr and not self.unit.is_leader():
+            self._configure_replication(False)
+
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
         """Sets configuration information for database connection.
 
@@ -477,19 +518,48 @@ class GrafanaCharm(CharmBase):
         layer = self._build_layer()
 
         try:
-            plan = self.container.get_plan()
+            plan = self.containers["workload"].get_plan()
             if plan.services != layer.services:
-                self.container.add_layer(self.name, layer, combine=True)
-                if self.container.get_service(self.name).is_running():
-                    self.container.stop(self.name)
+                self.containers["workload"].add_layer(self.name, layer, combine=True)
+                if self.containers["workload"].get_service(self.name).is_running():
+                    self.containers["workload"].stop(self.name)
 
-                self.container.start(self.name)
+                self.containers["workload"].start(self.name)
                 logger.info("Restarted grafana-k8s")
 
             self.unit.status = ActiveStatus()
+
+            # We should also make sure sqlite is in WAL mode for replication
+            pragma = self.containers["workload"].exec(
+                ["sqlite3", "/var/lib/grafana/grafana.db", "pragma journal_mode=wal;"]
+            )
+            pragma.wait()
         except ConnectionError:
             logger.error(
                 "Could not restart grafana-k8s -- Pebble socket does "
+                "not exist or is not responsive"
+            )
+
+    def restart_litestream(self, leader: bool) -> None:
+        """Restart the pebble container.
+
+        `container.replan()` is intentionally avoided, since if no environment
+        variables are changed, this will not actually restart Litestream.
+        """
+        layer = self._build_replication(leader)
+
+        try:
+            plan = self.containers["replication"].get_plan()
+            if plan.services != layer.services:
+                self.containers["replication"].add_layer("litestream", layer, combine=True)
+                if self.containers["replication"].get_service("litestream").is_running():
+                    self.containers["replication"].stop("litestream")
+
+                self.containers["replication"].start("litestream")
+                logger.info("Restarted replication")
+        except ConnectionError:
+            logger.error(
+                "Could not restart replication -- Pebble socket does "
                 "not exist or is not responsive"
             )
 
@@ -563,6 +633,43 @@ class GrafanaCharm(CharmBase):
 
         return layer
 
+    def _build_replication(self, primary: bool) -> Layer:
+        """Construct the pebble layer information for litestream."""
+        config = {}
+
+        if primary:
+            self.set_peer_data("replica_primary", socket.gethostbyname(socket.getfqdn()))
+            config["LITESTREAM_ADDR"] = "{}:{}".format(
+                socket.gethostbyname(socket.getfqdn()), "9876"
+            )
+            arg = "replicate"
+        else:
+            config["LITESTREAM_UPSTREAM_URL"] = "{}:{}".format(
+                self.get_peer_data("replica_primary"), "9876"
+            )
+            config["LITESTREAM_UPSTREAM_PATH"] = "/stream"
+            arg = "restore -o"
+
+        layer = Layer(
+            {
+                "summary": "litestream layer",
+                "description": "litestream layer",
+                "services": {
+                    "litestream": {
+                        "override": "replace",
+                        "summary": "litestream service",
+                        "command": "litestream {} /var/lib/grafana/grafana.db".format(arg),
+                        "startup": "enabled",
+                        "environment": {
+                            **config,
+                        },
+                    }
+                },
+            }
+        )
+
+        return layer
+
     @property
     def grafana_version(self):
         """Grafana server version."""
@@ -597,9 +704,9 @@ class GrafanaCharm(CharmBase):
         Args:
             file: a `str` filepath to read
         """
-        if self.container.can_connect():
+        if self.containers["workload"].can_connect():
             try:
-                content = self.container.pull(file)
+                content = self.containers["workload"].pull(file)
                 hash = hashlib.sha256(str(content.read()).encode("utf-8")).hexdigest()
                 return hash
             except (FileNotFoundError, ProtocolError, PathError) as e:

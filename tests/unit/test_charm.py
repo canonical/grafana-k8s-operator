@@ -99,8 +99,11 @@ def cli_arg(plan, cli_opt):
 
 class TestCharm(unittest.TestCase):
     def setUp(self):
+        patch_exec = patch("ops.testing._TestingPebbleClient.exec", MagicMock())
+        self.patch_exec = patch_exec.start()
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
+        self.addCleanup(self.patch_exec)
         self.harness.begin()
         self.harness.add_relation("grafana", "grafana")
 
@@ -121,7 +124,7 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
 
     def test_datasource_config_is_updated_by_grafana_source_removal(self):
@@ -136,13 +139,13 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
 
         rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
         self.harness.charm.on["grafana-source"].relation_departed.emit(rel)
 
-        config = yaml.safe_load(self.harness.charm.container.pull(DATASOURCES_PATH))
+        config = yaml.safe_load(self.harness.charm.containers["workload"].pull(DATASOURCES_PATH))
         self.assertEqual(config.get("datasources"), [])
         self.assertEqual(
             config.get("deleteDatasources"),
@@ -160,7 +163,7 @@ class TestCharm(unittest.TestCase):
             DB_CONFIG,
         )
 
-        config = self.harness.charm.container.pull(CONFIG_PATH)
+        config = self.harness.charm.containers["workload"].pull(CONFIG_PATH)
         self.assertEqual(config.read(), DATABASE_CONFIG_INI)
 
     def test_dashboard_path_is_initialized(self):
@@ -169,7 +172,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.init_dashboard_provisioning(PROVISIONING_PATH + "/dashboards")
 
         dashboards_dir_path = PROVISIONING_PATH + "/dashboards/default.yaml"
-        config = self.harness.charm.container.pull(dashboards_dir_path)
+        config = self.harness.charm.containers["workload"].pull(dashboards_dir_path)
         self.assertEqual(yaml.safe_load(config), DASHBOARD_CONFIG)
 
     def test_can_get_password(self):
@@ -203,6 +206,8 @@ class TestCharm(unittest.TestCase):
 
         self.harness.update_config({"web_external_url": "/grafana"})
 
-        services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
+        services = (
+            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
+        )
         self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
         self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
