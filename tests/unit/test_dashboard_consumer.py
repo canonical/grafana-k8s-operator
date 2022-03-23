@@ -303,7 +303,6 @@ class TestDashboardConsumer(unittest.TestCase):
                     "dashboards": json.dumps(bad_data),
                 },
             )
-            print(cm.output)
             self.assertTrue(
                 any(["Invalid JSON in Grafana dashboard: file:tester" in msg for msg in cm.output])
             )

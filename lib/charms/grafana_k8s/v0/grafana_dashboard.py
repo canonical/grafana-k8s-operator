@@ -829,7 +829,12 @@ class GrafanaDashboardProvider(Object):
                 if dashboard_id.startswith("file:"):
                     del stored_dashboard_templates[dashboard_id]
 
-            for path in filter(Path.is_file, Path(self._dashboards_path).glob("*")):
+            # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
+            # lambda for the filter
+            for path in filter(
+                lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
+                Path(self._dashboards_path).glob("*"),
+            ):
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
