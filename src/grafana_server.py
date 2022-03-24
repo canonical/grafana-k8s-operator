@@ -28,7 +28,6 @@ class Grafana:
         Args:
             host: a :str: which indicates the hostname
             port: an :int: to listen on
-
         """
         self.host = host
         self.port = port
@@ -54,8 +53,8 @@ class Grafana:
         headers = urllib3.make_headers(basic_auth="{}:{}".format(username, passwd))
 
         try:
-            self.http.request("GET", url, headers=headers)
-            return False
+            res = self.http.request("GET", url, headers=headers)
+            return True if "invalid username" in res.data.decode("utf8") else False
         except urllib3.exceptions.HTTPError:
             return True
 
