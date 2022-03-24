@@ -74,6 +74,31 @@ VARIABLE_DASHBOARD_RENDERED = json.dumps(
     }
 )
 
+NULL_DATASOURCE_DASHBOARD_TEMPLATE = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "$replace_me"
+        },
+        {
+            "data": "Row separator",
+            "datasource": null
+        }
+    ]
+}
+"""
+
+NULL_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
+            {"data": "Row separator", "datasource": None},
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
 EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
 {
     "panels": [
@@ -382,6 +407,24 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": VARIABLE_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    def test_consumer_templates_with_null_datasource(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(NULL_DATASOURCE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": NULL_DATASOURCE_DASHBOARD_RENDERED,
                 }
             ],
         )
