@@ -587,7 +587,7 @@ def _replace_template_fields(  # noqa: C901
         #
         # COS only knows about Prometheus and Loki.
         for panel in panels:
-            if "datasource" not in panel:
+            if "datasource" not in panel or not panel.get("datasource", ""):
                 continue
             if not existing_templates:
                 panel["datasource"] = "${prometheusds}"
