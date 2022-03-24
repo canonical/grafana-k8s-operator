@@ -1495,7 +1495,10 @@ class GrafanaDashboardAggregator(Object):
             )
 
         if dashboards_path:
-            for path in filter(Path.is_file, Path(dashboards_path).glob("*")):
+            for path in filter(
+                lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
+                Path(dashboards_path).glob("*"),
+            ):
                 if event.app.name in path.name:
                     id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
