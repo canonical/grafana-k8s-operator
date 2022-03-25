@@ -365,9 +365,12 @@ class GrafanaSourceProvider(Object):
         self._relation_name = relation_name
         events = self._charm.on[relation_name]
 
-        refresh_event = refresh_event or self._charm.on.pebble_ready
-
         self._source_type = source_type
+
+        if not refresh_event:
+            if len(self._charm.meta.containers) == 1:
+                container = list(self._charm.meta.containers.values())[0]
+                refresh_event = self._charm.on[container.name.replace("-", "_")].pebble_ready
 
         if source_port and source_uri:
             logger.warning(
@@ -386,7 +389,8 @@ class GrafanaSourceProvider(Object):
         self._source_uri = source_uri
 
         self.framework.observe(events.relation_joined, self._set_sources)
-        self.framework.observe(refresh_event, self._set_unit_details)
+        if refresh_event:
+            self.framework.observe(refresh_event, self._set_unit_details)
 
     def _set_sources(self, event: RelationJoinedEvent):
         """Inform the consumer about the source configuration."""
@@ -429,7 +433,6 @@ class GrafanaSourceProvider(Object):
                 uri = self._source_uri
             else:
                 address = self._charm.model.get_binding(relation).network.bind_address
-                print("ELSE")
                 if address:
                     uri = "{}:{}".format(str(address), self._source_port)
 

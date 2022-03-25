@@ -131,3 +131,22 @@ class TestSourceProviderWithIngress(unittest.TestCase):
         data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         self.assertIn("grafana_source_host", data)
         self.assertEqual(data["grafana_source_host"], "http://1.2.3.4/v1")
+
+
+class ProviderCharmNoRefreshEvent(CharmBase):
+    _stored = StoredState()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+        self.provider = GrafanaSourceProvider(self)
+
+        self._stored.set_default(valid_events=0)  # available data sources
+        self._stored.set_default(invalid_events=0)
+
+
+class TestDashboardProviderNoRefreshEvent(unittest.TestCase):
+    def test_provider_instantiates_correctly(self):
+        self.harness = Harness(ProviderCharmNoRefreshEvent, meta=CONSUMER_META)
+        self.harness.begin_with_initial_hooks()
+
+        self.harness.container_pebble_ready("grafana-tester")
