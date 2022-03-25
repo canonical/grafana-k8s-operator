@@ -32,8 +32,7 @@ class ProviderCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self.provider = GrafanaSourceProvider(
-            self,
-            refresh_event=self.on.grafana_tester_pebble_ready,
+            self, refresh_event=self.on.grafana_tester_pebble_ready, source_port="9090"
         )
 
 

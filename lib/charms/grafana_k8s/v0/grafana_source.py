@@ -29,9 +29,13 @@ The default arguments are:
     `refresh_event`: A `PebbleReady` event from `charm`, used to refresh
         the IP address sent to Grafana on a charm lifecycle event or
         pod restart
-    `source_type`: prometheus
-    `source_port`: 9090
+    `source_type`: ""
+    `source_port`: ""
     `source_uri`: ""
+
+`source_uri` should be a fully-resolvable URI for a valid Grafana source.
+As only HTTP sources are supported via libraries in the current charm, this
+is likely to be `http://example.com/api` or similar.
 
 If your configuration requires any changes from these defaults, they
 may be set from the class constructor. It may be instantiated as
@@ -315,8 +319,8 @@ class GrafanaSourceProvider(Object):
         charm: CharmBase,
         refresh_event: Optional[BoundEvent] = None,
         relation_name: str = DEFAULT_RELATION_NAME,
-        source_type: Optional[str] = "prometheus",
-        source_port: Optional[str] = "9090",
+        source_type: Optional[str] = "",
+        source_port: Optional[str] = "",
         source_uri: Optional[str] = "",
     ) -> None:
         """Construct a Grafana charm client.
@@ -354,7 +358,8 @@ class GrafanaSourceProvider(Object):
                 required for Grafana configuration.
             source_uri: an optional source uri which can be used if ingress for
                 a source is enabled, the source is in a different namespace, or
-                a path must be specified for another reason.
+                a path must be specified for another reason. If set, 'source_port'
+                will not be used.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
