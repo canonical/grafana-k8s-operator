@@ -91,3 +91,43 @@ class TestSourceProvider(unittest.TestCase):
         data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         self.assertIn("grafana_source_host", data)
         self.assertEqual(data["grafana_source_host"], "{}:9090".format(bind_address))
+
+
+class ProviderCharmWithIngress(CharmBase):
+    _stored = StoredState()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+        self.provider = None
+
+
+class TestSourceProviderWithIngress(unittest.TestCase):
+    def setUp(self):
+        self.harness = Harness(ProviderCharmWithIngress, meta=CONSUMER_META)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
+        self.harness.begin()
+
+    def test_provider_unit_sets_source_uri_if_provided(self):
+        self.harness.charm.provider = GrafanaSourceProvider(
+            self.harness.charm,
+            refresh_event=self.harness.charm.on.grafana_tester_pebble_ready,
+            source_uri="http://1.2.3.4/v1",
+        )
+        rel_id = self.harness.add_relation("grafana-source", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
+        self.assertIn("grafana_source_host", data)
+        self.assertEqual(data["grafana_source_host"], "http://1.2.3.4/v1")
+
+    def test_provider_unit_sets_scheme_if_not_provided(self):
+        self.harness.charm.provider = GrafanaSourceProvider(
+            self.harness.charm,
+            refresh_event=self.harness.charm.on.grafana_tester_pebble_ready,
+            source_uri="1.2.3.4/v1",
+        )
+        rel_id = self.harness.add_relation("grafana-source", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
+        self.assertIn("grafana_source_host", data)
+        self.assertEqual(data["grafana_source_host"], "http://1.2.3.4/v1")

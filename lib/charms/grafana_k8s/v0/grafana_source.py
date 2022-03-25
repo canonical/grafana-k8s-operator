@@ -31,6 +31,7 @@ The default arguments are:
         pod restart
     `source_type`: prometheus
     `source_port`: 9090
+    `source_uri`: ""
 
 If your configuration requires any changes from these defaults, they
 may be set from the class constructor. It may be instantiated as
@@ -66,7 +67,8 @@ from a dict, with a structure of:
         "type": source_type,
     },
     "unit/0": {
-        "uri": {ip_address}:{port} # `ip_address` is derived at runtime, `port` from the constructor
+        "uri": {ip_address}:{port}{path} # `ip_address` is derived at runtime, `port` from the constructor,
+                                         # and `path` from the constructor, if specified
     },
 ```
 
@@ -120,6 +122,7 @@ events may not be needed.
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional, Union
 
 from ops.charm import (
@@ -151,7 +154,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 logger = logging.getLogger(__name__)
 
@@ -314,6 +317,7 @@ class GrafanaSourceProvider(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         source_type: Optional[str] = "prometheus",
         source_port: Optional[str] = "9090",
+        source_uri: Optional[str] = "",
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -348,6 +352,9 @@ class GrafanaSourceProvider(Object):
                 the DataSource type from the Grafana perspective.
             source_port: an optional (default `9090`) source port
                 required for Grafana configuration.
+            source_uri: an optional source uri which can be used if ingress for
+                a source is enabled, the source is in a different namespace, or
+                a path must be specified for another reason.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
@@ -361,14 +368,29 @@ class GrafanaSourceProvider(Object):
         refresh_event = refresh_event or self._charm.on.pebble_ready
 
         self._source_type = source_type
+
+        if source_port and source_uri:
+            logger.warning(
+                "Both `source_port` and `source_uri` were specified! Using "
+                "`source_uri` as the address."
+            )
+
+        if source_uri and not re.match(r"^\w+://", source_uri):
+            logger.warning(
+                "'source_uri' should start with a scheme, such as "
+                "'http://'. Assuming 'http://' since none is present."
+            )
+            source_uri = "http://{}".format(source_uri)
+
         self._source_port = source_port
+        self._source_uri = source_uri
 
         self.framework.observe(events.relation_joined, self._set_sources)
-        self.framework.observe(refresh_event, self._set_unit_ip)
+        self.framework.observe(refresh_event, self._set_unit_details)
 
     def _set_sources(self, event: RelationJoinedEvent):
         """Inform the consumer about the source configuration."""
-        self._set_unit_ip(event)
+        self._set_unit_details(event)
 
         if not self._charm.unit.is_leader():
             return
@@ -391,8 +413,8 @@ class GrafanaSourceProvider(Object):
         }
         return data
 
-    def _set_unit_ip(self, _: Union[BoundEvent, RelationEvent]):
-        """Set unit host address.
+    def _set_unit_details(self, _: Union[BoundEvent, RelationEvent]):
+        """Set unit host details.
 
         Each time a provider charm container is restarted it updates its own host address in the
         unit relation data for the Prometheus consumer.
@@ -402,12 +424,19 @@ class GrafanaSourceProvider(Object):
             # that it's valid before passing it. Otherwise, we'll catch is on pebble_ready.
             # The provider side already skips adding it if `grafana_source_host` is not set,
             # so no additional guards needed
-            address = self._charm.model.get_binding(relation).network.bind_address
-            if address:
-                relation.data[self._charm.unit]["grafana_source_host"] = "{}:{}".format(
-                    str(address),
-                    self._source_port,
-                )
+            uri = None
+            if self._source_uri:
+                uri = self._source_uri
+            else:
+                address = self._charm.model.get_binding(relation).network.bind_address
+                print("ELSE")
+                if address:
+                    uri = "{}:{}".format(str(address), self._source_port)
+
+            # If _source_uri was not set in the constructor and there are no units in the
+            # relation or pebble or address was not bound, this may not be set
+            if uri:
+                relation.data[self._charm.unit]["grafana_source_host"] = uri
 
 
 class GrafanaSourceConsumer(Object):
