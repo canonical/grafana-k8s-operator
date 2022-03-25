@@ -533,11 +533,15 @@ class GrafanaSourceConsumer(Object):
                 unit_name.split("/")[1],
             )
 
+            host = (
+                "http://{}".format(host_addr) if not re.match(r"^\w+://", host_addr) else host_addr
+            )
+
             host_data = {
                 "unit": unit_name,
                 "source_name": unique_source_name,
                 "source_type": source_data["type"],
-                "url": "http://{}".format(host_addr),
+                "url": host,
             }
 
             if host_data["source_name"] in sources_to_delete:
