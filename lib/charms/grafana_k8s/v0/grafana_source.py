@@ -397,6 +397,10 @@ class GrafanaSourceProvider(Object):
         if refresh_event:
             self.framework.observe(refresh_event, self._set_unit_details)
 
+    def update_source(self):
+        """Trigger the update of relation data."""
+        self._set_sources(None)  # type: ignore
+
     def _set_sources(self, event: RelationJoinedEvent):
         """Inform the consumer about the source configuration."""
         self._set_unit_details(event)
