@@ -152,6 +152,56 @@ class TestSourceConsumer(unittest.TestCase):
         self.assertEqual(dict(sources), completed_data)
         self.assertEqual(self.harness.charm._stored.source_events, 2)
 
+    def test_consumer_notifies_on_new_sources_with_url_without_path(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
+        self.assertEqual(self.harness.charm._stored.source_events, 0)
+        self.harness.set_leader(True)
+        rel_id = self.harness.add_relation("grafana-source", "prometheus")
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"grafana_source_data": json.dumps(SOURCE_DATA)}
+        )
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.update_relation_data(
+            rel_id, "prometheus/0", {"grafana_source_host": "http://1.2.3.4:9090"}
+        )
+        completed_data = {
+            "source_name": "{}_0".format(generate_source_name(SOURCE_DATA)),
+            "source_type": "prometheus",
+            "url": "http://1.2.3.4:9090",
+            "unit": "prometheus/0",
+        }
+
+        sources = self.harness.charm.source_by_rel_id(rel_id)[0]
+
+        self.assertIsNotNone(sources)
+        self.assertEqual(dict(sources), completed_data)
+        self.assertEqual(self.harness.charm._stored.source_events, 2)
+
+    def test_consumer_notifies_on_new_sources_with_url_with_path(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
+        self.assertEqual(self.harness.charm._stored.source_events, 0)
+        self.harness.set_leader(True)
+        rel_id = self.harness.add_relation("grafana-source", "prometheus")
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"grafana_source_data": json.dumps(SOURCE_DATA)}
+        )
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.update_relation_data(
+            rel_id, "prometheus/0", {"grafana_source_host": "http://1.2.3.4:9090/some/path"}
+        )
+        completed_data = {
+            "source_name": "{}_0".format(generate_source_name(SOURCE_DATA)),
+            "source_type": "prometheus",
+            "url": "http://1.2.3.4:9090/some/path",
+            "unit": "prometheus/0",
+        }
+
+        sources = self.harness.charm.source_by_rel_id(rel_id)[0]
+
+        self.assertIsNotNone(sources)
+        self.assertEqual(dict(sources), completed_data)
+        self.assertEqual(self.harness.charm._stored.source_events, 2)
+
     def test_consumer_noop_if_data_is_empty_sources(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
