@@ -393,23 +393,35 @@ class GrafanaSourceProvider(Object):
         self._source_port = source_port
         self._source_uri = source_uri
 
-        self.framework.observe(events.relation_joined, self._set_sources)
+        self.framework.observe(events.relation_joined, self._set_sources_from_event)
         if refresh_event:
             self.framework.observe(refresh_event, self._set_unit_details)
 
-    def update_source(self):
+    def update_source(self, source_uri: Optional[str] = ""):
         """Trigger the update of relation data."""
-        self._set_sources(None)  # type: ignore
+        if source_uri:
+            self._source_uri = source_uri
 
-    def _set_sources(self, event: RelationJoinedEvent):
+        rel = self._charm.model.get_relation(self._relation_name)
+
+        if not rel:
+            return
+
+        self._set_sources(rel)
+
+    def _set_sources_from_event(self, event: RelationJoinedEvent) -> None:
+        """Get a `Relation` object from the event to pass on."""
+        self._set_sources(event.relation)
+
+    def _set_sources(self, rel: Relation):
         """Inform the consumer about the source configuration."""
-        self._set_unit_details(event)
+        self._set_unit_details(rel)
 
         if not self._charm.unit.is_leader():
             return
 
         logger.debug("Setting Grafana data sources: %s", self._scrape_data)
-        event.relation.data[self._charm.app]["grafana_source_data"] = json.dumps(self._scrape_data)
+        rel.data[self._charm.app]["grafana_source_data"] = json.dumps(self._scrape_data)
 
     @property
     def _scrape_data(self) -> Dict:
@@ -426,7 +438,7 @@ class GrafanaSourceProvider(Object):
         }
         return data
 
-    def _set_unit_details(self, _: Union[BoundEvent, RelationEvent]):
+    def _set_unit_details(self, _: Union[BoundEvent, RelationEvent, Relation]):
         """Set unit host details.
 
         Each time a provider charm container is restarted it updates its own host address in the
