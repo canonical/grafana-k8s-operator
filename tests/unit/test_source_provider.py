@@ -32,7 +32,10 @@ class ProviderCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self.provider = GrafanaSourceProvider(
-            self, refresh_event=self.on.grafana_tester_pebble_ready, source_port="9090"
+            self,
+            source_type="foobar",
+            source_port="9090",
+            refresh_event=self.on.grafana_tester_pebble_ready,
         )
 
 
@@ -110,8 +113,9 @@ class TestSourceProviderWithIngress(unittest.TestCase):
     def test_provider_unit_sets_source_uri_if_provided(self):
         self.harness.charm.provider = GrafanaSourceProvider(
             self.harness.charm,
+            source_type="foobar",
+            source_url="http://1.2.3.4/v1",
             refresh_event=self.harness.charm.on.grafana_tester_pebble_ready,
-            source_uri="http://1.2.3.4/v1",
         )
         rel_id = self.harness.add_relation("grafana-source", "provider")
         self.harness.add_relation_unit(rel_id, "provider/0")
@@ -122,8 +126,9 @@ class TestSourceProviderWithIngress(unittest.TestCase):
     def test_provider_unit_sets_scheme_if_not_provided(self):
         self.harness.charm.provider = GrafanaSourceProvider(
             self.harness.charm,
+            source_type="foobar",
+            source_url="1.2.3.4/v1",
             refresh_event=self.harness.charm.on.grafana_tester_pebble_ready,
-            source_uri="1.2.3.4/v1",
         )
         rel_id = self.harness.add_relation("grafana-source", "provider")
         self.harness.add_relation_unit(rel_id, "provider/0")
@@ -137,7 +142,7 @@ class ProviderCharmNoRefreshEvent(CharmBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
-        self.provider = GrafanaSourceProvider(self)
+        self.provider = GrafanaSourceProvider(self, source_type="foobar")
 
         self._stored.set_default(valid_events=0)  # available data sources
         self._stored.set_default(invalid_events=0)
