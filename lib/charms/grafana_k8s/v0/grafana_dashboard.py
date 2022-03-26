@@ -32,7 +32,7 @@ sufficient.
 be included in your charm with a default path of:
 
     path/to/charm.py
-    path/to/src/grafana_dashboards/*
+    path/to/src/grafana_dashboards/*.{json|json.tmpl|.tmpl}
 
 Where the files are Grafana dashboard JSON data either from the
 Grafana marketplace, or directly exported from a Grafana instance.
