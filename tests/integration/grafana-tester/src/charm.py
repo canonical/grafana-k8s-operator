@@ -21,7 +21,7 @@ class GrafanaTesterCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._name = "grafana-tester"
-        self.grafana_source = GrafanaSourceProvider(self, self.on.grafana_tester_pebble_ready)
+        self.grafana_source = GrafanaSourceProvider(self, source_type="prometheus")
         self.grafana_dashboard = GrafanaDashboardProvider(self)
         self.framework.observe(
             self.on.grafana_tester_pebble_ready, self._on_grafana_tester_pebble_ready
