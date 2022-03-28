@@ -663,7 +663,11 @@ class GrafanaDashboardEvent(EventBase):
 
     def snapshot(self) -> Dict:
         """Save grafana source information."""
-        return {"error_message": self.error_message, "valid": self.valid, "errors": json.dumps(self.errors)}
+        return {
+            "error_message": self.error_message,
+            "valid": self.valid,
+            "errors": json.dumps(self.errors),
+        }
 
     def restore(self, snapshot):
         """Restore grafana source information."""
