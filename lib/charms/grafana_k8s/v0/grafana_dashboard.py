@@ -1122,13 +1122,16 @@ class GrafanaDashboardConsumer(Object):
         relation_has_invalid_dashboards = False
 
         for _, (fname, template) in enumerate(templates.items()):
-            decoded_content = _decode_dashboard_content(template["content"])
-
+            decoded_content = None
             content = None
             error = None
             try:
+                decoded_content = _decode_dashboard_content(template["content"])
                 content = Template(decoded_content).render()
                 content = _encode_dashboard_content(_convert_dashboard_fields(content))
+            except lzma.LZMAError as e:
+                error = str(e)
+                relation_has_invalid_dashboards = True
             except json.JSONDecodeError as e:
                 error = str(e.msg)
                 logger.warning("Invalid JSON in Grafana dashboard: {}".format(fname))
