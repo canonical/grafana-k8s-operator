@@ -74,6 +74,31 @@ VARIABLE_DASHBOARD_RENDERED = json.dumps(
     }
 )
 
+NULL_DATASOURCE_DASHBOARD_TEMPLATE = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "$replace_me"
+        },
+        {
+            "data": "Row separator",
+            "datasource": null
+        }
+    ]
+}
+"""
+
+NULL_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
+            {"data": "Row separator", "datasource": None},
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
 EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
 {
     "panels": [
@@ -117,6 +142,58 @@ EXISTING_VARIABLE_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "label_values(up, juju_application)", "datasource": "${prometheusds}"},
+            {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
+        ],
+        "templating": {
+            "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
+            + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
+        },
+    }
+)
+
+EXISTING_DATASOURCE_DASHBOARD_TEMPLATE = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "${prometheusds}"
+        },
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "${leave_me_alone}"
+        }
+    ],
+    "templating": {
+        "list": [
+            {
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": false,
+                "label": null,
+                "multi": false,
+                "name": "prometheusds",
+                "options": [],
+                "query": "prometheus",
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "type": "datasource"
+            },
+            {
+                "name": "leave_me_alone",
+                "query": "influxdb",
+                "type": "datasource"
+            }
+        ]
+    }
+}
+"""
+
+EXISTING_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
         "templating": {
@@ -325,6 +402,24 @@ class TestDashboardConsumer(unittest.TestCase):
             ],
         )
 
+    def test_consumer_templates_with_null_datasource(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(NULL_DATASOURCE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": NULL_DATASOURCE_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
     def test_consumer_templates_dashboard_and_keeps_variables(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
@@ -342,3 +437,23 @@ class TestDashboardConsumer(unittest.TestCase):
                 }
             ],
         )
+
+    def test_consumer_templates_dashboard_and_keeps_datasources(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(EXISTING_DATASOURCE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        # Comparing lists of dicts is painful. Convert back to a dict so we can sort
+        # and compare appropriately
+        db_content = json.loads(self.harness.charm.grafana_consumer.dashboards[0]["content"])
+        expected_content = json.loads(EXISTING_DATASOURCE_DASHBOARD_RENDERED)
+
+        db_content["templating"]["list"] = sorted(
+            db_content["templating"]["list"], key=lambda k: k["name"]
+        )
+        expected_content["templating"]["list"] = sorted(
+            expected_content["templating"]["list"], key=lambda k: k["name"]
+        )
+
+        self.assertEqual(db_content, expected_content)

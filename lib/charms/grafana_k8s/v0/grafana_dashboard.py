@@ -563,7 +563,7 @@ def _convert_dashboard_fields(content: str) -> str:
     return json.dumps(dict_content)
 
 
-def _replace_template_fields(
+def _replace_template_fields(  # noqa: C901
     dict_content: dict, datasources: dict, existing_templates: bool
 ) -> dict:
     """Make templated fields get cleaned up afterwards.
@@ -586,11 +586,17 @@ def _replace_template_fields(
         #
         # COS only knows about Prometheus and Loki.
         for panel in panels:
-            if "datasource" not in panel:
+            if "datasource" not in panel or not panel.get("datasource", ""):
                 continue
             if not existing_templates:
                 panel["datasource"] = "${prometheusds}"
             else:
+                if panel["datasource"] in replacements.values():
+                    # Already a known template variable
+                    continue
+                if not panel["datasource"]:
+                    # Don't worry about null values
+                    continue
                 # Strip out variable characters and maybe braces
                 ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
                 replacement = replacements.get(datasources[ds], "")
