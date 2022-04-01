@@ -1047,7 +1047,7 @@ class GrafanaDashboardConsumer(Object):
             return
         self.on.dashboards_changed.emit()
 
-    def update_dashboards(self, relation: Optional[Relation] = None) -> None:
+    def update_dashboards(self, relation: Relation = None) -> None:
         """Re-establish dashboards on one or more relations.
 
         If something changes between this library and a datasource, try to re-establish
@@ -1064,8 +1064,8 @@ class GrafanaDashboardConsumer(Object):
                 [relation] if relation else self._charm.model.relations[self._relation_name]
             )
 
-            for relation in relations:
-                self._render_dashboards_and_signal_changed(relation)
+            for rel in relations:
+                self._render_dashboards_and_signal_changed(rel)
 
         if changes:
             self.on.dashboards_changed.emit()
@@ -1251,11 +1251,11 @@ class GrafanaDashboardConsumer(Object):
 
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        self._charm.peers.data[self._charm.app][key] = json.dumps(data)
+        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore[attr-defined]
 
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
-        data = self._charm.peers.data[self._charm.app].get(key, "")
+        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore[attr-defined]
         return json.loads(data) if data else {}
 
 
