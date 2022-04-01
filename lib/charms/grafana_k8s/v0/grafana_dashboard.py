@@ -1065,7 +1065,7 @@ class GrafanaDashboardConsumer(Object):
             )
 
             for relation in relations:
-                self._render_dashboards_and_signal_changed(relation)  # type: ignore
+                self._render_dashboards_and_signal_changed(relation)
 
         if changes:
             self.on.dashboards_changed.emit()
@@ -1113,8 +1113,8 @@ class GrafanaDashboardConsumer(Object):
 
         # Import only if a charmed operator uses the consumer, we don't impose these
         # dependencies on the client
-        from jinja2 import Template  # type: ignore
-        from jinja2.exceptions import TemplateSyntaxError  # type: ignore
+        from jinja2 import Template
+        from jinja2.exceptions import TemplateSyntaxError
 
         # The dashboards are WAY too big since this ultimately calls out to Juju to
         # set the relation data, and it overflows the maximum argument length for
@@ -1251,11 +1251,11 @@ class GrafanaDashboardConsumer(Object):
 
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore
+        self._charm.peers.data[self._charm.app][key] = json.dumps(data)
 
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
-        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore
+        data = self._charm.peers.data[self._charm.app].get(key, "")
         return json.loads(data) if data else {}
 
 
