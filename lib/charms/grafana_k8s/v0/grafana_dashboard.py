@@ -624,6 +624,45 @@ def _replace_template_fields(  # noqa: C901
 def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer") -> str:
     """Inject Juju topology into panel expressions via PromqlTransformerself.
 
+    A dashboard will have a structure approximating:
+        {
+            "__inputs": [],
+            "templating": {
+                "list": [
+                    {
+                        "name": "prometheusds",
+                        "type": "prometheus"
+                    }
+                ]
+            },
+            "panels": [
+                {
+                    "foo": "bar",
+                    "targets": [
+                        {
+                            "some": "field",
+                            "expr": "up{job="foo"}"
+                        },
+                        {
+                            "some_other": "field",
+                            "expr": "sum(http_requests_total{instance="$foo"}[5m])}
+                        }
+                    ]
+                }
+            ]
+        }
+
+    `templating` is used elsewhere in this library, but the structure is not rigid. It is
+    not guaranteed that a panel will actually have any targets (it could be a "spacer" with
+    no datasource, hence no expression). It could have only one target. It could have multiple
+    targets. It could have multiple targets of which only one has an `expr` to evaluate. We need
+    to try to handle all of these concisely.
+
+    `promql-transform` (`github.com/prometheus/prometheus/promql/parser` as a Go module in general)
+    does not know "Grafana-isms", such as using `[$_variable]` to modify the query from the user
+    interface, so we add placeholders (as `5y`, since it must parse, but a dashboard looking for
+    five years for a panel query would be unusual).
+
     Args:
         content: dashboard content as a string
         topology: a dict containing topology values
@@ -632,7 +671,9 @@ def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer
         dashboard content with replaced values.
     """
     dict_content = json.loads(content)
-    panels = dict_content["panels"]
+
+    if "panels" not in dict_content.keys():
+        return json.dumps(dict_content)
 
     # Go through all of the panels and inject topology labels
     # Panels may have more than one 'target' where the expressions live, so that must be
@@ -642,43 +683,88 @@ def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer
     #
     # It is not a certainty that the `datasource` field will necessarily reflect the type, so
     # operate on all fields.
-
+    panels = dict_content["panels"]
     topology_with_prefix = {"juju_{}".format(k): v for k, v in topology.items()}
 
-    negative_leader_re = re.compile(r"^\s*?-\s*?")
-    range_re = re.compile(r"\[(?P<value>.*?)\]")
+    # We need to use an index so we can insert the changed element back later
     for panel_idx, panel in enumerate(panels):
-        if "targets" not in panel:
+        if type(panel) is not dict:
             continue
-        targets = panel["targets"]
-        for idx, target in enumerate(targets):
-            if "expr" not in target.keys():
-                continue
-            expr = target["expr"]
 
-            negative_leader = negative_leader_re.match(expr) or False
-            expr = negative_leader_re.sub("", expr)
-
-            range_values = [m.group("value") for m in range_re.finditer(expr)]
-            expr = range_re.sub(r"[5y]", expr)
-
-            replacement, replaced = transformer.apply_label_matcher(expr, topology_with_prefix)
-            if replaced and negative_leader:
-                replacement = "- {}".format(replacement)
-
-            # Go back and substitute values in [] which were pulled out
-            for i, match in enumerate(range_re.finditer(replacement)):
-                # Replace one-by-one, starting from the left
-                replacement = replacement.replace(
-                    "[{}]".format(match.group("value")),
-                    re.sub(r"^.*$", "[{}]".format(range_values[i]), match.group("value")),
-                    1,
-                )
-            targets[idx]["expr"] = replacement
-
-        panels[panel_idx]["targets"] = targets
+        # Use the index to insert it back in the same location
+        panels[panel_idx] = _modify_panel(panel, topology_with_prefix, transformer)
 
     return json.dumps(dict_content)
+
+
+def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer") -> dict:
+    """Inject Juju topology into panel expressions via PromqlTransformerself.
+
+    Args:
+        panel: a dashboard pnael as a dict
+        topology: a dict containing topology values
+        transformer: a 'PromqlTransformer' instance
+    Returns:
+        the panel with injected values
+    """
+    if "targets" not in panel.keys():
+        return panel
+
+    # Pre-compile regular expressions to match a leading negation, and to grab values
+    # from inside of []
+    negative_leader_re = re.compile(r"^\s*?-\s*?")
+    range_re = re.compile(r"\[(?P<value>.*?)\]")
+    targets = panel["targets"]
+
+    # We need to use an index so we can insert the changed element back later
+    for idx, target in enumerate(targets):
+        # If there's no expression, we don't need to do anything
+        if "expr" not in target.keys():
+            continue
+        expr = target["expr"]
+
+        # Check if it starts with `-` so we know whether or not to add it back later,
+        # then strip it off.
+        negative_leader = negative_leader_re.match(expr) or False
+        expr = negative_leader_re.sub("", expr)
+
+        # Capture all values inside `[]` into a list which we'll iterate over later to
+        # put them back in-order. Then apply the regex again and replace everything with
+        # `[5y]` so promql/parser will take it
+        range_values = [m.group("value") for m in range_re.finditer(expr)]
+        expr = range_re.sub(r"[5y]", expr)
+
+        # Retrieve the new expression (which may be unchanged if there were no label
+        # matchers in the expression, or if tt was unable to be parsed like logql. It's
+        # virtually impossible to tell from any datasource "name" in a panel what the
+        # actual type is without re-implementing a complete dashboard parser, but no
+        # harm will some from passing invalid promql -- we'll just get the original back.
+        #
+        # We'll also get a `replaced` boolean which tells us whether it was changed. If it
+        # was, and we found a leaving `-` earlier, put it back.
+        replacement, replaced = transformer.apply_label_matcher(expr, topology)
+        if replaced and negative_leader:
+            replacement = "- {}".format(replacement)
+
+        # Go back and substitute values in [] which were pulled out
+        # Enumerate with an index... again. The same regex is ok, since it will still match
+        # `[(.*?)]`, which includes `[5y]`, our placeholder
+        for i, match in enumerate(range_re.finditer(replacement)):
+            # Replace one-by-one, starting from the left. We build the string back with
+            # `str.replace(string_to_replace, replacement_value, count)`. Limit the count
+            # to one, since we are going through one-by-one through the list we saved earlier
+            # in `range_values`.
+            replacement = replacement.replace(
+                "[{}]".format(match.group("value")),
+                "[{}]".format(range_values[i]),
+                1,
+            )
+
+        # Use the index to insert it back in the same location
+        targets[idx]["expr"] = replacement
+
+    panel["targets"] = targets
+    return panel
 
 
 def _type_convert_stored(obj):
