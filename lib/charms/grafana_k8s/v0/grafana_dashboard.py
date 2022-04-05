@@ -185,7 +185,7 @@ import re
 import subprocess
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ops.charm import (
     CharmBase,
@@ -678,8 +678,7 @@ def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer
     # Go through all of the panels and inject topology labels
     # Panels may have more than one 'target' where the expressions live, so that must be
     # accounted for. Additionally, `promql-transform` does not necessarily gracefully handle
-    # expressions which begin with `-` (to be evaluated as a negative index for graphing), nor
-    # range queries including variables. Exclude all of these.
+    # expressions with range queries including variables. Exclude these.
     #
     # It is not a certainty that the `datasource` field will necessarily reflect the type, so
     # operate on all fields.
@@ -710,9 +709,7 @@ def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer")
     if "targets" not in panel.keys():
         return panel
 
-    # Pre-compile regular expressions to match a leading negation, and to grab values
-    # from inside of []
-    negative_leader_re = re.compile(r"^\s*?-\s*?")
+    # Pre-compile a regular expression to grab values from inside of []
     range_re = re.compile(r"\[(?P<value>.*?)\]")
     targets = panel["targets"]
 
@@ -722,11 +719,6 @@ def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer")
         if "expr" not in target.keys():
             continue
         expr = target["expr"]
-
-        # Check if it starts with `-` so we know whether or not to add it back later,
-        # then strip it off.
-        negative_leader = negative_leader_re.match(expr) or False
-        expr = negative_leader_re.sub("", expr)
 
         # Capture all values inside `[]` into a list which we'll iterate over later to
         # put them back in-order. Then apply the regex again and replace everything with
@@ -740,11 +732,7 @@ def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer")
         # actual type is without re-implementing a complete dashboard parser, but no
         # harm will some from passing invalid promql -- we'll just get the original back.
         #
-        # We'll also get a `replaced` boolean which tells us whether it was changed. If it
-        # was, and we found a leaving `-` earlier, put it back.
-        replacement, replaced = transformer.apply_label_matcher(expr, topology)
-        if replaced and negative_leader:
-            replacement = "- {}".format(replacement)
+        replacement = transformer.apply_label_matcher(expr, topology)
 
         # Go back and substitute values in [] which were pulled out
         # Enumerate with an index... again. The same regex is ok, since it will still match
@@ -1733,27 +1721,27 @@ class PromqlTransformer:
                 rule["expr"] = self.apply_label_matcher(rule["expr"], topology)
         return rules
 
-    def apply_label_matcher(self, expression: str, topology: dict) -> Tuple[str, bool]:
+    def apply_label_matcher(self, expression: str, topology: dict) -> str:
         """Apply label matchers to a single expression."""
         if not topology:
-            return expression, False
+            return expression
         if not self.path:
             logger.debug(
                 "`promql-transform` unavailable. leaving expression unchanged: %s", expression
             )
-            return expression, False
+            return expression
         args = [str(self.path)]
         args.extend(
             ["--label-matcher={}={}".format(key, value) for key, value in topology.items()]
         )
 
-        args.extend(["{}".format(expression)])
+        args.extend(["--", "{}".format(expression)])
         # noinspection PyBroadException
         try:
-            return self._exec(args), True
+            return self._exec(args)
         except Exception as e:
             logger.debug('Applying the expression failed: "{}", falling back to the original', e)
-            return expression, False
+            return expression
 
     def _get_transformer_path(self) -> Optional[Path]:
         arch = platform.processor()

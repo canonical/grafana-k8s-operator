@@ -69,12 +69,12 @@ class TestTransform(unittest.TestCase):
         )
 
         transform = self.harness.charm.transformer
-        output, _ = transform.apply_label_matcher(
+        output = transform.apply_label_matcher(
             'rate({job="loki"} | logfmt)', {"juju_model": "dead-beef"}
         )
         self.assertEqual(output, 'rate({job="loki"} | logfmt)')
 
-        output, _ = transform.apply_label_matcher(
+        output = transform.apply_label_matcher(
             r'{job="loki"} |~ error=\w+', {"juju_model": "dead-beef"}
         )
         self.assertEqual(output, r'{job="loki"} |~ error=\w+')
@@ -87,7 +87,7 @@ class TestTransform(unittest.TestCase):
         )
         transform = self.harness.charm.transformer
 
-        output, _ = transform.apply_label_matcher("up", {"juju_model": "some_juju_model"})
+        output = transform.apply_label_matcher("up", {"juju_model": "some_juju_model"})
         assert output == 'up{juju_model="some_juju_model"}'
 
     @unittest.mock.patch("platform.processor", lambda: "x86_64")
@@ -97,7 +97,7 @@ class TestTransform(unittest.TestCase):
             open("./promql-transform", "rb").read(),
         )
         transform = self.harness.charm.transformer
-        output, _ = transform.apply_label_matcher("up > 1", {"juju_model": "some_juju_model"})
+        output = transform.apply_label_matcher("up > 1", {"juju_model": "some_juju_model"})
         assert output == 'up{juju_model="some_juju_model"} > 1'
 
     @unittest.mock.patch("platform.processor", lambda: "x86_64")
@@ -107,7 +107,7 @@ class TestTransform(unittest.TestCase):
             open("./promql-transform", "rb").read(),
         )
         transform = self.harness.charm.transformer
-        output, _ = transform.apply_label_matcher(
+        output = transform.apply_label_matcher(
             "up > 1",
             {
                 "juju_model": "some_juju_model",

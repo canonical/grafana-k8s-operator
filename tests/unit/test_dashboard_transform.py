@@ -109,7 +109,7 @@ DASHBOARD_RENDERED_WITH_NEGATIVE = json.dumps(
                         "expr": 'sum(up{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"})',
                     },
                     {
-                        "expr": '- sum(up{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"})',
+                        "expr": '-sum(up{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"})',
                     },
                 ],
             },
