@@ -180,10 +180,12 @@ import json
 import logging
 import lzma
 import os
+import platform
 import re
+import subprocess
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ops.charm import (
     CharmBase,
@@ -203,7 +205,7 @@ from ops.framework import (
     StoredList,
     StoredState,
 )
-from ops.model import Relation
+from ops.model import ModelError, Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -213,7 +215,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
 
 logger = logging.getLogger(__name__)
 
@@ -619,6 +621,66 @@ def _replace_template_fields(  # noqa: C901
     return dict_content
 
 
+def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer") -> str:
+    """Inject Juju topology into panel expressions via PromqlTransformerself.
+
+    Args:
+        content: dashboard content as a string
+        topology: a dict containing topology values
+        transformer: a 'PromqlTransformer' instance
+    Returns:
+        dashboard content with replaced values.
+    """
+    dict_content = json.loads(content)
+    panels = dict_content["panels"]
+
+    # Go through all of the panels and inject topology labels
+    # Panels may have more than one 'target' where the expressions live, so that must be
+    # accounted for. Additionally, `promql-transform` does not necessarily gracefully handle
+    # expressions which begin with `-` (to be evaluated as a negative index for graphing), nor
+    # range queries including variables. Exclude all of these.
+    #
+    # It is not a certainty that the `datasource` field will necessarily reflect the type, so
+    # operate on all fields.
+
+    topology_with_prefix = {"juju_{}".format(k): v for k, v in topology.items()}
+
+    negative_leader_re = re.compile(r"^\s*?-\s*?")
+    range_re = re.compile(r"\[(?P<value>.*?)\]")
+    for panel_idx, panel in enumerate(panels):
+        if "targets" not in panel:
+            continue
+        targets = panel["targets"]
+        for idx, target in enumerate(targets):
+            if "expr" not in target.keys():
+                continue
+            expr = target["expr"]
+
+            negative_leader = negative_leader_re.match(expr) or False
+            expr = negative_leader_re.sub("", expr)
+
+            range_values = [m.group("value") for m in range_re.finditer(expr)]
+            expr = range_re.sub(r"[5y]", expr)
+
+            replacement, replaced = transformer.apply_label_matcher(expr, topology_with_prefix)
+            if replaced and negative_leader:
+                replacement = "- {}".format(replacement)
+
+            # Go back and substitute values in [] which were pulled out
+            for i, match in enumerate(range_re.finditer(replacement)):
+                # Replace one-by-one, starting from the left
+                replacement = replacement.replace(
+                    "[{}]".format(match.group("value")),
+                    re.sub(r"^.*$", "[{}]".format(range_values[i]), match.group("value")),
+                    1,
+                )
+            targets[idx]["expr"] = replacement
+
+        panels[panel_idx]["targets"] = targets
+
+    return json.dumps(dict_content)
+
+
 def _type_convert_stored(obj):
     """Convert Stored* to their appropriate types, recursively."""
     if isinstance(obj, StoredList):
@@ -994,6 +1056,7 @@ class GrafanaDashboardConsumer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
+        self._tranformer = PromqlTransformer(self._charm)
 
         self._stored.set_default(dashboards=dict())
 
@@ -1131,10 +1194,15 @@ class GrafanaDashboardConsumer(Object):
             decoded_content = None
             content = None
             error = None
+            topology = template.get("juju_topology", {})
             try:
                 decoded_content = _decode_dashboard_content(template["content"])
                 content = Template(decoded_content).render()
-                content = _encode_dashboard_content(_convert_dashboard_fields(content))
+                content = _convert_dashboard_fields(content)
+                if topology:
+                    content = _inject_labels(content, topology, self._tranformer)
+
+                content = _encode_dashboard_content(content)
             except lzma.LZMAError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True
@@ -1533,3 +1601,89 @@ class GrafanaDashboardAggregator(Object):
             "application": event.app.name,
             "unit": event.unit.name,
         }
+
+
+class PromqlTransformer:
+    """Uses promql-transform to inject label matchers into alert rule expressions."""
+
+    _path = None
+    _disabled = False
+
+    def __init__(self, charm):
+        self._charm = charm
+
+    @property
+    def path(self):
+        """Lazy lookup of the path of promql-transform."""
+        if self._disabled:
+            return None
+        if not self._path:
+            self._path = self._get_transformer_path()
+            if not self._path:
+                logger.debug("Skipping injection of juju topology as label matchers")
+                self._disabled = True
+        return self._path
+
+    def apply_label_matchers(self, rules):
+        """Will apply label matchers to the expression of all alerts in all supplied groups."""
+        if not self.path:
+            return rules
+        for group in rules["groups"]:
+            rules_in_group = group.get("rules", [])
+            for rule in rules_in_group:
+                topology = {}
+                # if the user for some reason has provided juju_unit, we'll need to honor it
+                # in most cases, however, this will be empty
+                for label in [
+                    "juju_model",
+                    "juju_model_uuid",
+                    "juju_application",
+                    "juju_charm",
+                    "juju_unit",
+                ]:
+                    if label in rule["labels"]:
+                        topology[label] = rule["labels"][label]
+
+                rule["expr"] = self.apply_label_matcher(rule["expr"], topology)
+        return rules
+
+    def apply_label_matcher(self, expression: str, topology: dict) -> Tuple[str, bool]:
+        """Apply label matchers to a single expression."""
+        if not topology:
+            return expression, False
+        if not self.path:
+            logger.debug(
+                "`promql-transform` unavailable. leaving expression unchanged: %s", expression
+            )
+            return expression, False
+        args = [str(self.path)]
+        args.extend(
+            ["--label-matcher={}={}".format(key, value) for key, value in topology.items()]
+        )
+
+        args.extend(["{}".format(expression)])
+        # noinspection PyBroadException
+        try:
+            return self._exec(args), True
+        except Exception as e:
+            logger.debug('Applying the expression failed: "{}", falling back to the original', e)
+            return expression, False
+
+    def _get_transformer_path(self) -> Optional[Path]:
+        arch = platform.processor()
+        arch = "amd64" if arch == "x86_64" else arch
+        res = "promql-transform-{}".format(arch)
+        try:
+            path = self._charm.model.resources.fetch(res)
+            os.chmod(path, 0o777)
+            return path
+        except NotImplementedError:
+            logger.debug("System lacks support for chmod")
+        except (NameError, ModelError):
+            logger.debug('No resource available for the platform "{}"'.format(arch))
+        return None
+
+    def _exec(self, cmd):
+        result = subprocess.run(cmd, check=False, stdout=subprocess.PIPE)
+        output = result.stdout.decode("utf-8").strip()
+        return output
