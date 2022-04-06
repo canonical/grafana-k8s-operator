@@ -700,7 +700,7 @@ def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer")
     """Inject Juju topology into panel expressions via PromqlTransformer.
 
     Args:
-        panel: a dashboard pnael as a dict
+        panel: a dashboard panel as a dict
         topology: a dict containing topology values
         transformer: a 'PromqlTransformer' instance
     Returns:
