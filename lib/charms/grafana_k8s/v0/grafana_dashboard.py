@@ -622,7 +622,7 @@ def _replace_template_fields(  # noqa: C901
 
 
 def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer") -> str:
-    """Inject Juju topology into panel expressions via PromqlTransformerself.
+    """Inject Juju topology into panel expressions via PromqlTransformer.
 
     A dashboard will have a structure approximating:
         {
