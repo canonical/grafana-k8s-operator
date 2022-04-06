@@ -697,7 +697,7 @@ def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer
 
 
 def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer") -> dict:
-    """Inject Juju topology into panel expressions via PromqlTransformerself.
+    """Inject Juju topology into panel expressions via PromqlTransformer.
 
     Args:
         panel: a dashboard pnael as a dict
