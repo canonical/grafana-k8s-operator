@@ -160,6 +160,48 @@ DASHBOARD_RENDERED_WITH_RANGES = json.dumps(
     }
 )
 
+DASHBOARD_TEMPLATE_WITH_OFFSETS = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "targets": [
+                {
+                    "expr": "sum(http_requests_total{job='foo'} offset $__interval) - sum(http_requests_total{job='foo'} offset -5m)"
+                }
+            ]
+        }
+    ]
+}
+"""
+
+DASHBOARD_DATA_WITH_OFFSETS = {
+    "charm": "grafana-k8s",
+    "content": DASHBOARD_TEMPLATE_WITH_RANGES,
+    "juju_topology": {
+        "model": MODEL_INFO["name"],
+        "model_uuid": MODEL_INFO["uuid"],
+        "application": "provider-tester",
+        "unit": "provider-tester/0",
+    },
+}
+
+DASHBOARD_RENDERED_WITH_OFFSETS = json.dumps(
+    {
+        "panels": [
+            {
+                "data": "label_values(up, juju_unit)",
+                "targets": [
+                    {
+                        "expr": 'sum(http_requests_total{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"} offset $__interval) - sum(http_requests_total{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"} offset -5m)',
+                    },
+                ],
+            },
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
 
 class ConsumerCharm(CharmBase):
     _stored = StoredState()
@@ -304,6 +346,25 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_WITH_RANGES,
+                }
+            ],
+        )
+
+    @unittest.mock.patch("platform.processor", lambda: "x86_64")
+    def test_consumer_handles_expressions_with_offsets(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(DASHBOARD_TEMPLATE_WITH_OFFSETS)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": DASHBOARD_RENDERED_WITH_OFFSETS,
                 }
             ],
         )

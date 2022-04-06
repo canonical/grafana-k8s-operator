@@ -711,6 +711,9 @@ def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer")
 
     # Pre-compile a regular expression to grab values from inside of []
     range_re = re.compile(r"\[(?P<value>.*?)\]")
+    # Do the same for any offsets
+    offset_re = re.compile(r"offset\s+(?P<value>-?\s*[$\w]+)")
+
     targets = panel["targets"]
 
     # We need to use an index so we can insert the changed element back later
@@ -722,10 +725,14 @@ def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer")
 
         # Capture all values inside `[]` into a list which we'll iterate over later to
         # put them back in-order. Then apply the regex again and replace everything with
-        # `[5y]` so promql/parser will take it
+        # `[5y]` so promql/parser will take it.
+        #
+        # Then do it again for offsets
         range_values = [m.group("value") for m in range_re.finditer(expr)]
         expr = range_re.sub(r"[5y]", expr)
 
+        offset_values = [m.group("value") for m in offset_re.finditer(expr)]
+        expr = offset_re.sub(r"offset 5y", expr)
         # Retrieve the new expression (which may be unchanged if there were no label
         # matchers in the expression, or if tt was unable to be parsed like logql. It's
         # virtually impossible to tell from any datasource "name" in a panel what the
@@ -733,6 +740,10 @@ def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer")
         # harm will some from passing invalid promql -- we'll just get the original back.
         #
         replacement = transformer.apply_label_matcher(expr, topology)
+
+        if replacement == target["expr"]:
+            # promql-tranform caught an error. Move on
+            continue
 
         # Go back and substitute values in [] which were pulled out
         # Enumerate with an index... again. The same regex is ok, since it will still match
@@ -745,6 +756,17 @@ def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer")
             replacement = replacement.replace(
                 "[{}]".format(match.group("value")),
                 "[{}]".format(range_values[i]),
+                1,
+            )
+
+        for i, match in enumerate(offset_re.finditer(replacement)):
+            # Replace one-by-one, starting from the left. We build the string back with
+            # `str.replace(string_to_replace, replacement_value, count)`. Limit the count
+            # to one, since we are going through one-by-one through the list we saved earlier
+            # in `range_values`.
+            replacement = replacement.replace(
+                "offset {}".format(match.group("value")),
+                "offset {}".format(offset_values[i]),
                 1,
             )
 
@@ -1739,7 +1761,7 @@ class PromqlTransformer:
         # noinspection PyBroadException
         try:
             return self._exec(args)
-        except Exception as e:
+        except subprocess.CalledProcessError as e:
             logger.debug('Applying the expression failed: "{}", falling back to the original', e)
             return expression
 
@@ -1758,6 +1780,6 @@ class PromqlTransformer:
         return None
 
     def _exec(self, cmd):
-        result = subprocess.run(cmd, check=False, stdout=subprocess.PIPE)
+        result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE)
         output = result.stdout.decode("utf-8").strip()
         return output
