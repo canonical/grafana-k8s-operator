@@ -1,6 +1,6 @@
 groups:
   alert: GrafanaUnitIsUnavailable
-  expr: up{%%juju_topology%%} < 1
+  expr: up{} < 1
   for: 0m
   labels:
     severity: critical
@@ -11,7 +11,7 @@ groups:
       LABELS = {{ $labels }}
 
   alert: GrafanaUnitIsDown
-  expr: avg_over_time(up{%%juju_topology%%}[1m]) < 0.5
+  expr: avg_over_time(up{}[1m]) < 0.5
   for: 0m
   labels:
     severity: critical
