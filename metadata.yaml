@@ -44,3 +44,6 @@ resources:
   promql-transform-amd64:
     type: file
     description: test
+  promql-transform-arm64:
+    type: file
+    description: test
