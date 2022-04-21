@@ -10,8 +10,8 @@ grafana_resources = {"grafana-image": oci_image("./metadata.yaml", "grafana-imag
 
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy_with_alternative_images(ops_test, grafana_charm):
-    """Test that the Prometheus charm can be deployed successfully."""
-    app_name = "prometheus-ubuntu"
+    """Test that the Grafana charm can be deployed successfully."""
+    app_name = "grafana"
 
     await ops_test.model.deploy(
         grafana_charm, resources=grafana_resources, application_name=app_name
