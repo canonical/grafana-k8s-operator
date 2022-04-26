@@ -40,7 +40,7 @@ resources:
   grafana-image:
     type: oci-image
     description: upstream docker image for Grafana
-    upstream-source: docker.io/ubuntu/grafana@sha256:8952155a72868b609e6b2e5ac5d20c540b232380f17dcf8aa60ac04b234edf9c
+    upstream-source: docker.io/ubuntu/grafana@sha256:86c77082f25b4bce37df37fb1fb1c351477902c59481369b71ba2d328e98d793
   promql-transform-amd64:
     type: file
     description: |
