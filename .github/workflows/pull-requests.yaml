@@ -1,7 +1,7 @@
 name: Pull Request
 
 on:
-  pull_request: 
+  pull_request:
     branches:
       - main
 
@@ -105,7 +105,7 @@ jobs:
     - name: Setup operator environment
       uses: charmed-kubernetes/actions-operator@main
       with:
-        juju-channel: latest/candidate # FIXME: Once 2.9.23 hits stable
+        juju-channel: 2.9/edge
         provider: microk8s
     - name: Run integration tests
       run: tox -vve integration
