@@ -105,7 +105,7 @@ jobs:
     - name: Setup operator environment
       uses: charmed-kubernetes/actions-operator@main
       with:
-        juju-channel: 2.9/edge
+        juju-channel: 2.9/edge # FIXME: Back to stable once 2.9.29 releases
         provider: microk8s
     - name: Run integration tests
       run: tox -vve integration
