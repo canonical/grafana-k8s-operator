@@ -660,19 +660,25 @@ class GrafanaDashboardEvent(EventBase):
     Enables us to set a clear status on the provider.
     """
 
-    def __init__(self, handle, error_message: str = "", valid: bool = False):
+    def __init__(self, handle, errors: List[Dict[str, str]] = [], valid: bool = False):
         super().__init__(handle)
-        self.error_message = error_message
+        self.errors = errors
+        self.error_message = "; ".join([error["error"] for error in errors if "error" in error])
         self.valid = valid
 
     def snapshot(self) -> Dict:
         """Save grafana source information."""
-        return {"error_message": self.error_message, "valid": self.valid}
+        return {
+            "error_message": self.error_message,
+            "valid": self.valid,
+            "errors": json.dumps(self.errors),
+        }
 
     def restore(self, snapshot):
         """Restore grafana source information."""
         self.error_message = snapshot["error_message"]
         self.valid = snapshot["valid"]
+        self.errors = json.loads(snapshot["errors"])
 
 
 class GrafanaProviderEvents(ObjectEvents):
