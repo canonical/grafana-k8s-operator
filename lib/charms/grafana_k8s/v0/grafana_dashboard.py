@@ -632,6 +632,11 @@ def _type_convert_stored(obj):
         return obj
 
 
+def is_dashboard(p: Path) -> bool:
+    """Check if provided path is a dashboard or a dashboard template file."""
+    return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+
+
 class GrafanaDashboardsChanged(EventBase):
     """Event emitted when Grafana dashboards change."""
 
@@ -843,10 +848,7 @@ class GrafanaDashboardProvider(Object):
 
             # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
             # lambda for the filter
-            for path in filter(
-                lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
-                Path(self._dashboards_path).glob("*"),
-            ):
+            for path in filter(is_dashboard, Path(self._dashboards_path).glob("*")):
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
@@ -1510,10 +1512,7 @@ class GrafanaDashboardAggregator(Object):
             )
 
         if dashboards_path:
-            for path in filter(
-                lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
-                Path(dashboards_path).glob("*"),
-            ):
+            for path in filter(is_dashboard, Path(dashboards_path).glob("*")):
                 if event.app.name in path.name:
                     id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
