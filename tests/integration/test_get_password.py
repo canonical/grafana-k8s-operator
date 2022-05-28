@@ -32,6 +32,7 @@ async def test_password_returns_correct_value_after_scaling(ops_test, grafana_ch
 
     logger.info("scaling local charm %s to 0 units", grafana_charm)
     await ops_test.model.applications[app_name].scale(scale=0)
+    logger.info("Blocking until charm %s is scaled to 0 units", grafana_charm)
     await ops_test.model.block_until(lambda: len(ops_test.model.applications[app_name].units) == 0)
 
     logger.info("scaling local charm %s to 1 units", grafana_charm)
