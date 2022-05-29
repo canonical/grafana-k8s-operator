@@ -843,10 +843,11 @@ class GrafanaDashboardProvider(Object):
 
             # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
             # lambda for the filter
-            for path in filter(  # type: Path
+            for path in filter(
                 lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
                 Path(self._dashboards_path).glob("*"),
             ):
+                path = Path(path)
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
@@ -1510,10 +1511,11 @@ class GrafanaDashboardAggregator(Object):
             )
 
         if dashboards_path:
-            for path in filter(  # type: Path
+            for path in filter(
                 lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
                 Path(dashboards_path).glob("*"),
             ):
+                path = Path(path)
                 if event.app.name in path.name:
                     id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
