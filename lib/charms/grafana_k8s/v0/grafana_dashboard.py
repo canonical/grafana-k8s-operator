@@ -847,7 +847,7 @@ class GrafanaDashboardProvider(Object):
                 return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
 
             for path in filter(_is_dashbaord, Path(self._dashboards_path).glob("*")):
-                path = Path(path)
+                # path = Path(path)
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
@@ -1516,7 +1516,7 @@ class GrafanaDashboardAggregator(Object):
                 return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
 
             for path in filter(_is_dashbaord, Path(dashboards_path).glob("*")):
-                path = Path(path)
+                # path = Path(path)
                 if event.app.name in path.name:
                     id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
