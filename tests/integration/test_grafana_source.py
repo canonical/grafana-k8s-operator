@@ -39,21 +39,9 @@ async def test_grafana_source_relation_data_with_grafana_tester(
             grafana_tester_charm, resources=tester_resources, application_name=tester_app_name
         ),
     )
-    await asyncio.gather(
-        ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active"),
-        ops_test.model.wait_for_idle(apps=[tester_app_name], status="active"),
+    await ops_test.model.wait_for_idle(
+        apps=[grafana_app_name, tester_app_name], status="active", wait_for_units=1, timeout=300
     )
-    await asyncio.gather(
-        ops_test.model.block_until(
-            lambda: len(ops_test.model.applications[grafana_app_name].units) > 0, timeout=300
-        ),
-        ops_test.model.block_until(
-            lambda: len(ops_test.model.applications[tester_app_name].units) > 0, timeout=300
-        ),
-    )
-
-    assert ops_test.model.applications[grafana_app_name].units[0].workload_status == "active"
-    assert ops_test.model.applications[tester_app_name].units[0].workload_status == "active"
 
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
     initial_datasources = await get_grafana_datasources(ops_test, grafana_app_name, 0)
