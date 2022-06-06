@@ -43,5 +43,4 @@ async def test_password_returns_correct_value_after_scaling(ops_test, grafana_ch
     await ops_test.model.wait_for_idle(apps=[app_name], timeout=300, wait_for_exact_units=1)
     action = await ops_test.model.applications[app_name].units[0].run_action("get-admin-password")
     msg = (await action.wait()).results["admin-password"]
-    assert pw != msg
-    assert msg == "Admin password has been changed by an administrator"
+    assert pw == msg
