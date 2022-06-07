@@ -40,7 +40,9 @@ async def test_password_returns_correct_value_after_scaling(ops_test, grafana_ch
 
     logger.info("scaling local charm %s to 1 units", grafana_charm)
     await ops_test.model.applications[app_name].scale(scale=1)
-    await ops_test.model.wait_for_idle(apps=[app_name], timeout=300, wait_for_exact_units=1)
+    await ops_test.model.wait_for_idle(
+        apps=[app_name], status="active", timeout=300, wait_for_exact_units=1
+    )
     action = await ops_test.model.applications[app_name].units[0].run_action("get-admin-password")
     msg = (await action.wait()).results["admin-password"]
     assert pw == msg
