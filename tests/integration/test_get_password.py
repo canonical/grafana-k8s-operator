@@ -28,7 +28,9 @@ async def test_password_returns_correct_value_after_scaling(ops_test, grafana_ch
     await ops_test.model.deploy(
         grafana_charm, resources=grafana_resources, application_name=app_name
     )
-    await ops_test.model.wait_for_idle(apps=[app_name], timeout=300, wait_for_exact_units=1)
+    await ops_test.model.wait_for_idle(
+        apps=[app_name], status="active", timeout=300, wait_for_exact_units=1
+    )
 
     # set some custom configs to later check they persisted across the test
     action = await ops_test.model.applications[app_name].units[0].run_action("get-admin-password")
