@@ -26,9 +26,7 @@ tester_app_name = "grafana-tester"
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy(
-    ops_test, grafana_charm, grafana_tester_charm
-):
+async def test_deploy(ops_test, grafana_charm, grafana_tester_charm):
     await asyncio.gather(
         ops_test.model.deploy(
             grafana_charm, resources=grafana_resources, application_name=grafana_app_name
