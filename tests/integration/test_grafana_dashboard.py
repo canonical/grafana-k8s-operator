@@ -21,16 +21,14 @@ tester_resources = {
     )
 }
 grafana_resources = {"grafana-image": oci_image("./metadata.yaml", "grafana-image")}
+grafana_app_name = "grafana"
+tester_app_name = "grafana-tester"
 
 
 @pytest.mark.abort_on_fail
-async def test_grafana_dashboard_relation_data_with_grafana_tester(
+async def test_deploy(
     ops_test, grafana_charm, grafana_tester_charm
 ):
-    """Test basic functionality of grafana-dashboard relation interface."""
-    grafana_app_name = "grafana"
-    tester_app_name = "grafana-tester"
-
     await asyncio.gather(
         ops_test.model.deploy(
             grafana_charm, resources=grafana_resources, application_name=grafana_app_name
@@ -47,6 +45,10 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
     initial_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)
     assert initial_dashboards == []
 
+
+@pytest.mark.abort_on_fail
+async def test_grafana_dashboard_relation_data_with_grafana_tester(ops_test):
+    """Test basic functionality of grafana-dashboard relation interface."""
     await ops_test.model.add_relation(
         "{}:grafana-dashboard".format(grafana_app_name),
         "{}:grafana-dashboard".format(tester_app_name),
@@ -58,11 +60,12 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
     )
     assert tester_dashboard != {}
 
+
+@pytest.mark.abort_on_fail
+async def test_remove(ops_test):
+    logger.info("Removing %s", tester_app_name)
     await ops_test.model.applications[tester_app_name].remove()
-    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
+    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active", timeout=300)
 
     relation_removed_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)
-    assert initial_dashboards == relation_removed_dashboards
-
-    await ops_test.model.applications[grafana_app_name].remove()
-    await ops_test.model.reset()
+    assert relation_removed_dashboards == []
