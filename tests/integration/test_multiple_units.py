@@ -47,11 +47,11 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
     )
     await ops_test.model.applications[grafana_app_name].scale(scale=2)
     await asyncio.gather(
-        ops_test.model.block_until(
-            lambda: len(ops_test.model.applications[grafana_app_name].units) == 2
+        ops_test.model.wait_for_idle(
+            apps=[grafana_app_name], status="active", wait_for_exact_units=2, timeout=300
         ),
-        ops_test.model.block_until(
-            lambda: len(ops_test.model.applications[tester_app_name].units) > 0
+        ops_test.model.wait_for_idle(
+            apps=[tester_app_name], status="active", wait_for_units=1, timeout=300
         ),
     )
 

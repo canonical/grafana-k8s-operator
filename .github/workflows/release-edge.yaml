@@ -107,6 +107,7 @@ jobs:
         with:
           juju-channel: latest/candidate # FIXME: Once 2.9.23 hits stable
           provider: microk8s
+          bootstrap-options: "--agent-version 2.9.29"
       - name: Run integration tests
         run: tox -vve integration
 
