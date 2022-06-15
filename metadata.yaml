@@ -40,4 +40,4 @@ resources:
   grafana-image:
     type: oci-image
     description: upstream docker image for Grafana
-    upstream-source: docker.io/ubuntu/grafana@sha256:86c77082f25b4bce37df37fb1fb1c351477902c59481369b71ba2d328e98d793
+    upstream-source: docker.io/ubuntu/grafana:8.2-22.04_beta
