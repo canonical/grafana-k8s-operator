@@ -551,6 +551,7 @@ class GrafanaCharm(CharmBase):
                         "environment": {
                             "GF_SERVER_HTTP_PORT": PORT,
                             "GF_LOG_LEVEL": self.model.config["log_level"],
+                            "GF_PLUGINS_ENABLE_ALPHA": True,
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
