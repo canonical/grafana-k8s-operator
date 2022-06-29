@@ -376,7 +376,7 @@ class GrafanaSourceProvider(Object):
         events = self._charm.on[relation_name]
 
         self._source_type = source_type
-        if "source_type" == "alertmananager":
+        if "source_type" == "alertmanager":
             if not extra_fields:
                 extra_fields = {"implementation": "prometheus"}
             elif not extra_fields.get("implementation", None):
@@ -541,7 +541,7 @@ class GrafanaSourceConsumer(Object):
 
     def _get_source_config(self, rel: Relation):
         """Generate configuration from data stored in relation data by providers."""
-        source_data = json.loads(rel.data[rel.app].get("grafana_source_data", "{}"))
+        source_data = json.loads(rel.data[rel.app].get("grafana_source_data", "{}"))  # type: ignore
         if not source_data:
             return
 

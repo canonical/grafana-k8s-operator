@@ -1072,7 +1072,7 @@ class GrafanaDashboardConsumer(Object):
             )
 
             for relation in relations:
-                self._render_dashboards_and_signal_changed(relation)  # type: ignore
+                self._render_dashboards_and_signal_changed(relation)
 
         if changes:
             self.on.dashboards_changed.emit()
@@ -1103,7 +1103,7 @@ class GrafanaDashboardConsumer(Object):
         """
         other_app = relation.app
 
-        raw_data = relation.data[other_app].get("dashboards", {})
+        raw_data = relation.data[other_app].get("dashboards", {})  # type: ignore
 
         if not raw_data:
             logger.warning(
