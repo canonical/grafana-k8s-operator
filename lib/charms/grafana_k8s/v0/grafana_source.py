@@ -376,7 +376,7 @@ class GrafanaSourceProvider(Object):
         events = self._charm.on[relation_name]
 
         self._source_type = source_type
-        if "source_type" == "alertmanager":
+        if source_type == "alertmanager":
             if not extra_fields:
                 extra_fields = {"implementation": "prometheus"}
             elif not extra_fields.get("implementation", None):
