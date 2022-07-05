@@ -551,6 +551,7 @@ class GrafanaCharm(CharmBase):
                         "environment": {
                             "GF_SERVER_HTTP_PORT": PORT,
                             "GF_LOG_LEVEL": self.model.config["log_level"],
+                            "GF_PLUGINS_ENABLE_ALPHA": True,
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
@@ -637,6 +638,8 @@ class GrafanaCharm(CharmBase):
                 "type": source_info["source_type"],
                 "url": source_info["url"],
             }
+            if source_info.get("extra_fields", None):
+                source["jsonData"] = source_info.get("extra_fields")
             datasources_dict["datasources"].append(source)  # type: ignore[attr-defined]
 
         # Also get a list of all the sources which have previously been purged and add them

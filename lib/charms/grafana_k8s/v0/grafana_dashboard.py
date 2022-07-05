@@ -213,7 +213,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 13
 
 logger = logging.getLogger(__name__)
 
@@ -551,7 +551,7 @@ def _convert_dashboard_fields(content: str) -> str:
             # Build a list of `datasource_name`: `datasource_type` mappings
             # The "query" field is actually "prometheus", "loki", "influxdb", etc
             if "type" in maybe and maybe["type"] == "datasource":
-                datasources[maybe["name"]] = maybe["query"]
+                datasources[maybe["name"]] = maybe["query"].lower()
 
         # Put our own variables in the template
         for d in TEMPLATE_DROPDOWNS:
@@ -591,7 +591,7 @@ def _replace_template_fields(  # noqa: C901
             if not existing_templates:
                 panel["datasource"] = "${prometheusds}"
             else:
-                if panel["datasource"] in replacements.values():
+                if panel["datasource"].lower() in replacements.values():
                     # Already a known template variable
                     continue
                 if not panel["datasource"]:
@@ -1072,7 +1072,7 @@ class GrafanaDashboardConsumer(Object):
             )
 
             for relation in relations:
-                self._render_dashboards_and_signal_changed(relation)  # type: ignore
+                self._render_dashboards_and_signal_changed(relation)
 
         if changes:
             self.on.dashboards_changed.emit()
@@ -1103,7 +1103,7 @@ class GrafanaDashboardConsumer(Object):
         """
         other_app = relation.app
 
-        raw_data = relation.data[other_app].get("dashboards", {})
+        raw_data = relation.data[other_app].get("dashboards", {})  # type: ignore
 
         if not raw_data:
             logger.warning(

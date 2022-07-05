@@ -124,7 +124,7 @@ EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
             },
             {
                 "name": "replace_me_also",
-                "query": "prometheus",
+                "query": "ProMeTheus",
                 "type": "datasource"
             },
             {
