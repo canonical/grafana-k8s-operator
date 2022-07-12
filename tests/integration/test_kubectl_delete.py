@@ -47,7 +47,10 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
     retcode, stdout, stderr = await ops_test.run(*cmd)
     assert retcode == 0, f"kubectl failed: {(stderr or stdout).strip()}"
     logger.debug(stdout)
-    await ops_test.model.block_until(lambda: len(ops_test.model.applications[app_name].units) > 0)
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+
+    await ops_test.model.wait_for_idle(
+        apps=[app_name], status="active", wait_for_units=1, timeout=1000
+    )
+
     await check_grafana_is_ready(ops_test, app_name, 0)
     assert (await get_config_values(ops_test, app_name)).items() >= config.items()

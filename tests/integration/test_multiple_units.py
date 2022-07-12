@@ -45,18 +45,21 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
     await asyncio.gather(
         ops_test.model.wait_for_idle(apps=[grafana_app_name, tester_app_name], status="active"),
     )
+    logging.info("scaling up to 2 units")
     await ops_test.model.applications[grafana_app_name].scale(scale=2)
     await asyncio.gather(
-        ops_test.model.block_until(
-            lambda: len(ops_test.model.applications[grafana_app_name].units) == 2
+        ops_test.model.wait_for_idle(
+            apps=[grafana_app_name], status="active", wait_for_exact_units=2, timeout=300
         ),
-        ops_test.model.block_until(
-            lambda: len(ops_test.model.applications[tester_app_name].units) > 0
+        ops_test.model.wait_for_idle(
+            apps=[tester_app_name], status="active", wait_for_units=1, timeout=300
         ),
     )
 
-    # Idle again to ensure the second unit has an address
-    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
+    logging.info("waiting for idle to ensure the second unit has an address")
+    await ops_test.model.wait_for_idle(
+        apps=[grafana_app_name], status="active", wait_for_units=2, timeout=300
+    )
 
     assert ops_test.model.applications[grafana_app_name].units[0].workload_status == "active"
     assert ops_test.model.applications[grafana_app_name].units[1].workload_status == "active"
@@ -80,6 +83,7 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
     assert initial_dashboards == []
     assert initial_datasources == []
 
+    logging.info("adding relations and waiting for units to settle")
     await asyncio.gather(
         ops_test.model.add_relation(
             "{}:grafana-source".format(grafana_app_name),
@@ -91,7 +95,6 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
         ),
     )
     await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
-
     tester_dashboards = await asyncio.gather(
         get_dashboard_by_search(ops_test, grafana_app_name, 0, "Grafana Tester"),
         get_dashboard_by_search(ops_test, grafana_app_name, 1, "Grafana Tester"),
@@ -124,6 +127,7 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
     assert tester_datasources[0] != {}
     assert tester_datasources[0] == tester_datasources[1]
 
+    logging.info("removing tester and waiting for units to settle")
     await ops_test.model.applications[tester_app_name].remove()
     await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
 

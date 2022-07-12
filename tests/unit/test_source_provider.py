@@ -1,6 +1,7 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import json
 import unittest
 from unittest.mock import patch
 
@@ -39,6 +40,19 @@ class ProviderCharm(CharmBase):
         )
 
 
+class AlertManagerProviderCharm(CharmBase):
+    _stored = StoredState()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+        self.provider = GrafanaSourceProvider(
+            self,
+            source_type="alertmanager",
+            source_port="9093",
+            refresh_event=self.on.grafana_tester_pebble_ready,
+        )
+
+
 class TestSourceProvider(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(ProviderCharm, meta=CONSUMER_META)
@@ -46,8 +60,7 @@ class TestSourceProvider(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin()
 
-    @patch("ops.testing._TestingModelBackend.network_get")
-    def test_provider_sets_scrape_data(self, _):
+    def test_provider_sets_scrape_data(self):
         rel_id = self.harness.add_relation("grafana-source", "provider")
         self.harness.add_relation_unit(rel_id, "provider/0")
         data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
@@ -57,42 +70,41 @@ class TestSourceProvider(unittest.TestCase):
         self.assertIn("model_uuid", scrape_data)
         self.assertIn("application", scrape_data)
 
-    @patch("ops.testing._TestingModelBackend.network_get")
-    def test_provider_unit_sets_bind_address_on_pebble_ready(self, mock_net_get):
-        bind_address = "1.2.3.4"
-        fake_network = {
-            "bind-addresses": [
-                {
-                    "interface-name": "eth0",
-                    "addresses": [{"hostname": "grafana-tester-0", "value": bind_address}],
-                }
-            ]
-        }
-        mock_net_get.return_value = fake_network
+    @patch("socket.getfqdn", new=lambda *args: "fqdn1")
+    def test_provider_unit_sets_address_on_pebble_ready(self):
         rel_id = self.harness.add_relation("grafana-source", "provider")
         self.harness.container_pebble_ready("grafana-tester")
         self.harness.add_relation_unit(rel_id, "provider/0")
         data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         self.assertIn("grafana_source_host", data)
-        self.assertEqual(data["grafana_source_host"], "{}:9090".format(bind_address))
+        self.assertEqual(data["grafana_source_host"], "fqdn1:9090")
 
-    @patch("ops.testing._TestingModelBackend.network_get")
-    def test_provider_unit_sets_bind_address_on_relation_joined(self, mock_net_get):
-        bind_address = "1.2.3.4"
-        fake_network = {
-            "bind-addresses": [
-                {
-                    "interface-name": "eth0",
-                    "addresses": [{"hostname": "grafana-tester-0", "value": bind_address}],
-                }
-            ]
-        }
-        mock_net_get.return_value = fake_network
+    @patch("socket.getfqdn", new=lambda *args: "fqdn2")
+    def test_provider_unit_sets_address_on_relation_joined(self):
         rel_id = self.harness.add_relation("grafana-source", "provider")
         self.harness.add_relation_unit(rel_id, "provider/0")
         data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         self.assertIn("grafana_source_host", data)
-        self.assertEqual(data["grafana_source_host"], "{}:9090".format(bind_address))
+        self.assertEqual(data["grafana_source_host"], "fqdn2:9090")
+
+
+class TestAlertManagerProvider(unittest.TestCase):
+    def setUp(self):
+        self.harness = Harness(AlertManagerProviderCharm, meta=CONSUMER_META)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
+        self.harness.begin()
+
+    def test_provider_sets_scrape_data(self):
+        rel_id = self.harness.add_relation("grafana-source", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+        self.assertIn("grafana_source_data", data)
+        scrape_data = json.loads(data["grafana_source_data"])
+        self.assertIn("model", scrape_data)
+        self.assertIn("model_uuid", scrape_data)
+        self.assertIn("application", scrape_data)
+        self.assertEqual(scrape_data["extra_fields"], {"implementation": "prometheus"})
 
 
 class ProviderCharmWithIngress(CharmBase):

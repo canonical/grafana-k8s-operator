@@ -74,6 +74,35 @@ VARIABLE_DASHBOARD_RENDERED = json.dumps(
     }
 )
 
+INPUT_DASHBOARD_TEMPLATE = """
+{
+    "__inputs": [
+        {
+            "name": "DS_PROMETHEUS",
+            "label": "Prometheus",
+            "type": "datasource",
+            "pluginId": "prometheus",
+            "pluginName": "prometheus"
+        }
+    ],
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "$DS_PROMETHEUS"
+        }
+    ]
+}
+"""
+
+INPUT_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
 NULL_DATASOURCE_DASHBOARD_TEMPLATE = """
 {
     "panels": [
@@ -124,7 +153,7 @@ EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
             },
             {
                 "name": "replace_me_also",
-                "query": "prometheus",
+                "query": "ProMeTheus",
                 "type": "datasource"
             },
             {
@@ -398,6 +427,25 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": VARIABLE_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    def test_consumer_templates_dashboard_with_inputs(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(INPUT_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.maxDiff = None
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": INPUT_DASHBOARD_RENDERED,
                 }
             ],
         )

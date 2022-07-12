@@ -213,7 +213,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 13
 
 logger = logging.getLogger(__name__)
 
@@ -541,17 +541,26 @@ def _convert_dashboard_fields(content: str) -> str:
     datasources = {}
     existing_templates = False
 
+    # If the dashboard has __inputs, get the names to replace them. These are stripped
+    # from reactive dashboards in GrafanaDashboardAggregator, but charm authors in
+    # newer charms may import them directly from the marketplace
+    if "__inputs" in dict_content:
+        for field in dict_content["__inputs"]:
+            if "type" in field and field["type"] == "datasource":
+                datasources[field["name"]] = field["pluginName"].lower()
+        del dict_content["__inputs"]
+
     # If no existing template variables exist, just insert our own
     if "templating" not in dict_content:
         dict_content["templating"] = {"list": [d for d in TEMPLATE_DROPDOWNS]}
     else:
         # Otherwise, set a flag so we can go back later
         existing_templates = True
-        for maybe in dict_content["templating"]["list"]:
+        for template_value in dict_content["templating"]["list"]:
             # Build a list of `datasource_name`: `datasource_type` mappings
             # The "query" field is actually "prometheus", "loki", "influxdb", etc
-            if "type" in maybe and maybe["type"] == "datasource":
-                datasources[maybe["name"]] = maybe["query"]
+            if "type" in template_value and template_value["type"] == "datasource":
+                datasources[template_value["name"]] = template_value["query"].lower()
 
         # Put our own variables in the template
         for d in TEMPLATE_DROPDOWNS:
@@ -591,7 +600,7 @@ def _replace_template_fields(  # noqa: C901
             if not existing_templates:
                 panel["datasource"] = "${prometheusds}"
             else:
-                if panel["datasource"] in replacements.values():
+                if panel["datasource"].lower() in replacements.values():
                     # Already a known template variable
                     continue
                 if not panel["datasource"]:
@@ -660,19 +669,25 @@ class GrafanaDashboardEvent(EventBase):
     Enables us to set a clear status on the provider.
     """
 
-    def __init__(self, handle, error_message: str = "", valid: bool = False):
+    def __init__(self, handle, errors: List[Dict[str, str]] = [], valid: bool = False):
         super().__init__(handle)
-        self.error_message = error_message
+        self.errors = errors
+        self.error_message = "; ".join([error["error"] for error in errors if "error" in error])
         self.valid = valid
 
     def snapshot(self) -> Dict:
         """Save grafana source information."""
-        return {"error_message": self.error_message, "valid": self.valid}
+        return {
+            "error_message": self.error_message,
+            "valid": self.valid,
+            "errors": json.dumps(self.errors),
+        }
 
     def restore(self, snapshot):
         """Restore grafana source information."""
         self.error_message = snapshot["error_message"]
         self.valid = snapshot["valid"]
+        self.errors = json.loads(snapshot["errors"])
 
 
 class GrafanaProviderEvents(ObjectEvents):
@@ -836,11 +851,12 @@ class GrafanaDashboardProvider(Object):
                     del stored_dashboard_templates[dashboard_id]
 
             # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
-            # lambda for the filter
-            for path in filter(
-                lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
-                Path(self._dashboards_path).glob("*"),
-            ):
+            # custom function for the filter
+            def _is_dashbaord(p: Path) -> bool:
+                return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+
+            for path in filter(_is_dashbaord, Path(self._dashboards_path).glob("*")):
+                # path = Path(path)
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes())
@@ -1064,8 +1080,8 @@ class GrafanaDashboardConsumer(Object):
                 [relation] if relation else self._charm.model.relations[self._relation_name]
             )
 
-            for rel in relations:
-                self._render_dashboards_and_signal_changed(rel)
+            for relation in relations:
+                self._render_dashboards_and_signal_changed(relation)
 
         if changes:
             self.on.dashboards_changed.emit()
@@ -1096,7 +1112,7 @@ class GrafanaDashboardConsumer(Object):
         """
         other_app = relation.app
 
-        raw_data = relation.data[other_app].get("dashboards", {})
+        raw_data = relation.data[other_app].get("dashboards", {})  # type: ignore
 
         if not raw_data:
             logger.warning(
@@ -1504,10 +1520,12 @@ class GrafanaDashboardAggregator(Object):
             )
 
         if dashboards_path:
-            for path in filter(
-                lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
-                Path(dashboards_path).glob("*"),
-            ):
+
+            def _is_dashbaord(p: Path) -> bool:
+                return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+
+            for path in filter(_is_dashbaord, Path(dashboards_path).glob("*")):
+                # path = Path(path)
                 if event.app.name in path.name:
                     id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
