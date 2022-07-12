@@ -541,17 +541,26 @@ def _convert_dashboard_fields(content: str) -> str:
     datasources = {}
     existing_templates = False
 
+    # If the dashboard has __inputs, get the names to replace them. These are stripped
+    # from reactive dashboards in GrafanaDashboardAggregator, but charm authors in
+    # newer charms may import them directly from the marketplace
+    if "__inputs" in dict_content:
+        for field in dict_content["__inputs"]:
+            if "type" in field and field["type"] == "datasource":
+                datasources[field["name"]] = field["pluginName"].lower()
+        del dict_content["__inputs"]
+
     # If no existing template variables exist, just insert our own
     if "templating" not in dict_content:
         dict_content["templating"] = {"list": [d for d in TEMPLATE_DROPDOWNS]}
     else:
         # Otherwise, set a flag so we can go back later
         existing_templates = True
-        for maybe in dict_content["templating"]["list"]:
+        for template_value in dict_content["templating"]["list"]:
             # Build a list of `datasource_name`: `datasource_type` mappings
             # The "query" field is actually "prometheus", "loki", "influxdb", etc
-            if "type" in maybe and maybe["type"] == "datasource":
-                datasources[maybe["name"]] = maybe["query"].lower()
+            if "type" in template_value and template_value["type"] == "datasource":
+                datasources[template_value["name"]] = template_value["query"].lower()
 
         # Put our own variables in the template
         for d in TEMPLATE_DROPDOWNS:
