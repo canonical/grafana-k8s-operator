@@ -206,3 +206,21 @@ class TestCharm(unittest.TestCase):
         services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
         self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
         self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
+
+    def test_config_is_updated_with_auth_proxy_when_auth_proxy_enabled(self):
+        self.harness.update_config({"enable_auth_proxy": True})
+
+        services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
+        self.assertIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())
+        self.assertIn("GF_AUTH_PROXY_HEADER_NAME", services["environment"].keys())
+        self.assertIn("GF_AUTH_PROXY_HEADER_PROPERTY", services["environment"].keys())
+        self.assertIn("GF_AUTH_PROXY_AUTO_SIGN_UP", services["environment"].keys())
+
+    def test_config_is_not_updated_with_auth_proxy_when_auth_proxy_disabled(self):
+        self.harness.update_config({"enable_auth_proxy": False})
+
+        services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
+        self.assertNotIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())
+        self.assertNotIn("GF_AUTH_PROXY_HEADER_NAME", services["environment"].keys())
+        self.assertNotIn("GF_AUTH_PROXY_HEADER_PROPERTY", services["environment"].keys())
+        self.assertNotIn("GF_AUTH_PROXY_AUTO_SIGN_UP", services["environment"].keys())

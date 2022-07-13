@@ -538,9 +538,9 @@ class GrafanaCharm(CharmBase):
                     }
                 )
 
-        auth_proxy_enabled = self.model.config["enable_auth_proxy"]
+        auth_proxy_enabled = self.model.config.get("enable_auth_proxy")
 
-        if auth_proxy_enabled == "true":
+        if auth_proxy_enabled:
             extra_info.update(
                 {
                     "GF_AUTH_PROXY_ENABLED": "true",
