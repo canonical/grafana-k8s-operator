@@ -538,6 +538,18 @@ class GrafanaCharm(CharmBase):
                     }
                 )
 
+        auth_proxy_enabled = self.model.config["enable_auth_proxy"]
+
+        if auth_proxy_enabled == "true":
+            extra_info.update(
+                {
+                    "GF_AUTH_PROXY_ENABLED": "true",
+                    "GF_AUTH_PROXY_HEADER_NAME": "X-WEBAUTH-USER",
+                    "GF_AUTH_PROXY_HEADER_PROPERTY": "username",
+                    "GF_AUTH_PROXY_AUTO_SIGN_UP": "false",
+                }
+            )
+
         layer = Layer(
             {
                 "summary": "grafana-k8s layer",
@@ -555,6 +567,9 @@ class GrafanaCharm(CharmBase):
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
+                            "GF_USERS_AUTO_ASSIGN_ORG": self.model.config[
+                                "enable_auto_assign_org"
+                            ],
                             **extra_info,
                         },
                     }

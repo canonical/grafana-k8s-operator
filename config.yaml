@@ -29,3 +29,16 @@ options:
       host or a bare A record, this may be omitted.
     type: string
     default: ""
+  enable_auth_proxy:
+    description: |
+      You can configure Grafana to let a HTTP reverse proxy handle authentication. Popular web
+      servers have a very extensive list of pluggable authentication modules, and any of them can
+      be used with the AuthProxy feature.
+    type: boolean
+    default: false
+  enable_auto_assign_org:
+    description: |
+      Set to true to automatically add new users to the main organization (id 1). When set to
+      false, new users automatically cause a new organization to be created for that new user.
+    type: boolean
+    default: true
