@@ -640,6 +640,15 @@ class GrafanaCharm(CharmBase):
             }
             if source_info.get("extra_fields", None):
                 source["jsonData"] = source_info.get("extra_fields")
+
+            # set timeout for querying this data source
+            timeout = source.get("jsonData", {}).get("timeout", 0)
+            configured_timeout = self.model.config.get("datasource_query_timeout")
+            if timeout < configured_timeout:
+                json_data = source.get("jsonData", {})
+                json_data.update({"timeout": configured_timeout})
+                source["jsonData"] = json_data
+
             datasources_dict["datasources"].append(source)  # type: ignore[attr-defined]
 
         # Also get a list of all the sources which have previously been purged and add them
