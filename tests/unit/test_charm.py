@@ -28,6 +28,7 @@ BASIC_DATASOURCES = [
         "orgId": "1",
         "type": "prometheus",
         "url": "http://1.2.3.4:1234",
+        "jsonData": {"timeout": 300},
     }
 ]
 
@@ -206,3 +207,43 @@ class TestCharm(unittest.TestCase):
         services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
         self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
         self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
+
+    def test_datasource_timeout_value_overrides_config_if_larger(self):
+        self.harness.set_leader(True)
+
+        # set relation data with timeout value larger than default
+        rel_id = self.harness.add_relation("grafana-source", "prometheus")
+        source_data = SOURCE_DATA.copy()
+        source_data["extra_fields"] = {"timeout": 600}
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"grafana_source_data": json.dumps(source_data)}
+        )
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.update_relation_data(
+            rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
+        )
+
+        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        expected_source_data = BASIC_DATASOURCES.copy()
+        expected_source_data[0]["jsonData"]["timeout"] = 600
+        self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
+
+    def test_datasource_timeout_value_is_overridden_by_config_if_smaller(self):
+        self.harness.set_leader(True)
+
+        # set relation data with timeout value smaller than default
+        rel_id = self.harness.add_relation("grafana-source", "prometheus")
+        source_data = SOURCE_DATA.copy()
+        source_data["extra_fields"] = {"timeout": 200}
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"grafana_source_data": json.dumps(source_data)}
+        )
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.update_relation_data(
+            rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
+        )
+
+        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        expected_source_data = BASIC_DATASOURCES.copy()
+        expected_source_data[0]["jsonData"]["timeout"] = 300
+        self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
