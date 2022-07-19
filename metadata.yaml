@@ -33,6 +33,9 @@ requires:
   database:
     interface: db
     limit: 1
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
 peers:
   grafana:
     interface: grafana_peers
