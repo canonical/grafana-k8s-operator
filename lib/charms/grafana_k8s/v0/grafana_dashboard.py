@@ -213,7 +213,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 13
+LIBPATCH = 14
 
 logger = logging.getLogger(__name__)
 
@@ -1063,7 +1063,7 @@ class GrafanaDashboardConsumer(Object):
             return
         self.on.dashboards_changed.emit()
 
-    def update_dashboards(self, relation: Optional[Relation] = None) -> None:
+    def update_dashboards(self, relation: Relation = None) -> None:
         """Re-establish dashboards on one or more relations.
 
         If something changes between this library and a datasource, try to re-establish
@@ -1129,8 +1129,8 @@ class GrafanaDashboardConsumer(Object):
 
         # Import only if a charmed operator uses the consumer, we don't impose these
         # dependencies on the client
-        from jinja2 import Template  # type: ignore
-        from jinja2.exceptions import TemplateSyntaxError  # type: ignore
+        from jinja2 import Template
+        from jinja2.exceptions import TemplateSyntaxError
 
         # The dashboards are WAY too big since this ultimately calls out to Juju to
         # set the relation data, and it overflows the maximum argument length for
@@ -1267,11 +1267,11 @@ class GrafanaDashboardConsumer(Object):
 
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore
+        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore[attr-defined]
 
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
-        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore
+        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore[attr-defined]
         return json.loads(data) if data else {}
 
 
