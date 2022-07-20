@@ -36,9 +36,8 @@ copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
 
 [tool.mypy]
 pretty = true
-python_version = 3.8
-mypy_path = "$MYPY_CONFIG_FILE_DIR/src:$MYPY_CONFIG_FILE_DIR/lib"
-follow_imports = "normal"
+mypy_path = "$MYPY_CONFIG_FILE_DIR/src:$MYPY_CONFIG_FILE_DIR/lib:$MYPY_CONFIG_FILE_DIR/tests"
+follow_imports = "silent"
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unused_configs = true
@@ -51,5 +50,8 @@ allow_redefinition = true
 
 # Ignore libraries that do not have type hint nor stubs
 [[tool.mypy.overrides]]
-module = ["ops.*", "pytest.*", "pytest_operator.*", "urllib3.*"]
+module = ["ops.*", "pytest.*", "pytest_operator.*", "urllib3.*", "jinja2.*"]
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

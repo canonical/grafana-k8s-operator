@@ -97,7 +97,6 @@ jobs:
   release-to-charmhub:
     name: Release to CharmHub
     needs:
-      - static-analysis
       - static-libs
       - lint
       - unit-test
