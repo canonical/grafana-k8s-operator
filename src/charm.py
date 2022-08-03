@@ -39,9 +39,9 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
     adjust_resource_requirements,
+    ResourceRequirements,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from lightkube.models.core_v1 import ResourceRequirements
 from ops.charm import (
     ActionEvent,
     CharmBase,
