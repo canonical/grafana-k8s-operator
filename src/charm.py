@@ -38,8 +38,8 @@ from charms.grafana_k8s.v0.grafana_source import (
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
-    adjust_resource_requirements,
     ResourceRequirements,
+    adjust_resource_requirements,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from ops.charm import (
@@ -52,7 +52,7 @@ from ops.charm import (
 )
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus, BlockedStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import ConnectionError, Layer, PathError, ProtocolError
 
 from grafana_server import Grafana
