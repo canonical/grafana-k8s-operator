@@ -25,7 +25,7 @@ async def test_password_returns_correct_value_after_upgrading(ops_test, grafana_
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.info("deploying local charm")
     await ops_test.model.deploy(
-        grafana_charm, resources=grafana_resources, application_name=app_name
+        grafana_charm, resources=grafana_resources, application_name=app_name, trust=True
     )
     await ops_test.model.wait_for_idle(
         apps=[app_name], status="active", timeout=300, wait_for_exact_units=1
