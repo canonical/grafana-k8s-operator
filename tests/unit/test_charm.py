@@ -98,8 +98,18 @@ def cli_arg(plan, cli_opt):
     return None
 
 
+k8s_resource_multipatch = patch.multiple(
+    "charm.KubernetesComputeResourcesPatch",
+    _namespace="test-namespace",
+    _patch=lambda *a, **kw: True,
+    is_ready=lambda *a, **kw: True,
+)
+
+
 class TestCharm(unittest.TestCase):
-    def setUp(self):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *unused):
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
