@@ -1,20 +1,26 @@
 name: Pull Request
 
 on:
-  pull_request: 
+  pull_request:
     branches:
       - main
 
 jobs:
-  fetch-lib-check:
-    name: Check the charm uses up-to-date charm libraries
+  lib-check:
+    name: Check libraries
     runs-on: ubuntu-latest
     steps:
-    - name: Check libs
-      uses: canonical/charm-lib-checker-action@main
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-  lib-check:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Check libs
+        uses: canonical/charming-actions/check-libraries@1.0.1-rc
+        with:
+          credentials: "${{ secrets.CHARMHUB_TOKEN }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+  static-libs:
     name: Static analysis of /lib for Python 3.5
     runs-on: ubuntu-latest
     steps:
@@ -30,22 +36,7 @@ jobs:
       run: python3 -m pip install tox
     - name: Run static analysis for /lib for 3.5
       run: tox -vve static-lib
-  static-analysis:
-    name: Static analysis
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-    - name: Install dependencies
-      run: python3 -m pip install tox
-    - name: Run static analysis (charm)
-      run: tox -vve static-charm
-    - name: Run static analysis (unit tests)
-      run: tox -vve static-unit
-    - name: Run static analysis (integration tests)
-      run: tox -vve static-integration
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -65,6 +56,7 @@ jobs:
       run: python3 -m pip install tox
     - name: Run linters
       run: tox -vve lint
+
   unit-test:
     name: Unit tests
     runs-on: ubuntu-latest
@@ -84,7 +76,8 @@ jobs:
       run: python -m pip install tox
     - name: Run tests
       run: tox -e unit
-  integration-test-microk8s:
+
+  integration-test:
     name: Integration tests (microk8s)
     runs-on: ubuntu-latest
     steps:
@@ -97,5 +90,6 @@ jobs:
       with:
         juju-channel: latest/candidate # FIXME: Once 2.9.23 hits stable
         provider: microk8s
+        bootstrap-options: "--agent-version 2.9.29"
     - name: Run integration tests
       run: tox -vve integration

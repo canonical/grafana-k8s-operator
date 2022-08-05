@@ -29,3 +29,13 @@ options:
       host or a bare A record, this may be omitted.
     type: string
     default: ""
+  datasource_query_timeout:
+    description: |
+      The default timeout for querying a Grafana datasource. Each datasource can
+      also configure its own preferred timeout value through relation data. If the
+      value configured through relation data is larger than datasource_query_timeout
+      then that value is left unchanged. The value of this configuration option must
+      be a positive integer representing the maximum number of seconds Grafana will
+      wait for a datasource to respond to a query.
+    type: int
+    default: 300

@@ -2,6 +2,7 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import asyncio
 import logging
 
 import pytest
@@ -30,23 +31,17 @@ async def test_grafana_source_relation_data_with_grafana_tester(
     grafana_app_name = "grafana"
     tester_app_name = "grafana-tester"
 
-    await ops_test.model.deploy(
-        grafana_charm, resources=grafana_resources, application_name=grafana_app_name
+    await asyncio.gather(
+        ops_test.model.deploy(
+            grafana_charm, resources=grafana_resources, application_name=grafana_app_name
+        ),
+        ops_test.model.deploy(
+            grafana_tester_charm, resources=tester_resources, application_name=tester_app_name
+        ),
     )
-    await ops_test.model.deploy(
-        grafana_tester_charm, resources=tester_resources, application_name=tester_app_name
+    await ops_test.model.wait_for_idle(
+        apps=[grafana_app_name, tester_app_name], status="active", wait_for_units=1, timeout=300
     )
-    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
-    await ops_test.model.wait_for_idle(apps=[tester_app_name], status="active")
-    await ops_test.model.block_until(
-        lambda: len(ops_test.model.applications[grafana_app_name].units) > 0
-    )
-    await ops_test.model.block_until(
-        lambda: len(ops_test.model.applications[tester_app_name].units) > 0
-    )
-
-    assert ops_test.model.applications[grafana_app_name].units[0].workload_status == "active"
-    assert ops_test.model.applications[tester_app_name].units[0].workload_status == "active"
 
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
     initial_datasources = await get_grafana_datasources(ops_test, grafana_app_name, 0)

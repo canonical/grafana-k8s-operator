@@ -36,6 +36,7 @@ from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceEvents,
     SourceFieldsMissingError,
 )
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from ops.charm import (
     ActionEvent,
     CharmBase,
@@ -98,6 +99,16 @@ class GrafanaCharm(CharmBase):
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
         self._stored.set_default(k8s_service_patched=False, admin_password="")
+
+        # -- Prometheus self-monitoring
+        self.metrics_endpoint = MetricsEndpointProvider(
+            self,
+            jobs=[
+                {
+                    "static_configs": [{"targets": ["*:3000"]}],
+                },
+            ],
+        )
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
@@ -621,6 +632,7 @@ class GrafanaCharm(CharmBase):
                         "environment": {
                             "GF_SERVER_HTTP_PORT": PORT,
                             "GF_LOG_LEVEL": self.model.config["log_level"],
+                            "GF_PLUGINS_ENABLE_ALPHA": True,
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
@@ -744,6 +756,17 @@ class GrafanaCharm(CharmBase):
                 "type": source_info["source_type"],
                 "url": source_info["url"],
             }
+            if source_info.get("extra_fields", None):
+                source["jsonData"] = source_info.get("extra_fields")
+
+            # set timeout for querying this data source
+            timeout = source.get("jsonData", {}).get("timeout", 0)
+            configured_timeout = self.model.config.get("datasource_query_timeout")
+            if timeout < configured_timeout:
+                json_data = source.get("jsonData", {})
+                json_data.update({"timeout": configured_timeout})
+                source["jsonData"] = json_data
+
             datasources_dict["datasources"].append(source)  # type: ignore[attr-defined]
 
         # Also get a list of all the sources which have previously been purged and add them

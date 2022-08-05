@@ -38,6 +38,9 @@ requires:
   database:
     interface: db
     limit: 1
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
 peers:
   grafana:
     interface: grafana_peers
@@ -45,8 +48,8 @@ resources:
   grafana-image:
     type: oci-image
     description: upstream docker image for Grafana
-    upstream-source: docker.io/ubuntu/grafana@sha256:8952155a72868b609e6b2e5ac5d20c540b232380f17dcf8aa60ac04b234edf9c
+    upstream-source: docker.io/ubuntu/grafana:8.2-22.04_beta
   litestream-image:
     type: oci-image
     description: upstream image for sqlite streaming
-    upstream-source: docker.io/rbarry82/litestream@sha256:79f3119ed32d5b5698f1defff0ee10fbb8e0179de2fc05c2bbe6f3c6004cec10
+    upstream-source: docker.io/litestream/litestream@sha256:f502bac65cff50baf250ed4e8ae91af4b594e68762340479f7161b0cbc4c2ab6

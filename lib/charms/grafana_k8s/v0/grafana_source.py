@@ -25,12 +25,16 @@ provider in a charm which `provides: grafana-source`, creation of a
 The default arguments are:
 
     `charm`: `self` from the charm instantiating this library
+    `source_type`: None
+    `source_port`: None
+    `source_url`: None
     `relation_name`: grafana-source
     `refresh_event`: A `PebbleReady` event from `charm`, used to refresh
         the IP address sent to Grafana on a charm lifecycle event or
         pod restart
-    `source_type`: prometheus
-    `source_port`: 9090
+
+The value of `source_url` should be a fully-resolvable URL for a valid Grafana
+source, e.g., `http://example.com/api` or similar.
 
 If your configuration requires any changes from these defaults, they
 may be set from the class constructor. It may be instantiated as
@@ -42,7 +46,9 @@ follows:
         def __init__(self, *args):
             super().__init__(*args, **kwargs)
             ...
-            self.grafana_source_provider = GrafanaSourceProvider(self)
+            self.grafana_source_provider = GrafanaSourceProvider(
+                self, source_type="prometheus", source_port="9090"
+            )
             ...
 
 The first argument (`self`) should be a reference to the parent (datasource)
@@ -66,7 +72,8 @@ from a dict, with a structure of:
         "type": source_type,
     },
     "unit/0": {
-        "uri": {ip_address}:{port} # `ip_address` is derived at runtime, `port` from the constructor
+        "uri": {ip_address}:{port}{path} # `ip_address` is derived at runtime, `port` from the constructor,
+                                         # and `path` from the constructor, if specified
     },
 ```
 
@@ -120,6 +127,8 @@ events may not be needed.
 
 import json
 import logging
+import re
+import socket
 from typing import Any, Dict, List, Optional, Union
 
 from ops.charm import (
@@ -151,7 +160,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 11
 
 logger = logging.getLogger(__name__)
 
@@ -310,10 +319,12 @@ class GrafanaSourceProvider(Object):
     def __init__(
         self,
         charm: CharmBase,
+        source_type: str,
+        source_port: Optional[str] = "",
+        source_url: Optional[str] = "",
         refresh_event: Optional[BoundEvent] = None,
         relation_name: str = DEFAULT_RELATION_NAME,
-        source_type: Optional[str] = "prometheus",
-        source_port: Optional[str] = "9090",
+        extra_fields: dict = None,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -335,6 +346,15 @@ class GrafanaSourceProvider(Object):
             charm: a :class:`CharmBase` object which manages this
                 :class:`GrafanaSourceProvider` object. Generally this is
                 `self` in the instantiating class.
+            source_type: an optional (default `prometheus`) source type
+                required for Grafana configuration. The value must match
+                the DataSource type from the Grafana perspective.
+            source_port: an optional (default `9090`) source port
+                required for Grafana configuration.
+            source_url: an optional source URL which can be used, for example, if
+                ingress for a source is enabled, or a URL path to the API consumed
+                by the datasource must be specified for another reason. If set,
+                'source_port' will not be used.
             relation_name: string name of the relation that is provides the
                 Grafana source service. It is strongly advised not to change
                 the default, so that people deploying your charm will have a
@@ -343,11 +363,8 @@ class GrafanaSourceProvider(Object):
             refresh_event: a :class:`CharmEvents` event on which the IP
                 address should be refreshed in case of pod or
                 machine/VM restart.
-            source_type: an optional (default `prometheus`) source type
-                required for Grafana configuration. The value must match
-                the DataSource type from the Grafana perspective.
-            source_port: an optional (default `9090`) source port
-                required for Grafana configuration.
+            extra_fields: a :dict: which is used for additional information required
+                for some datasources in the `jsonData` field
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
@@ -358,23 +375,65 @@ class GrafanaSourceProvider(Object):
         self._relation_name = relation_name
         events = self._charm.on[relation_name]
 
-        refresh_event = refresh_event or self._charm.on.pebble_ready
-
         self._source_type = source_type
+        if source_type == "alertmanager":
+            if not extra_fields:
+                extra_fields = {"implementation": "prometheus"}
+            elif not extra_fields.get("implementation", None):
+                extra_fields["implementation"] = "prometheus"
+
+        self._extra_fields = extra_fields
+
+        if not refresh_event:
+            if len(self._charm.meta.containers) == 1:
+                container = list(self._charm.meta.containers.values())[0]
+                refresh_event = self._charm.on[container.name.replace("-", "_")].pebble_ready
+
+        if source_port and source_url:
+            logger.warning(
+                "Both `source_port` and `source_url` were specified! Using "
+                "`source_url` as the address."
+            )
+
+        if source_url and not re.match(r"^\w+://", source_url):
+            logger.warning(
+                "'source_url' should start with a scheme, such as "
+                "'http://'. Assuming 'http://' since none is present."
+            )
+            source_url = "http://{}".format(source_url)
+
         self._source_port = source_port
+        self._source_url = source_url
 
-        self.framework.observe(events.relation_joined, self._set_sources)
-        self.framework.observe(refresh_event, self._set_unit_ip)
+        self.framework.observe(events.relation_joined, self._set_sources_from_event)
+        if refresh_event:
+            self.framework.observe(refresh_event, self._set_unit_details)
 
-    def _set_sources(self, event: RelationJoinedEvent):
+    def update_source(self, source_url: Optional[str] = ""):
+        """Trigger the update of relation data."""
+        if source_url:
+            self._source_url = source_url
+
+        rel = self._charm.model.get_relation(self._relation_name)
+
+        if not rel:
+            return
+
+        self._set_sources(rel)
+
+    def _set_sources_from_event(self, event: RelationJoinedEvent) -> None:
+        """Get a `Relation` object from the event to pass on."""
+        self._set_sources(event.relation)
+
+    def _set_sources(self, rel: Relation):
         """Inform the consumer about the source configuration."""
-        self._set_unit_ip(event)
+        self._set_unit_details(rel)
 
         if not self._charm.unit.is_leader():
             return
 
         logger.debug("Setting Grafana data sources: %s", self._scrape_data)
-        event.relation.data[self._charm.app]["grafana_source_data"] = json.dumps(self._scrape_data)
+        rel.data[self._charm.app]["grafana_source_data"] = json.dumps(self._scrape_data)
 
     @property
     def _scrape_data(self) -> Dict:
@@ -388,26 +447,19 @@ class GrafanaSourceProvider(Object):
             "model_uuid": str(self._charm.model.uuid),
             "application": str(self._charm.model.app.name),
             "type": self._source_type,
+            "extra_fields": self._extra_fields,
         }
         return data
 
-    def _set_unit_ip(self, _: Union[BoundEvent, RelationEvent]):
-        """Set unit host address.
+    def _set_unit_details(self, _: Union[BoundEvent, RelationEvent, Relation]):
+        """Set unit host details.
 
         Each time a provider charm container is restarted it updates its own host address in the
         unit relation data for the Prometheus consumer.
         """
         for relation in self._charm.model.relations[self._relation_name]:
-            # network.bind_address can return `None` and give us a bad string, so make sure
-            # that it's valid before passing it. Otherwise, we'll catch is on pebble_ready.
-            # The provider side already skips adding it if `grafana_source_host` is not set,
-            # so no additional guards needed
-            address = self._charm.model.get_binding(relation).network.bind_address
-            if address:
-                relation.data[self._charm.unit]["grafana_source_host"] = "{}:{}".format(
-                    str(address),
-                    self._source_port,
-                )
+            url = self._source_url or "{}:{}".format(socket.getfqdn(), self._source_port)
+            relation.data[self._charm.unit]["grafana_source_host"] = url
 
 
 class GrafanaSourceConsumer(Object):
@@ -489,7 +541,7 @@ class GrafanaSourceConsumer(Object):
 
     def _get_source_config(self, rel: Relation):
         """Generate configuration from data stored in relation data by providers."""
-        source_data = json.loads(rel.data[rel.app].get("grafana_source_data", "{}"))
+        source_data = json.loads(rel.data[rel.app].get("grafana_source_data", "{}"))  # type: ignore
         if not source_data:
             return
 
@@ -504,12 +556,18 @@ class GrafanaSourceConsumer(Object):
                 unit_name.split("/")[1],
             )
 
+            host = (
+                "http://{}".format(host_addr) if not re.match(r"^\w+://", host_addr) else host_addr
+            )
+
             host_data = {
                 "unit": unit_name,
                 "source_name": unique_source_name,
                 "source_type": source_data["type"],
-                "url": "http://{}".format(host_addr),
+                "url": host,
             }
+            if source_data.get("extra_fields", None):
+                host_data["extra_fields"] = source_data.get("extra_fields")
 
             if host_data["source_name"] in sources_to_delete:
                 sources_to_delete.remove(host_data["source_name"])
@@ -640,9 +698,9 @@ class GrafanaSourceConsumer(Object):
 
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore
+        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore[attr-defined]
 
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
-        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore
+        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore[attr-defined]
         return json.loads(data) if data else {}
