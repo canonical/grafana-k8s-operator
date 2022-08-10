@@ -193,6 +193,11 @@ class GrafanaCharm(CharmBase):
         already stored in the charm. If either the base Grafana config
         or the datasource config differs, restart Grafana.
         """
+        if not self.resource_patch.is_ready():
+            if isinstance(self.unit.status, ActiveStatus) or self.unit.status.message == "":
+                self.unit.status = MaintenanceStatus("Waiting for resource limit patch to apply")
+            return
+
         if not self.container.can_connect():
             return
 
