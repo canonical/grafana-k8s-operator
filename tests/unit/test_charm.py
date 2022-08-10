@@ -228,7 +228,7 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         expected_source_data = BASIC_DATASOURCES.copy()
         expected_source_data[0]["jsonData"]["timeout"] = 600
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
@@ -248,7 +248,7 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         expected_source_data = BASIC_DATASOURCES.copy()
         expected_source_data[0]["jsonData"]["timeout"] = 300
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)

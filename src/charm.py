@@ -26,6 +26,7 @@ import secrets
 import socket
 import string
 from io import StringIO
+from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
@@ -178,6 +179,15 @@ class GrafanaCharm(CharmBase):
             != self._build_replication(leader).services
         ):
             restart = True
+
+        litestream_config = {"addr": ":9876", "dbs": [{"path": "/var/lib/grafana/grafana.db"}]}
+
+        if not leader:
+            litestream_config["dbs"][0].update({"upstream": {"url": "http://${LITESTREAM_ADDR}"}})  # type: ignore
+
+        container = self.containers["replication"]
+        if container.can_connect():
+            container.push("/etc/litestream.yml", yaml.dump(litestream_config), make_dirs=True)
 
         if restart:
             self.restart_litestream(leader)
@@ -541,8 +551,19 @@ class GrafanaCharm(CharmBase):
             self.unit.status = ActiveStatus()
 
             # We should also make sure sqlite is in WAL mode for replication
+            self.containers["workload"].push(
+                "/usr/local/bin/sqlite3",
+                Path("sqlite-static").read_bytes(),
+                permissions=0o755,
+                make_dirs=True,
+            )
+
             pragma = self.containers["workload"].exec(
-                ["sqlite3", "/var/lib/grafana/grafana.db", "pragma journal_mode=wal;"]
+                [
+                    "/usr/local/bin/sqlite3",
+                    "/var/lib/grafana/grafana.db",
+                    "pragma journal_mode=wal;",
+                ]
             )
             pragma.wait()
         except ConnectionError:
@@ -654,13 +675,10 @@ class GrafanaCharm(CharmBase):
             config["LITESTREAM_ADDR"] = "{}:{}".format(
                 socket.gethostbyname(socket.getfqdn()), "9876"
             )
-            arg = "replicate"
         else:
             config["LITESTREAM_UPSTREAM_URL"] = "{}:{}".format(
                 self.get_peer_data("replica_primary"), "9876"
             )
-            config["LITESTREAM_UPSTREAM_PATH"] = "/stream"
-            arg = "restore -o"
 
         layer = Layer(
             {
@@ -670,7 +688,7 @@ class GrafanaCharm(CharmBase):
                     "litestream": {
                         "override": "replace",
                         "summary": "litestream service",
-                        "command": "litestream {} /var/lib/grafana/grafana.db".format(arg),
+                        "command": "litestream replicate -config /etc/litestream.yml",
                         "startup": "enabled",
                         "environment": {
                             **config,

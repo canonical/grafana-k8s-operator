@@ -52,4 +52,4 @@ resources:
   litestream-image:
     type: oci-image
     description: upstream image for sqlite streaming
-    upstream-source: docker.io/litestream/litestream@sha256:f502bac65cff50baf250ed4e8ae91af4b594e68762340479f7161b0cbc4c2ab6
+    upstream-source: docker.io/litestream/litestream:0.3.9
