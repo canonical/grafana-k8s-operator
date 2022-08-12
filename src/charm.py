@@ -183,7 +183,7 @@ class GrafanaCharm(CharmBase):
         litestream_config = {"addr": ":9876", "dbs": [{"path": "/var/lib/grafana/grafana.db"}]}
 
         if not leader:
-            litestream_config["dbs"][0].update({"upstream": {"url": "http://${LITESTREAM_ADDR}"}})  # type: ignore
+            litestream_config["dbs"][0].update({"upstream": {"url": "http://${LITESTREAM_UPSTREAM_URL}"}})  # type: ignore
 
         container = self.containers["replication"]
         if container.can_connect():
