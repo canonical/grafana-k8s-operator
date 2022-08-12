@@ -159,10 +159,9 @@ class GrafanaCharm(CharmBase):
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
         self._configure()
-        if self.unit.is_leader():
-            self._configure_replication(True)
+        self._configure_replication()
 
-    def _configure_replication(self, leader: bool) -> None:
+    def _configure_replication(self) -> None:
         """Checks to ensure that the leader is streaming DB changes, and others are listening.
 
         If a leader election event through `config-changed` would result in a new primary, start
@@ -173,6 +172,7 @@ class GrafanaCharm(CharmBase):
             leader: a boolean indicating the leader status
         """
         restart = False
+        leader = self.unit.is_leader()
 
         if (
             self.containers["replication"].get_plan().services
@@ -192,7 +192,7 @@ class GrafanaCharm(CharmBase):
         if restart:
             self.restart_litestream(leader)
 
-    def _on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
+    def _on_grafana_source_changed(self, _: GrafanaSourceEvents) -> None:
         """When a grafana-source is added or modified, update the config.
 
         Args:
@@ -409,7 +409,7 @@ class GrafanaCharm(CharmBase):
         rel = self.model.get_relation(DATABASE)
         return len(rel.units) > 0 if rel is not None else False
 
-    def _on_peer_data_changed(self, event: RelationChangedEvent) -> None:
+    def _on_peer_data_changed(self, _: RelationChangedEvent) -> None:
         """Get the replica primary address from peer data so we can check whether to restart.
 
         Args:
@@ -417,8 +417,19 @@ class GrafanaCharm(CharmBase):
         """
         primary_addr = self.get_peer_data("replica_primary")
 
-        if primary_addr and not self.unit.is_leader():
-            self._configure_replication(False)
+        # If we found a key for the address of a primary, ensure that replication reflects the
+        # current state. It is necessary to watch for peer_data_changed events, since a
+        # leader election may not run any in specific order. Checking here ensures that, once
+        # a new leader is elected AND updates the bucket with its address, that secondaries
+        # are notified of where they should look to replication stream now, and restart their
+        # clients. It is, generally, a way to guarantee the ordering between:
+        #   - new leader elected
+        #   - leader restarts litestream in "primary" mode (no `upstream:` in the config)
+        #   - leader sets `replica_primary` in the peer databag as part of _build_replication
+        #   - other units get on_peer_data_changed
+        #   - secondaries get the "correct" primary and restart
+        if primary_addr:
+            self._configure_replication()
 
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
         """Sets configuration information for database connection.
