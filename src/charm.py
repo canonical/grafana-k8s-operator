@@ -49,7 +49,7 @@ from ops.charm import (
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus
-from ops.pebble import ConnectionError, Layer, PathError, ProtocolError
+from ops.pebble import ConnectionError, ExecError, Layer, PathError, ProtocolError
 
 from grafana_server import Grafana
 from kubernetes_service import K8sServicePatch, PatchFailed
@@ -246,7 +246,9 @@ class GrafanaCharm(CharmBase):
             self._update_datasource_config(grafana_datasources)
             logger.info("Updated Grafana's datasource configuration")
 
-            restart = True
+            # Non-leaders will get updates from litestream
+            if self.unit.is_leader():
+                restart = True
 
         if self.containers["workload"].get_plan().services != self._build_layer().services:
             restart = True
@@ -320,6 +322,7 @@ class GrafanaCharm(CharmBase):
             "providers": [
                 {
                     "name": "Default",
+                    "updateIntervalSeconds": "5",
                     "type": "file",
                     "options": {"path": dashboard_path},
                 }
@@ -332,6 +335,7 @@ class GrafanaCharm(CharmBase):
         if not os.path.exists(dashboard_path):
             try:
                 container.push(default_config, default_config_string, make_dirs=True)
+                self.restart_grafana()
             except ConnectionError:
                 logger.warning(
                     "Could not push default dashboard configuration. Pebble shutting down?"
@@ -373,7 +377,6 @@ class GrafanaCharm(CharmBase):
                     container.remove_path(dashboard_file_path)
                     logger.debug("Removed dashboard %s", dashboard_file_path)
 
-            self.restart_grafana()
         except ConnectionError:
             logger.exception("Could not update dashboards. Pebble shutting down?")
 
@@ -548,18 +551,13 @@ class GrafanaCharm(CharmBase):
         Note that Grafana does not support SIGHUP, so a full restart is needed.
         """
         layer = self._build_layer()
-
         try:
-            plan = self.containers["workload"].get_plan()
-            if plan.services != layer.services:
-                self.containers["workload"].add_layer(self.name, layer, combine=True)
-                if self.containers["workload"].get_service(self.name).is_running():
-                    self.containers["workload"].stop(self.name)
+            self.containers["workload"].add_layer(self.name, layer, combine=True)
+            if self.containers["workload"].get_service(self.name).is_running():
+                self.containers["workload"].stop(self.name)
 
-                self.containers["workload"].start(self.name)
-                logger.info("Restarted grafana-k8s")
-
-            self.unit.status = ActiveStatus()
+            self.containers["workload"].start(self.name)
+            logger.info("Restarted grafana-k8s")
 
             # We should also make sure sqlite is in WAL mode for replication
             self.containers["workload"].push(
@@ -577,6 +575,12 @@ class GrafanaCharm(CharmBase):
                 ]
             )
             pragma.wait()
+
+            self.unit.status = ActiveStatus()
+        except ExecError as e:
+            # debug because, on initial container startup when Grafana has an open lock and is
+            # populating, this comes up with ERRCODE: 26
+            logger.debug("Could not apply journal_mode pragma. Exit code: {}".format(e.exit_code))
         except ConnectionError:
             logger.error(
                 "Could not restart grafana-k8s -- Pebble socket does "
@@ -662,9 +666,9 @@ class GrafanaCharm(CharmBase):
                         "command": "grafana-server -config {}".format(CONFIG_PATH),
                         "startup": "enabled",
                         "environment": {
-                            "GF_SERVER_HTTP_PORT": PORT,
+                            "GF_SERVER_HTTP_PORT": str(PORT),
                             "GF_LOG_LEVEL": self.model.config["log_level"],
-                            "GF_PLUGINS_ENABLE_ALPHA": True,
+                            "GF_PLUGINS_ENABLE_ALPHA": "true",
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
