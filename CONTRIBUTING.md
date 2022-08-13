@@ -13,7 +13,7 @@ Deploy Grafana on its own:
 git clone git@github.com:canonical/grafana-k8s.git
 cd grafana-k8s
 charmcraft pack
-juju deploy ./grafana-k8s_ubuntu-20.04-amd64.charm --resource grafana-image=ubuntu/grafana:latest --resource litestream-image=docker.io/litestream/litestream:0.3.9
+juju deploy ./grafana-k8s_ubuntu-20.04-amd64.charm --resource grafana-image=ubuntu/grafana:latest --resource litestream-image=docker.io/litestream/litestream:0.4.0-beta.2
 ```
 
 View the dashboard in a browser:
