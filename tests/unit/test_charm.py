@@ -44,6 +44,7 @@ DASHBOARD_CONFIG = {
     "providers": [
         {
             "name": "Default",
+            "updateIntervalSeconds": "5",
             "type": "file",
             "options": {"path": "/etc/grafana/provisioning/dashboards"},
         }
