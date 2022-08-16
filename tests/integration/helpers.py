@@ -27,7 +27,7 @@ async def unit_password(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
         .run_action("get-admin-password")
     )
     action = await action.wait()
-    return action["admin-password"]
+    return action.results["admin-password"]
 
 
 async def unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:

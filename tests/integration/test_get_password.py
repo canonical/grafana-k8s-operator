@@ -33,7 +33,7 @@ async def test_password_returns_correct_value_after_upgrading(ops_test, grafana_
 
     # set some custom configs to later check they persisted across the test
     action = await ops_test.model.applications[app_name].units[0].run_action("get-admin-password")
-    pw = (await action.wait())["admin-password"]
+    pw = (await action.wait()).results["admin-password"]
 
     logger.info("Upgrading charm")
     await ops_test.model.applications[app_name].refresh(
@@ -57,5 +57,5 @@ async def test_password_returns_correct_value_after_upgrading(ops_test, grafana_
     # )
 
     action = await ops_test.model.applications[app_name].units[0].run_action("get-admin-password")
-    msg = (await action.wait())["admin-password"]
+    msg = (await action.wait()).results["admin-password"]
     assert pw == msg
