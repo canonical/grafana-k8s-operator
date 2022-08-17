@@ -253,3 +253,65 @@ class TestCharm(unittest.TestCase):
         expected_source_data = BASIC_DATASOURCES.copy()
         expected_source_data[0]["jsonData"]["timeout"] = 300
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
+
+
+class TestCharmReplication(unittest.TestCase):
+    def setUp(self):
+        patch_exec = patch("ops.testing._TestingPebbleClient.exec", MagicMock())
+        self.patch_exec = patch_exec.start()
+        self.harness = Harness(GrafanaCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.addCleanup(self.patch_exec)
+        self.harness.add_relation("grafana", "grafana")
+        self.harness.set_leader(True)
+        self.harness.begin()
+
+        self.minimal_datasource_hash = hashlib.sha256(
+            str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
+        ).hexdigest()
+
+    @patch("socket.getfqdn", lambda: "1.2.3.4")
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test_primary_sets_correct_peer_data(self, mock_unit_ip):
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "grafana-0", "value": "1.2.3.4"}],
+                }
+            ]
+        }
+        mock_unit_ip.return_value = fake_network
+        self.harness.set_leader(True)
+        self.harness.charm.on.config_changed.emit()
+        rel = self.harness.model.get_relation("grafana")
+        self.harness.add_relation_unit(rel.id, "grafana/1")
+
+        unit_ip = str(self.harness.charm.model.get_binding("grafana").network.bind_address)
+        replica_address = self.harness.charm.get_peer_data("replica_primary")
+
+        self.assertEqual(unit_ip, replica_address)
+
+    @patch("socket.getfqdn", lambda: "2.3.4.5")
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test_replicas_get_correct_environment_variables(self, mock_unit_ip):
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "grafana-0", "value": "2.3.4.5"}],
+                }
+            ]
+        }
+        mock_unit_ip.return_value = fake_network
+        self.harness.set_leader(False)
+        rel = self.harness.model.get_relation("grafana")
+        self.harness.add_relation_unit(rel.id, "grafana/1")
+        self.harness.update_relation_data(
+            rel.id, "grafana-k8s", {"replica_primary": json.dumps("1.2.3.4")}
+        )
+        primary = self.harness.charm._build_replication(False).to_dict()["services"]["litestream"][
+            "environment"
+        ]["LITESTREAM_UPSTREAM_URL"]
+
+        self.assertEqual(primary, "1.2.3.4:9876")

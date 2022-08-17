@@ -109,6 +109,7 @@ class GrafanaCharm(CharmBase):
                     "static_configs": [{"targets": ["*:3000"]}],
                 },
             ],
+            refresh_event=self.on.grafana_pebble_ready,
         )
 
         # -- standard events
