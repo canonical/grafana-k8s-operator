@@ -24,7 +24,7 @@ async def test_deploy_from_local_path(ops_test, grafana_charm):
     logger.debug("deploy local charm")
 
     await ops_test.model.deploy(
-        grafana_charm, application_name=app_name, resources=grafana_resources
+        grafana_charm, application_name=app_name, resources=grafana_resources, trust=True
     )
 
     # set some custom configs to later check they persisted across the test

@@ -37,6 +37,12 @@ from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceEvents,
     SourceFieldsMissingError,
 )
+from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
+    K8sResourcePatchFailedEvent,
+    KubernetesComputeResourcesPatch,
+    ResourceRequirements,
+    adjust_resource_requirements,
+)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from ops.charm import (
     ActionEvent,
@@ -48,7 +54,7 @@ from ops.charm import (
 )
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import ConnectionError, ExecError, Layer, PathError, ProtocolError
 
 from grafana_server import Grafana
@@ -143,6 +149,12 @@ class GrafanaCharm(CharmBase):
         # -- database relation observations
         self.framework.observe(self.on[DATABASE].relation_changed, self._on_database_changed)
         self.framework.observe(self.on[DATABASE].relation_broken, self._on_database_broken)
+
+        # -- k8s resource patch
+        self.resource_patch = KubernetesComputeResourcesPatch(
+            self, self.name, resource_reqs_func=self._resource_reqs_from_config
+        )
+        self.framework.observe(self.resource_patch.on.patch_failed, self._on_resource_patch_failed)
 
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
@@ -253,6 +265,11 @@ class GrafanaCharm(CharmBase):
 
         if self.containers["workload"].get_plan().services != self._build_layer().services:
             restart = True
+
+        if not self.resource_patch.is_ready():
+            if isinstance(self.unit.status, ActiveStatus) or self.unit.status.message == "":
+                self.unit.status = MaintenanceStatus("Waiting for resource limit patch to apply")
+            return
 
         if restart:
             self.restart_grafana()
@@ -838,6 +855,14 @@ class GrafanaCharm(CharmBase):
         # through subprocess. So much for complex password
         chars = string.ascii_letters + string.digits
         return "".join(secrets.choice(chars) for _ in range(12))
+
+    def _resource_reqs_from_config(self) -> ResourceRequirements:
+        limits = {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}
+        requests = {"cpu": "0.25", "memory": "200Mi"}
+        return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
+
+    def _on_resource_patch_failed(self, event: K8sResourcePatchFailedEvent):
+        self.unit.status = BlockedStatus(event.message)
 
 
 if __name__ == "__main__":

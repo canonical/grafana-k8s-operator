@@ -39,7 +39,10 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
 
     await asyncio.gather(
         ops_test.model.deploy(
-            grafana_charm, resources=grafana_resources, application_name=grafana_app_name
+            grafana_charm,
+            resources=grafana_resources,
+            application_name=grafana_app_name,
+            trust=True,
         ),
         ops_test.model.deploy(
             grafana_tester_charm, resources=tester_resources, application_name=tester_app_name

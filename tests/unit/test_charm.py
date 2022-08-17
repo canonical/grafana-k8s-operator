@@ -99,8 +99,18 @@ def cli_arg(plan, cli_opt):
     return None
 
 
+k8s_resource_multipatch = patch.multiple(
+    "charm.KubernetesComputeResourcesPatch",
+    _namespace="test-namespace",
+    _patch=lambda *a, **kw: True,
+    is_ready=lambda *a, **kw: True,
+)
+
+
 class TestCharm(unittest.TestCase):
-    def setUp(self):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *unused):
         patch_exec = patch("ops.testing._TestingPebbleClient.exec", MagicMock())
         self.patch_exec = patch_exec.start()
         self.harness = Harness(GrafanaCharm)
@@ -113,6 +123,7 @@ class TestCharm(unittest.TestCase):
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
         ).hexdigest()
 
+    @k8s_resource_multipatch
     def test_datasource_config_is_updated_by_raw_grafana_source_relation(self):
         self.harness.set_leader(True)
 
@@ -129,6 +140,7 @@ class TestCharm(unittest.TestCase):
         config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
 
+    @k8s_resource_multipatch
     def test_datasource_config_is_updated_by_grafana_source_removal(self):
         self.harness.set_leader(True)
 
@@ -154,6 +166,7 @@ class TestCharm(unittest.TestCase):
             [{"name": "juju_test-model_abcdef_prometheus_0", "orgId": 1}],
         )
 
+    @k8s_resource_multipatch
     def test_config_is_updated_with_database_relation(self):
         self.harness.set_leader(True)
 
@@ -203,6 +216,7 @@ class TestCharm(unittest.TestCase):
             {"admin-password": "Admin password has been changed by an administrator"}
         )
 
+    @k8s_resource_multipatch
     def test_config_is_updated_with_subpath(self):
         self.harness.set_leader(True)
 
@@ -214,6 +228,7 @@ class TestCharm(unittest.TestCase):
         self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
         self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
 
+    @k8s_resource_multipatch
     def test_datasource_timeout_value_overrides_config_if_larger(self):
         self.harness.set_leader(True)
 
@@ -234,6 +249,7 @@ class TestCharm(unittest.TestCase):
         expected_source_data[0]["jsonData"]["timeout"] = 600
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
 
+    @k8s_resource_multipatch
     def test_datasource_timeout_value_is_overridden_by_config_if_smaller(self):
         self.harness.set_leader(True)
 
@@ -256,7 +272,9 @@ class TestCharm(unittest.TestCase):
 
 
 class TestCharmReplication(unittest.TestCase):
-    def setUp(self):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *unused):
         patch_exec = patch("ops.testing._TestingPebbleClient.exec", MagicMock())
         self.patch_exec = patch_exec.start()
         self.harness = Harness(GrafanaCharm)
