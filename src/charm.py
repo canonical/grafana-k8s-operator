@@ -492,6 +492,7 @@ class GrafanaCharm(CharmBase):
     def _on_pebble_ready(self, event) -> None:
         """When Pebble is ready, start everything up."""
         self._configure()
+        self.unit.set_workload_version(self.grafana_version)
 
     def restart_grafana(self) -> None:
         """Restart the pebble container.
