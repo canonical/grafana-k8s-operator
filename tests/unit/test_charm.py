@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import yaml
 from ops.testing import Harness
 
+import grafana_server
 from charm import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH, GrafanaCharm
 
 MINIMAL_CONFIG = {"grafana-image-path": "grafana/grafana", "port": 3000}
@@ -263,3 +264,9 @@ class TestCharm(unittest.TestCase):
         expected_source_data = BASIC_DATASOURCES.copy()
         expected_source_data[0]["jsonData"]["timeout"] = 300
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
+
+    @k8s_resource_multipatch
+    @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
+    def test_workload_version_is_set(self):
+        self.harness.container_pebble_ready("grafana")
+        self.assertEqual(self.harness.get_workload_version(), "1.0.0")
