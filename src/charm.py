@@ -25,9 +25,10 @@ import os
 import secrets
 import socket
 import string
+import time
 from io import StringIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import ParseResult, urlparse
 
 import yaml
@@ -55,7 +56,14 @@ from ops.charm import (
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
-from ops.pebble import ConnectionError, ExecError, Layer, PathError, ProtocolError
+from ops.pebble import (
+    APIError,
+    ConnectionError,
+    ExecError,
+    Layer,
+    PathError,
+    ProtocolError,
+)
 
 from grafana_server import Grafana
 from kubernetes_service import K8sServicePatch, PatchFailed
@@ -579,22 +587,23 @@ class GrafanaCharm(CharmBase):
             self.containers["workload"].start(self.name)
             logger.info("Restarted grafana-k8s")
 
-            # We should also make sure sqlite is in WAL mode for replication
-            self.containers["workload"].push(
-                "/usr/local/bin/sqlite3",
-                Path("sqlite-static").read_bytes(),
-                permissions=0o755,
-                make_dirs=True,
-            )
-
-            pragma = self.containers["workload"].exec(
-                [
+            if self._poll_container(self.containers["workload"].can_connect):
+                # We should also make sure sqlite is in WAL mode for replication
+                self.containers["workload"].push(
                     "/usr/local/bin/sqlite3",
-                    "/var/lib/grafana/grafana.db",
-                    "pragma journal_mode=wal;",
-                ]
-            )
-            pragma.wait()
+                    Path("sqlite-static").read_bytes(),
+                    permissions=0o755,
+                    make_dirs=True,
+                )
+
+                pragma = self.containers["workload"].exec(
+                    [
+                        "/usr/local/bin/sqlite3",
+                        "/var/lib/grafana/grafana.db",
+                        "pragma journal_mode=wal;",
+                    ]
+                )
+                pragma.wait()
 
             self.unit.status = ActiveStatus()
         except ExecError as e:
@@ -850,6 +859,28 @@ class GrafanaCharm(CharmBase):
             self._stored.admin_password = self._generate_password()
 
         return self._stored.admin_password
+
+    def _poll_container(self, func: Callable, timeout: float = 2.0, delay: float = 0.1) -> bool:
+        """Try to poll the container to work around Container.is_connect() being point-in-time.
+
+        Args:
+            func: a :Callable: to check, which should return a boolean.
+            timeout: a :float: to time out after
+            delay: a :float: to wait between checks
+
+        """
+        deadline = time.time() + timeout
+
+        while time.time() < deadline:
+            try:
+                if func():
+                    return True
+
+                time.sleep(delay)
+            except (APIError, ConnectionError, ProtocolError):
+                logger.debug("Failed to poll the container due to a Pebble error")
+
+        return False
 
     def _generate_password(self) -> str:
         """Generates a random 12 character password."""
