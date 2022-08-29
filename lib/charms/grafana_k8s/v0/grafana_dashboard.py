@@ -1150,6 +1150,7 @@ class GrafanaDashboardConsumer(Object):
             try:
                 decoded_content = _decode_dashboard_content(template["content"])
                 content = Template(decoded_content).render()
+                content = self._manage_dashboard_uid(content, relation, fname)
                 content = _encode_dashboard_content(_convert_dashboard_fields(content))
             except lzma.LZMAError as e:
                 error = str(e)
@@ -1220,6 +1221,19 @@ class GrafanaDashboardConsumer(Object):
                 stored_dashboards[relation.id] = stored_data
                 self.set_peer_data("dashboards", stored_dashboards)
                 return True
+
+    def _manage_dashboard_uid(self, dashboard: str, relation: Relation, fname: str) -> str:
+        """Add an uid to the dashboard if it is not present."""
+        dashboard = json.loads(dashboard)
+
+        if not dashboard.get("uid", None):
+            dashboards = json.loads(relation.data[relation.app]["dashboards"])  # type: ignore
+            dashboard["uid"] = "{}-{}".format(
+                dashboards["templates"][fname]["juju_topology"]["model_uuid"][:8],
+                relation.app.name[:6],  # type: ignore
+            )
+
+        return json.dumps(dashboard)
 
     def _remove_all_dashboards_for_relation(self, relation: Relation) -> None:
         """If an errored dashboard is in stored data, remove it and trigger a deletion."""
