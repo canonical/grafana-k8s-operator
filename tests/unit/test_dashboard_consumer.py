@@ -44,6 +44,7 @@ DASHBOARD_DATA = {
 DASHBOARD_RENDERED = json.dumps(
     {
         "panels": {"data": "label_values(up, juju_unit)"},
+        "uid": "abcdefgh-provid",
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
 )
@@ -70,6 +71,7 @@ VARIABLE_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
         ],
+        "uid": "abcdefgh-provid",
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
 )
@@ -99,6 +101,7 @@ INPUT_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
         ],
+        "uid": "abcdefgh-provid",
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
 )
@@ -124,6 +127,7 @@ NULL_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "Row separator", "datasource": None},
         ],
+        "uid": "abcdefgh-provid",
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
 )
@@ -144,6 +148,7 @@ EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
             "datasource": "${leave_me_alone}"
         }
     ],
+    "uid": "abcdefgh-provid",
     "templating": {
         "list": [
             {
@@ -173,6 +178,7 @@ EXISTING_VARIABLE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_application)", "datasource": "${prometheusds}"},
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
+        "uid": "abcdefgh-provid",
         "templating": {
             "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
@@ -225,6 +231,7 @@ EXISTING_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
+        "uid": "abcdefgh-provid",
         "templating": {
             "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
