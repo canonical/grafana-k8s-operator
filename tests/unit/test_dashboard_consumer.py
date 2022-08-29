@@ -325,7 +325,7 @@ class TestDashboardConsumer(unittest.TestCase):
 
         return rel_ids
 
-    def test_consumer_notifies_on_new_dashboards(self):
+    def test_consumer_notifies_and_creates_uid_on_new_dashboards(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         self.setup_charm_relations()
