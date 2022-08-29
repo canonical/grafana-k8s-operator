@@ -126,7 +126,7 @@ name". However unit name is associated only with wildcard targets but
 not with fully qualified targets.
 
 Multiple jobs with different metrics paths and labels are allowed, but
-each job must be given a unique name. For example
+each job must be given a unique name:
 
 ```
 [
@@ -157,14 +157,15 @@ each job must be given a unique name. For example
 ]
 ```
 
-It is also possible to configure other scrape related parameters using
-these job specifications as described by the Prometheus
-[documentation](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config).
-The permissible subset of job specific scrape configuration parameters
-supported in a `MetricsEndpointProvider` job specification are:
+**Important:** `job_name` should be a fixed string (e.g. hardcoded literal).
+For instance, if you include variable elements, like your `unit.name`, it may break
+the continuity of the metrics time series gathered by Prometheus when the leader unit
+changes (e.g. on upgrade or rescale).
 
-- `job_name`
-- `metrics_path`
+Additionally, it is also technically possible, but **strongly discouraged**, to
+configure the following scrape-related settings, which behave as described by the
+[Prometheus documentation](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config):
+
 - `static_configs`
 - `scrape_interval`
 - `scrape_timeout`
@@ -175,6 +176,11 @@ supported in a `MetricsEndpointProvider` job specification are:
 - `label_limit`
 - `label_name_length_limit`
 - `label_value_length_limit`
+
+The settings above are supported by the `prometheus_scrape` library only for the sake of
+specialized facilities like the [Prometheus Scrape Config](https://charmhub.io/prometheus-scrape-config-k8s)
+charm. Virtually no charms should use these settings, and charmers definitely **should not**
+expose them to the Juju administrator via configuration options.
 
 ## Consumer Library Usage
 
@@ -247,7 +253,7 @@ format is shown below.
 
 ```
 alert: HighRequestLatency
-expr: job:request_latency_seconds:mean5m{my_key=my_value, %%juju_topology%%} > 0.5
+expr: job:request_latency_seconds:mean5m{my_key=my_value} > 0.5
 for: 10m
 labels:
   severity: Medium
@@ -256,16 +262,27 @@ annotations:
   summary: High request latency for {{ $labels.instance }}.
 ```
 
-It is **very important** to note the `%%juju_topology%%` filter in the
-expression for the alert rule shown above. This filter is a stub that
-is automatically replaced by the metrics provider charm's Juju
-topology (application, model and its UUID). Such a topology filter is
-essential to ensure that alert rules submitted by one provider charm
-generates alerts only for that same charm.  The Prometheus charm may
-be related to multiple metrics provider charms. Without this, filter
-rules submitted by one provider charm will also result in
-corresponding alerts for other provider charms. Hence every alert rule
-expression must include such a topology filter stub.
+The `MetricsEndpointProvider` will read all available alert rules and
+also inject "filtering labels" into the alert expressions. The
+filtering labels ensure that alert rules are localised to the metrics
+provider charm's Juju topology (application, model and its UUID). Such
+a topology filter is essential to ensure that alert rules submitted by
+one provider charm generates alerts only for that same charm. When
+alert rules are embedded in a charm, and the charm is deployed as a
+Juju application, the alert rules from that application have their
+expressions automatically updated to filter for metrics coming from
+the units of that application alone. This remove risk of spurious
+evaluation, e.g., when you have multiple deployments of the same charm
+monitored by the same Prometheus.
+
+Not all alerts one may want to specify can be embedded in a
+charm. Some alert rules will be specific to a user's use case. This is
+the case, for example, of alert rules that are based on business
+constraints, like expecting a certain amount of requests to a specific
+API every five minutes. Such alert rules can be specified via the
+[COS Config Charm](https://charmhub.io/cos-configuration-k8s),
+which allows importing alert rules and other settings like dashboards
+from a Git repository.
 
 Gathering alert rules and generating rule files within the Prometheus
 charm is easily done using the `alerts()` method of
@@ -291,17 +308,28 @@ over unit relation data using the `prometheus_scrape_unit_name` and
 `prometheus_scrape_unit_address` keys. While the `scrape_metadata`,
 `scrape_jobs` and `alert_rules` keys in application relation data
 of Metrics provider charms hold eponymous information.
-"""
 
+"""  # noqa: W505
+
+import copy
+import hashlib
+import ipaddress
 import json
 import logging
 import os
+import platform
+import re
+import socket
+import subprocess
+import tempfile
+import uuid
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple, Union
 
 import yaml
+from charms.observability_libs.v0.juju_topology import JujuTopology
 from ops.charm import CharmBase, RelationRole
-from ops.framework import EventBase, EventSource, Object, ObjectEvents
+from ops.framework import BoundEvent, EventBase, EventSource, Object, ObjectEvents
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bc84295fef5f4049878f07b131968ee2"
@@ -311,8 +339,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
-
+LIBPATCH = 21
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +418,36 @@ class RelationRoleMismatchError(Exception):
         )
 
         super().__init__(self.message)
+
+
+class InvalidAlertRuleEvent(EventBase):
+    """Event emitted when alert rule files are not parsable.
+
+    Enables us to set a clear status on the provider.
+    """
+
+    def __init__(self, handle, errors: str = "", valid: bool = False):
+        super().__init__(handle)
+        self.errors = errors
+        self.valid = valid
+
+    def snapshot(self) -> Dict:
+        """Save alert rule information."""
+        return {
+            "valid": self.valid,
+            "errors": self.errors,
+        }
+
+    def restore(self, snapshot):
+        """Restore alert rule information."""
+        self.valid = snapshot["valid"]
+        self.errors = snapshot["errors"]
+
+
+class MetricsEndpointProviderEvents(ObjectEvents):
+    """Events raised by :class:`InvalidAlertRuleEvent`s."""
+
+    alert_rule_status_changed = EventSource(InvalidAlertRuleEvent)
 
 
 def _validate_relation_by_interface_and_direction(
@@ -474,116 +531,6 @@ def _sanitize_scrape_configuration(job) -> dict:
     return sanitized_job
 
 
-class JujuTopology:
-    """Class for storing and formatting juju topology information."""
-
-    STUB = "%%juju_topology%%"
-
-    def __init__(self, model: str, model_uuid: str, application: str, charm_name: str):
-        """Build a JujuTopology object.
-
-        A `JujuTopology` object is used for storing and transforming
-        Juju Topology information. This information is used to
-        annotate Prometheus scrape jobs and alert rules. Such
-        annotation when applied to scrape jobs helps in identifying
-        the source of the scrapped metrics. On the other hand when
-        applied to alert rules topology information ensures that
-        evaluation of alert expressions is restricted to the source
-        (charm) from which the alert rules were obtained.
-
-        Args:
-            model: a string name of the Juju model
-            model_uuid: a globally unique string identifier for the Juju model
-            application: an application name as a string
-            charm_name: name of charm as a string
-        """
-        self.model = model
-        self.model_uuid = model_uuid
-        self.application = application
-        self.charm_name = charm_name
-
-    @classmethod
-    def from_charm(cls, charm):
-        """Factory method for creating the `JujuTopology` dataclass from a given charm.
-
-        Args:
-            charm: a `CharmBase` object for which the `JujuTopology` has to be constructed
-
-        Returns:
-            a `JujuTopology` object.
-        """
-        return cls(
-            model=charm.model.name,
-            model_uuid=charm.model.uuid,
-            application=charm.model.app.name,
-            charm_name=charm.meta.name,
-        )
-
-    @classmethod
-    def from_relation_data(cls, data: dict):
-        """Factory method for creating the `JujuTopology` dataclass from a dictionary.
-
-        Args:
-            data: a dictionary with four keys providing topology information. The keys are
-                - "model"
-                - "model_uuid"
-                - "application"
-                - "charm_name"
-
-        Returns:
-            a `JujuTopology` object.
-        """
-        return cls(
-            model=data["model"],
-            model_uuid=data["model_uuid"],
-            application=data["application"],
-            charm_name=data["charm_name"],
-        )
-
-    @property
-    def identifier(self) -> str:
-        """Format the topology information into a terse string."""
-        return "{}_{}_{}".format(self.model, self.model_uuid, self.application)
-
-    @property
-    def scrape_identifier(self):
-        """Format the topology information into a scrape identifier."""
-        return "juju_{}_{}_{}_prometheus_scrape".format(
-            self.model,
-            self.model_uuid[:7],
-            self.application,
-        )
-
-    @property
-    def promql_labels(self) -> str:
-        """Format the topology information into a verbose string."""
-        return 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
-            self.model, self.model_uuid, self.application
-        )
-
-    def as_dict(self) -> dict:
-        """Format the topology information into a dict."""
-        return {
-            "model": self.model,
-            "model_uuid": self.model_uuid,
-            "application": self.application,
-            "charm_name": self.charm_name,
-        }
-
-    def as_dict_with_promql_labels(self):
-        """Format the topology information into a dict with keys having 'juju_' as prefix."""
-        return {
-            "juju_model": self.model,
-            "juju_model_uuid": self.model_uuid,
-            "juju_application": self.application,
-            "juju_charm": self.charm_name,
-        }
-
-    def render(self, template: str):
-        """Render a juju-topology template string with topology info."""
-        return template.replace(JujuTopology.STUB, self.promql_labels)
-
-
 class InvalidAlertRulePathError(Exception):
     """Raised if the alert rules folder cannot be found or is otherwise invalid."""
 
@@ -619,13 +566,13 @@ def _is_single_alert_rule_format(rules_dict: dict) -> bool:
 
     The Prometheus charm library supports reading of alert rules in a
     custom format that consists of a single alert rule per file. This
-    does not conform to the offical Prometheus alert rule file format
+    does not conform to the official Prometheus alert rule file format
     which requires that each alert rules file consists of a list of
     alert rule groups and each group consists of a list of alert
     rules.
 
     Alert rules in dictionary form are considered to be in single rule
-    format if in the least it contains two keys correspoinding to the
+    format if in the least it contains two keys corresponding to the
     alert rule name and alert expression.
 
     Returns:
@@ -662,13 +609,14 @@ class AlertRules:
     #   the "alert" and "expr" keys.
     # - alert rule (singular): a single dictionary that has the "alert" and "expr" keys.
 
-    def __init__(self, topology: JujuTopology):
+    def __init__(self, topology: Optional[JujuTopology] = None):
         """Build and alert rule object.
 
         Args:
-            topology: a `JujuTopology` instance that is used to annotate all alert rules.
+            topology: an optional `JujuTopology` instance that is used to annotate all alert rules.
         """
         self.topology = topology
+        self.tool = CosTool(None)
         self.alert_groups = []  # type: List[dict]
 
     def _from_file(self, root_path: Path, file_path: Path) -> List[dict]:
@@ -715,10 +663,14 @@ class AlertRules:
                 for alert_rule in alert_group["rules"]:
                     if "labels" not in alert_rule:
                         alert_rule["labels"] = {}
-                    alert_rule["labels"].update(self.topology.as_dict_with_promql_labels())
 
-                    # insert juju topology filters into a prometheus alert rule
-                    alert_rule["expr"] = self.topology.render(alert_rule["expr"])
+                    if self.topology:
+                        alert_rule["labels"].update(self.topology.label_matcher_dict)
+                        # insert juju topology filters into a prometheus alert rule
+                        alert_rule["expr"] = self.tool.inject_label_matchers(
+                            re.sub(r"%%juju_topology%%,?", "", alert_rule["expr"]),
+                            self.topology.label_matcher_dict,
+                        )
 
             return alert_groups
 
@@ -742,9 +694,27 @@ class AlertRules:
         # Generate group name:
         #  - name, from juju topology
         #  - suffix, from the relative path of the rule file;
-        group_name_parts = [self.topology.identifier, rel_path, group_name, "alerts"]
+        group_name_parts = [self.topology.identifier] if self.topology else []
+        group_name_parts.extend([rel_path, group_name, "alerts"])
         # filter to remove empty strings
         return "_".join(filter(None, group_name_parts))
+
+    @classmethod
+    def _multi_suffix_glob(
+        cls, dir_path: Path, suffixes: List[str], recursive: bool = True
+    ) -> list:
+        """Helper function for getting all files in a directory that have a matching suffix.
+
+        Args:
+            dir_path: path to the directory to glob from.
+            suffixes: list of suffixes to include in the glob (items should begin with a period).
+            recursive: a flag indicating whether a glob is recursive (nested) or not.
+
+        Returns:
+            List of files in `dir_path` that have one of the suffixes specified in `suffixes`.
+        """
+        all_files_in_dir = dir_path.glob("**/*" if recursive else "*")
+        return list(filter(lambda f: f.is_file() and f.suffix in suffixes, all_files_in_dir))
 
     def _from_dir(self, dir_path: Path, recursive: bool) -> List[dict]:
         """Read all rule files in a directory.
@@ -764,8 +734,7 @@ class AlertRules:
         alert_groups = []  # type: List[dict]
 
         # Gather all alerts into a list of groups
-        paths = dir_path.glob("**/*.rule" if recursive else "*.rule")
-        for file_path in filter(Path.is_file, paths):
+        for file_path in self._multi_suffix_glob(dir_path, [".rule", ".rules"], recursive):
             alert_groups_from_file = self._from_file(dir_path, file_path)
             if alert_groups_from_file:
                 logger.debug("Reading alert rule from %s", file_path)
@@ -773,7 +742,7 @@ class AlertRules:
 
         return alert_groups
 
-    def add_path(self, path: str, *, recursive: bool = False):
+    def add_path(self, path: str, *, recursive: bool = False) -> None:
         """Add rules from a dir path.
 
         All rules from files are aggregated into a data structure representing a single rule file.
@@ -783,8 +752,8 @@ class AlertRules:
             path: either a rules file or a dir of rules files.
             recursive: whether to read files recursively or not (no impact if `path` is a file).
 
-        Raises:
-            InvalidAlertRulePathError: if the provided path is invalid.
+        Returns:
+            True if path was added else False.
         """
         path = Path(path)  # type: Path
         if path.is_dir():
@@ -792,7 +761,7 @@ class AlertRules:
         elif path.is_file():
             self.alert_groups.extend(self._from_file(path.parent, path))
         else:
-            raise InvalidAlertRulePathError(path, "path does not exist")
+            logger.debug("Alert rules path does not exist: %s", path)
 
     def as_dict(self) -> dict:
         """Return standard alert rules file in dict representation.
@@ -861,6 +830,7 @@ class MetricsEndpointConsumer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
+        self._tool = CosTool(self._charm)
         events = self._charm.on[relation_name]
         self.framework.observe(events.relation_changed, self._on_metrics_provider_relation_changed)
         self.framework.observe(
@@ -913,6 +883,8 @@ class MetricsEndpointConsumer(Object):
             if static_scrape_jobs:
                 scrape_jobs.extend(static_scrape_jobs)
 
+        scrape_jobs = _dedupe_job_names(scrape_jobs)
+
         return scrape_jobs
 
     def alerts(self) -> dict:
@@ -958,30 +930,89 @@ class MetricsEndpointConsumer(Object):
         """
         alerts = {}  # type: Dict[str, dict] # mapping b/w juju identifiers and alert rule files
         for relation in self._charm.model.relations[self._relation_name]:
-            if not relation.units:
+            if not relation.units or not relation.app:
                 continue
 
             alert_rules = json.loads(relation.data[relation.app].get("alert_rules", "{}"))
             if not alert_rules:
                 continue
 
+            identifier = None
             try:
                 scrape_metadata = json.loads(relation.data[relation.app]["scrape_metadata"])
-                topology = JujuTopology.from_relation_data(scrape_metadata)
-
-                alerts[topology.identifier] = alert_rules
+                identifier = JujuTopology.from_dict(scrape_metadata).identifier
+                alerts[identifier] = self._tool.apply_label_matchers(alert_rules)
 
             except KeyError as e:
-                logger.error(
-                    "Relation %s has invalid data : %s",
+                logger.debug(
+                    "Relation %s has no 'scrape_metadata': %s",
                     relation.id,
                     e,
                 )
+                identifier = self._get_identifier_by_alert_rules(alert_rules)
+
+            if not identifier:
+                logger.error(
+                    "Alert rules were found but no usable group or identifier was present"
+                )
+                continue
+
+            alerts[identifier] = alert_rules
+
+            _, errmsg = self._tool.validate_alert_rules(alert_rules)
+            if errmsg:
+                if alerts[identifier]:
+                    del alerts[identifier]
+                relation.data[self._charm.app]["event"] = json.dumps({"errors": errmsg})
+                continue
 
         return alerts
 
+    def _get_identifier_by_alert_rules(self, rules: dict) -> Union[str, None]:
+        """Determine an appropriate dict key for alert rules.
+
+        The key is used as the filename when writing alerts to disk, so the structure
+        and uniqueness is important.
+
+        Args:
+            rules: a dict of alert rules
+        """
+        if "groups" not in rules:
+            logger.debug("No alert groups were found in relation data")
+            return None
+
+        # Construct an ID based on what's in the alert rules if they have labels
+        for group in rules["groups"]:
+            try:
+                labels = group["rules"][0]["labels"]
+                identifier = "{}_{}_{}".format(
+                    labels["juju_model"],
+                    labels["juju_model_uuid"],
+                    labels["juju_application"],
+                )
+                return identifier
+            except KeyError:
+                logger.debug("Alert rules were found but no usable labels were present")
+                continue
+
+        logger.warning(
+            "No labeled alert rules were found, and no 'scrape_metadata' "
+            "was available. Using the alert group name as filename."
+        )
+        try:
+            for group in rules["groups"]:
+                return group["name"]
+        except KeyError:
+            logger.debug("No group name was found to use as identifier")
+
+        return None
+
     def _static_scrape_config(self, relation) -> list:
         """Generate the static scrape configuration for a single relation.
+
+        If the relation data includes `scrape_metadata` then the value
+        of this key is used to annotate the scrape jobs with Juju
+        Topology labels before returning them.
 
         Args:
             relation: an `ops.model.Relation` object whose static
@@ -1005,8 +1036,9 @@ class MetricsEndpointConsumer(Object):
         if not scrape_metadata:
             return scrape_jobs
 
-        job_name_prefix = JujuTopology.from_relation_data(scrape_metadata).scrape_identifier
-
+        job_name_prefix = "juju_{}_prometheus_scrape".format(
+            JujuTopology.from_dict(scrape_metadata).identifier
+        )
         hosts = self._relation_hosts(relation)
 
         labeled_job_configs = []
@@ -1096,7 +1128,7 @@ class MetricsEndpointConsumer(Object):
             ports = []
             unitless_targets = []
             for target in all_targets:
-                host, port = target.split(":")
+                host, port = self._target_parts(target)
                 if host.strip() == "*":
                     ports.append(port.strip())
                 else:
@@ -1125,6 +1157,26 @@ class MetricsEndpointConsumer(Object):
 
         return labeled_job
 
+    def _target_parts(self, target) -> list:
+        """Extract host and port from a wildcard target.
+
+        Args:
+            target: a string specifying a scrape target. A
+              scrape target is expected to have the format
+              "host:port". The host part may be a wildcard
+              "*" and the port part can be missing (along
+              with ":") in which case port is set to 80.
+
+        Returns:
+            a list with target host and port as in [host, port]
+        """
+        if ":" in target:
+            parts = target.split(":")
+        else:
+            parts = [target, "80"]
+
+        return parts
+
     def _set_juju_labels(self, labels, scrape_metadata) -> dict:
         """Create a copy of metric labels with Juju topology information.
 
@@ -1138,9 +1190,7 @@ class MetricsEndpointConsumer(Object):
             topology information with the exception of unit name.
         """
         juju_labels = labels.copy()  # deep copy not needed
-        juju_labels.update(
-            JujuTopology.from_relation_data(scrape_metadata).as_dict_with_promql_labels()
-        )
+        juju_labels.update(JujuTopology.from_dict(scrape_metadata).label_matcher_dict)
 
         return juju_labels
 
@@ -1209,15 +1259,61 @@ class MetricsEndpointConsumer(Object):
         return static_config
 
 
+def _dedupe_job_names(jobs: List[dict]):
+    """Deduplicate a list of dicts by appending a hash to the value of the 'job_name' key.
+
+    Additionally fully dedeuplicate any identical jobs.
+
+    Args:
+        jobs: A list of prometheus scrape jobs
+    """
+    jobs_copy = copy.deepcopy(jobs)
+
+    # Convert to a dict with job names as keys
+    # I think this line is O(n^2) but it should be okay given the list sizes
+    jobs_dict = {
+        job["job_name"]: list(filter(lambda x: x["job_name"] == job["job_name"], jobs_copy))
+        for job in jobs_copy
+    }
+
+    # If multiple jobs have the same name, convert the name to "name_<hash-of-job>"
+    for key in jobs_dict:
+        if len(jobs_dict[key]) > 1:
+            for job in jobs_dict[key]:
+                job_json = json.dumps(job)
+                hashed = hashlib.sha256(job_json.encode()).hexdigest()
+                job["job_name"] = "{}_{}".format(job["job_name"], hashed)
+    new_jobs = []
+    for key in jobs_dict:
+        new_jobs.extend([i for i in jobs_dict[key]])
+
+    # Deduplicate jobs which are equal
+    # Again this in O(n^2) but it should be okay
+    deduped_jobs = []
+    seen = []
+    for job in new_jobs:
+        job_json = json.dumps(job)
+        hashed = hashlib.sha256(job_json.encode()).hexdigest()
+        if hashed in seen:
+            continue
+        seen.append(hashed)
+        deduped_jobs.append(job)
+
+    return deduped_jobs
+
+
 def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> str:
     """Resolve the provided path items against the directory of the main file.
 
     Look up the directory of the `main.py` file being executed. This is normally
     going to be the charm.py file of the charm including this library. Then, resolve
     the provided path elements and, if the result path exists and is a directory,
-    return its absolute path; otherwise, return `None`.
+    return its absolute path; otherwise, raise en exception.
+
+    Raises:
+        InvalidAlertRulePathError, if the path does not exist or is not a directory.
     """
-    charm_dir = Path(charm.charm_dir)  # type: ignore
+    charm_dir = Path(str(charm.charm_dir))
     if not charm_dir.exists() or not charm_dir.is_dir():
         # Operator Framework does not currently expose a robust
         # way to determine the top level charm source directory
@@ -1240,12 +1336,15 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
 class MetricsEndpointProvider(Object):
     """A metrics endpoint for Prometheus."""
 
+    on = MetricsEndpointProviderEvents()
+
     def __init__(
         self,
         charm,
         relation_name: str = DEFAULT_RELATION_NAME,
         jobs=None,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
+        refresh_event: Optional[Union[BoundEvent, List[BoundEvent]]] = None,
     ):
         """Construct a metrics provider for a Prometheus charm.
 
@@ -1304,26 +1403,30 @@ class MetricsEndpointProvider(Object):
         the  `MetricsEndpointProvider` logs an error and does not load the particular
         rule.
 
-        To avoid false positives and negatives in the evaluation of your alert rules,
-        you must always add the `%%juju_topology%%` token as label filters in the
-        PromQL expression, e.g.:
+        To avoid false positives and negatives in the evaluation of alert rules,
+        all ingested alert rule expressions are automatically qualified using Juju
+        Topology filters. This ensures that alert rules provided by your charm, trigger
+        alerts based only on data scrapped from your charm. For example an alert rule
+        such as the following
 
             alert: UnitUnavailable
-            expr: up{%%juju_topology%%} < 1
+            expr: up < 1
             for: 0m
-            labels:
-                severity: critical
-            annotations:
-              summary: Unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} unavailable
-              description: >
-                The unit {{ $labels.juju_model }} {{ $labels.juju_unit }} is unavailable
 
-        The `%%juju_topology%%` token will be replaced with label filters ensuring that
-        the only timeseries evaluated are those scraped from this charm, and no other.
-        Failing to ensure that the `%%juju_topology%%` token is applied to each and every
-        queried timeseries which will lead to unpredictable alert rule evaluation
-        if your charm is deployed multiple times and all these instances are
-        monitored by the same Prometheus.
+        will be automatically transformed into something along the lines of the following
+
+            alert: UnitUnavailable
+            expr: up{juju_model=<model>, juju_model_uuid=<uuid-prefix>, juju_application=<app>} < 1
+            for: 0m
+
+        An attempt will be made to validate alert rules prior to loading them into Prometheus.
+        If they are invalid, an event will be emitted from this object which charms can respond
+        to in order to set a meaningful status for administrators.
+
+        This can be observed via `consumer.on.alert_rule_status_changed` which contains:
+            - The error(s) encountered when validating as `errors`
+            - A `valid` attribute, which can be used to reset the state of charms if alert rules
+              are updated via another mechanism (e.g. `cos-config`) and refreshed.
 
         Args:
             charm: a `CharmBase` object that manages this
@@ -1344,6 +1447,8 @@ class MetricsEndpointProvider(Object):
                 files.  Defaults to "./prometheus_alert_rules",
                 resolved relative to the directory hosting the charm entry file.
                 The alert rules are automatically updated on charm upgrade.
+            refresh_event: an optional bound event or list of bound events which
+                will be observed to re-set scrape job data (IP address and others)
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -1362,7 +1467,7 @@ class MetricsEndpointProvider(Object):
         try:
             alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
         except InvalidAlertRulePathError as e:
-            logger.warning(
+            logger.debug(
                 "Invalid Prometheus alert rules folder at %s: %s",
                 e.alert_rules_absolute_path,
                 e.message,
@@ -1380,17 +1485,53 @@ class MetricsEndpointProvider(Object):
 
         events = self._charm.on[self._relation_name]
         self.framework.observe(events.relation_joined, self._set_scrape_job_spec)
-        self.framework.observe(events.relation_changed, self._set_scrape_job_spec)
+        self.framework.observe(events.relation_changed, self._on_relation_changed)
 
-        # dirty fix: set the ip address when the containers start, as a workaround
-        # for not being able to lookup the pod ip
-        for container_name in charm.unit.containers:
-            self.framework.observe(
-                charm.on[container_name].pebble_ready,
-                self._set_unit_ip,
-            )
+        if not refresh_event:
+            if len(self._charm.meta.containers) == 1:
+                if "kubernetes" in self._charm.meta.series:
+                    # This is a podspec charm
+                    refresh_event = [self._charm.on.update_status]
+                else:
+                    # This is a sidecar/pebble charm
+                    container = list(self._charm.meta.containers.values())[0]
+                    refresh_event = [self._charm.on[container.name.replace("-", "_")].pebble_ready]
+            else:
+                logger.warning(
+                    "%d containers are present in metadata.yaml and "
+                    "refresh_event was not specified. Defaulting to update_status. "
+                    "Metrics IP may not be set in a timely fashion.",
+                    len(self._charm.meta.containers),
+                )
+                refresh_event = [self._charm.on.update_status]
+
+        else:
+            if not isinstance(refresh_event, list):
+                refresh_event = [refresh_event]
+
+        for ev in refresh_event:
+            self.framework.observe(ev, self._set_unit_ip)
 
         self.framework.observe(self._charm.on.upgrade_charm, self._set_scrape_job_spec)
+
+        # If there is no leader during relation_joined we will still need to set alert rules.
+        self.framework.observe(self._charm.on.leader_elected, self._set_scrape_job_spec)
+
+    def _on_relation_changed(self, event):
+        """Check for alert rule messages in the relation data before moving on."""
+        if self._charm.unit.is_leader():
+            ev = json.loads(event.relation.data[event.app].get("event", "{}"))
+
+            if ev:
+                valid = bool(ev.get("valid", True))
+                errors = ev.get("errors", "")
+
+                if valid and not errors:
+                    self.on.alert_rule_status_changed.emit(valid=valid)
+                else:
+                    self.on.alert_rule_status_changed.emit(valid=valid, errors=errors)
+
+        self._set_scrape_job_spec(event)
 
     def _set_scrape_job_spec(self, event):
         """Ensure scrape target information is made available to prometheus.
@@ -1406,8 +1547,8 @@ class MetricsEndpointProvider(Object):
         if not self._charm.unit.is_leader():
             return
 
-        alert_rules = AlertRules(self.topology)
-        alert_rules.add_path(self._alert_rules_path, recursive=False)
+        alert_rules = AlertRules(topology=self.topology)
+        alert_rules.add_path(self._alert_rules_path, recursive=True)
         alert_rules_as_dict = alert_rules.as_dict()
 
         for relation in self._charm.model.relations[self._relation_name]:
@@ -1432,12 +1573,30 @@ class MetricsEndpointProvider(Object):
         event is actually needed.
         """
         for relation in self._charm.model.relations[self._relation_name]:
-            relation.data[self._charm.unit]["prometheus_scrape_unit_address"] = str(
-                self._charm.model.get_binding(relation).network.bind_address
+            unit_ip = str(self._charm.model.get_binding(relation).network.bind_address)
+            relation.data[self._charm.unit]["prometheus_scrape_unit_address"] = (
+                unit_ip if self._is_valid_unit_address(unit_ip) else socket.getfqdn()
             )
+
             relation.data[self._charm.unit]["prometheus_scrape_unit_name"] = str(
                 self._charm.model.unit.name
             )
+
+    def _is_valid_unit_address(self, address: str) -> bool:
+        """Validate a unit address.
+
+        At present only IP address validation is supported, but
+        this may be extended to DNS addresses also, as needed.
+
+        Args:
+            address: a string representing a unit address
+        """
+        try:
+            _ = ipaddress.ip_address(address)
+        except ValueError:
+            return False
+
+        return True
 
     @property
     def _scrape_jobs(self) -> list:
@@ -1476,28 +1635,29 @@ class PrometheusRulesProvider(Object):
             has the `prometheus_scrape` interface.
         dir_path: Root directory for the collection of rule files.
         recursive: Whether or not to scan for rule files recursively.
-        aux_events: User-provided events that should trigger relation data update.
     """
 
     def __init__(
         self,
         charm: CharmBase,
-        relation_name: str = "prometheus-config",
-        dir_path: str = None,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        dir_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive=True,
-        aux_events: List[EventSource] = None,
     ):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self.topology = JujuTopology.from_charm(charm)
-        self.dir_path = dir_path or _resolve_dir_against_charm_path(
-            charm, DEFAULT_ALERT_RULES_RELATIVE_PATH
-        )
         self._recursive = recursive
 
-        if aux_events is None:
-            aux_events = []
+        try:
+            dir_path = _resolve_dir_against_charm_path(charm, dir_path)
+        except InvalidAlertRulePathError as e:
+            logger.debug(
+                "Invalid Prometheus alert rules folder at %s: %s",
+                e.alert_rules_absolute_path,
+                e.message,
+            )
+        self.dir_path = dir_path
 
         events = self._charm.on[self._relation_name]
         event_sources = [
@@ -1505,27 +1665,30 @@ class PrometheusRulesProvider(Object):
             events.relation_changed,
             self._charm.on.leader_elected,
             self._charm.on.upgrade_charm,
-        ] + aux_events
+        ]
 
         for event_source in event_sources:
             self.framework.observe(event_source, self._update_relation_data)
+
+    def _reinitialize_alert_rules(self):
+        """Reloads alert rules and updates all relations."""
+        self._update_relation_data(None)
 
     def _update_relation_data(self, _):
         """Update application relation data with alert rules for all relations."""
         if not self._charm.unit.is_leader():
             return
 
-        alert_rules = AlertRules(self.topology)
+        alert_rules = AlertRules()
         alert_rules.add_path(self.dir_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
 
-        if alert_rules_as_dict:
-            logger.info("Updating relation data with rule files from disk")
-            for relation in self._charm.model.relations[self._relation_name]:
-                relation.data[self._charm.app]["alert_rules"] = json.dumps(
-                    alert_rules_as_dict,
-                    sort_keys=True,  # sort, to prevent unnecessary relation_changed events
-                )
+        logger.info("Updating relation data with rule files from disk")
+        for relation in self._charm.model.relations[self._relation_name]:
+            relation.data[self._charm.app]["alert_rules"] = json.dumps(
+                alert_rules_as_dict,
+                sort_keys=True,  # sort, to prevent unnecessary relation_changed events
+            )
 
 
 class MetricsEndpointAggregator(Object):
@@ -1546,6 +1709,8 @@ class MetricsEndpointAggregator(Object):
     `prometheus_scrape` interface.
 
     2. Integrating one or more scrape targets through cross model
+    relations. Although the [Scrape Config Operator](https://charmhub.io/cos-configuration-k8s)
+    may also be used for the purpose of supporting cross model
     relations.
 
     Using `MetricsEndpointAggregator` to build a Prometheus charm client
@@ -1609,6 +1774,22 @@ class MetricsEndpointAggregator(Object):
     """
 
     def __init__(self, charm, relation_names, relabel_instance=True):
+        """Construct a `MetricsEndpointAggregator`.
+
+        Args:
+            charm: a `CharmBase` object that manages this
+                `MetricsEndpointAggregator` object. Typically this is
+                `self` in the instantiating class.
+            relation_names: a dictionary with three keys. The value
+                of the "scrape_target" and "alert_rules" keys are
+                the relation names over which scrape job and alert rule
+                information is gathered by this `MetricsEndpointAggregator`.
+                And the value of the "prometheus" key is the name of
+                the relation with a `MetricsEndpointConsumer` such as
+                the Prometheus charm.
+            relabel_instance: A boolean flag indicating if Prometheus
+                scrape job "instance" labels must refer to Juju Topology.
+        """
         super().__init__(charm, relation_names["prometheus"])
 
         self._charm = charm
@@ -1641,13 +1822,13 @@ class MetricsEndpointAggregator(Object):
         jobs = []  # list of scrape jobs, one per relation
         for relation in self.model.relations[self._target_relation]:
             targets = self._get_targets(relation)
-            if targets:
+            if targets and relation.app:
                 jobs.append(self._static_scrape_job(targets, relation.app.name))
 
         groups = []  # list of alert rule groups, one group per relation
         for relation in self.model.relations[self._alert_rules_relation]:
             unit_rules = self._get_alert_rules(relation)
-            if unit_rules:
+            if unit_rules and relation.app:
                 appname = relation.app.name
                 rules = self._label_alert_rules(unit_rules, appname)
                 group = {"name": self._group_name(appname), "rules": rules}
@@ -1655,6 +1836,28 @@ class MetricsEndpointAggregator(Object):
 
         event.relation.data[self._charm.app]["scrape_jobs"] = json.dumps(jobs)
         event.relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": groups})
+
+    def _set_target_job_data(self, targets: dict, app_name: str, **kwargs) -> None:
+        """Update scrape jobs in response to scrape target changes.
+
+        When there is any change in relation data with any scrape
+        target, the Prometheus scrape job, for that specific target is
+        updated. Additionally, if this method is called manually, do the
+        sameself.
+
+        Args:
+            targets: a `dict` containing target information
+            app_name: a `str` identifying the application
+        """
+        # new scrape job for the relation that has changed
+        updated_job = self._static_scrape_job(targets, app_name, **kwargs)
+
+        for relation in self.model.relations[self._prometheus_relation]:
+            jobs = json.loads(relation.data[self._charm.app].get("scrape_jobs", "[]"))
+            # list of scrape jobs that have not changed
+            jobs = [job for job in jobs if updated_job["job_name"] != job["job_name"]]
+            jobs.append(updated_job)
+            relation.data[self._charm.app]["scrape_jobs"] = json.dumps(jobs)
 
     def _update_prometheus_jobs(self, event):
         """Update scrape jobs in response to scrape target changes.
@@ -1702,12 +1905,12 @@ class MetricsEndpointAggregator(Object):
             # list of scrape jobs for units of the same application that still exist
             configs_kept = [
                 config
-                for config in changed_job["static_configs"]
+                for config in changed_job["static_configs"]  # type: ignore
                 if config.get("labels", {}).get("juju_unit") != unit_name
             ]
 
             if configs_kept:
-                changed_job["static_configs"] = configs_kept
+                changed_job["static_configs"] = configs_kept  # type: ignore
                 jobs.append(changed_job)
 
             relation.data[self._charm.app]["scrape_jobs"] = json.dumps(jobs)
@@ -1765,12 +1968,12 @@ class MetricsEndpointAggregator(Object):
             # list of alert rules not associated with departing unit
             rules_kept = [
                 rule
-                for rule in changed_group.get("rules")
+                for rule in changed_group.get("rules")  # type: ignore
                 if rule.get("labels").get("juju_unit") != unit_name
             ]
 
             if rules_kept:
-                changed_group["rules"] = rules_kept
+                changed_group["rules"] = rules_kept  # type: ignore
                 groups.append(changed_group)
 
             relation.data[self._charm.app]["alert_rules"] = (
@@ -1863,23 +2066,6 @@ class MetricsEndpointAggregator(Object):
         """
         return "juju_{}_{}_{}_alert_rules".format(self.model.name, self.model.uuid[:7], appname)
 
-    def _juju_topology(self, unit_name, appname) -> dict:
-        """Construct juju topology labels.
-
-        Args:
-            unit_name: a string name of a unit.
-            appname: a string name of an application.
-
-        Returns:
-            a dictionary containing Juju topology labels.
-        """
-        return {
-            "juju_model": self.model.name,
-            "juju_model_uuid": self.model.uuid[:7],
-            "juju_application": appname,
-            "juju_unit": unit_name,
-        }
-
     def _label_alert_rules(self, unit_rules, appname) -> list:
         """Apply juju topology labels to alert rules.
 
@@ -1895,12 +2081,19 @@ class MetricsEndpointAggregator(Object):
         labeled_rules = []
         for unit_name, rules in unit_rules.items():
             for rule in rules:
-                rule["labels"].update(self._juju_topology(unit_name, appname))
+                # the new JujuTopology removed this, so build it up by hand
+                matchers = {
+                    "juju_{}".format(k): v
+                    for k, v in JujuTopology(self.model.name, self.model.uuid, appname, unit_name)
+                    .as_dict(excluded_keys=["charm_name"])
+                    .items()
+                }
+                rule["labels"].update(matchers.items())
                 labeled_rules.append(rule)
 
         return labeled_rules
 
-    def _static_scrape_job(self, targets, application_name) -> dict:
+    def _static_scrape_job(self, targets, application_name, **kwargs) -> dict:
         """Construct a static scrape job for an application.
 
         Args:
@@ -1935,8 +2128,9 @@ class MetricsEndpointAggregator(Object):
                 }
                 for unit_name, target in targets.items()
             ],
-            "relabel_configs": self._relabel_configs,
+            "relabel_configs": self._relabel_configs + kwargs.get("relabel_configs", []),
         }
+        job.update(kwargs.get("updates", {}))
 
         return job
 
@@ -1968,3 +2162,121 @@ class MetricsEndpointAggregator(Object):
             if self._relabel_instance
             else []
         )
+
+
+class CosTool:
+    """Uses cos-tool to inject label matchers into alert rule expressions and validate rules."""
+
+    _path = None
+    _disabled = False
+
+    def __init__(self, charm):
+        self._charm = charm
+
+    @property
+    def path(self):
+        """Lazy lookup of the path of cos-tool."""
+        if self._disabled:
+            return None
+        if not self._path:
+            self._path = self._get_tool_path()
+            if not self._path:
+                logger.debug("Skipping injection of juju topology as label matchers")
+                self._disabled = True
+        return self._path
+
+    def apply_label_matchers(self, rules) -> dict:
+        """Will apply label matchers to the expression of all alerts in all supplied groups."""
+        if not self.path:
+            return rules
+        for group in rules["groups"]:
+            rules_in_group = group.get("rules", [])
+            for rule in rules_in_group:
+                topology = {}
+                # if the user for some reason has provided juju_unit, we'll need to honor it
+                # in most cases, however, this will be empty
+                for label in [
+                    "juju_model",
+                    "juju_model_uuid",
+                    "juju_application",
+                    "juju_charm",
+                    "juju_unit",
+                ]:
+                    if label in rule["labels"]:
+                        topology[label] = rule["labels"][label]
+
+                rule["expr"] = self.inject_label_matchers(rule["expr"], topology)
+        return rules
+
+    def validate_alert_rules(self, rules: dict) -> Tuple[bool, str]:
+        """Will validate correctness of alert rules, returning a boolean and any errors."""
+        if not self.path:
+            logger.debug("`cos-tool` unavailable. Not validating alert correctness.")
+            return True, ""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rule_path = Path(tmpdir + "/validate_rule.yaml")
+
+            # Smash "our" rules format into what upstream actually uses, which is more like:
+            #
+            # groups:
+            #   - name: foo
+            #     rules:
+            #       - alert: SomeAlert
+            #         expr: up
+            #       - alert: OtherAlert
+            #         expr: up
+            transformed_rules = {"groups": []}  # type: ignore
+            for rule in rules["groups"]:
+                transformed = {"name": str(uuid.uuid4()), "rules": [rule]}
+                transformed_rules["groups"].append(transformed)
+
+            rule_path.write_text(yaml.dump(transformed_rules))
+
+            args = [str(self.path), "validate", str(rule_path)]
+            # noinspection PyBroadException
+            try:
+                self._exec(args)
+                return True, ""
+            except subprocess.CalledProcessError as e:
+                logger.debug("Validating the rules failed: %s", e.output)
+                return False, ", ".join([line for line in e.output if "error validating" in line])
+
+    def inject_label_matchers(self, expression, topology) -> str:
+        """Add label matchers to an expression."""
+        if not topology:
+            return expression
+        if not self.path:
+            logger.debug("`cos-tool` unavailable. Leaving expression unchanged: %s", expression)
+            return expression
+        args = [str(self.path), "transform"]
+        args.extend(
+            ["--label-matcher={}={}".format(key, value) for key, value in topology.items()]
+        )
+
+        args.extend(["{}".format(expression)])
+        # noinspection PyBroadException
+        try:
+            return self._exec(args)
+        except subprocess.CalledProcessError as e:
+            logger.debug('Applying the expression failed: "%s", falling back to the original', e)
+            return expression
+
+    def _get_tool_path(self) -> Optional[Path]:
+        arch = platform.machine()
+        arch = "amd64" if arch == "x86_64" else arch
+        res = "cos-tool-{}".format(arch)
+        try:
+            path = Path(res).resolve()
+            path.chmod(0o777)
+            return path
+        except NotImplementedError:
+            logger.debug("System lacks support for chmod")
+        except FileNotFoundError:
+            logger.debug('Could not locate cos-tool at: "{}"'.format(res))
+        return None
+
+    def _exec(self, cmd) -> str:
+        result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE)
+        output = result.stdout.decode("utf-8").strip()
+        return output

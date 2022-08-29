@@ -15,7 +15,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Check libs
-        uses: canonical/charming-actions/check-libraries@1.0.1-rc
+        uses: canonical/charming-actions/check-libraries@2.0.0-rc2
         with:
           credentials: "${{ secrets.CHARMHUB_TOKEN }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
@@ -88,8 +88,7 @@ jobs:
     - name: Setup operator environment
       uses: charmed-kubernetes/actions-operator@main
       with:
-        juju-channel: latest/candidate # FIXME: Once 2.9.23 hits stable
+        juju-channel: latest/candidate
         provider: microk8s
-        bootstrap-options: "--agent-version 2.9.29"
     - name: Run integration tests
       run: tox -vve integration
