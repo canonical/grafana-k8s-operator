@@ -23,9 +23,12 @@ import json
 import logging
 import os
 import secrets
+import socket
 import string
+import time
 from io import StringIO
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 from urllib.parse import ParseResult, urlparse
 
 import yaml
@@ -53,7 +56,14 @@ from ops.charm import (
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
-from ops.pebble import ConnectionError, Layer, PathError, ProtocolError
+from ops.pebble import (
+    APIError,
+    ConnectionError,
+    ExecError,
+    Layer,
+    PathError,
+    ProtocolError,
+)
 
 from grafana_server import Grafana
 from kubernetes_service import K8sServicePatch, PatchFailed
@@ -96,7 +106,10 @@ class GrafanaCharm(CharmBase):
 
         # -- initialize states --
         self.name = "grafana"
-        self.container = self.unit.get_container(self.name)
+        self.containers = {
+            "workload": self.unit.get_container(self.name),
+            "replication": self.unit.get_container("litestream"),
+        }
         self.grafana_service = Grafana("localhost", PORT)
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
@@ -110,6 +123,7 @@ class GrafanaCharm(CharmBase):
                     "static_configs": [{"targets": ["*:3000"]}],
                 },
             ],
+            refresh_event=self.on.grafana_pebble_ready,
         )
 
         # -- standard events
@@ -137,6 +151,9 @@ class GrafanaCharm(CharmBase):
             self.dashboard_consumer.on.dashboards_changed, self._on_dashboards_changed
         )
 
+        # -- Peer relation observations
+        self.framework.observe(self.on[PEER].relation_changed, self._on_peer_data_changed)
+
         # -- database relation observations
         self.framework.observe(self.on[DATABASE].relation_changed, self._on_database_changed)
         self.framework.observe(self.on[DATABASE].relation_broken, self._on_database_broken)
@@ -163,8 +180,40 @@ class GrafanaCharm(CharmBase):
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
         self._configure()
+        self._configure_replication()
 
-    def _on_grafana_source_changed(self, event: GrafanaSourceEvents) -> None:
+    def _configure_replication(self) -> None:
+        """Checks to ensure that the leader is streaming DB changes, and others are listening.
+
+        If a leader election event through `config-changed` would result in a new primary, start
+        it. If the address provided by the leader in peer data changes, `leader` will be false,
+        and replicas will be started.
+
+        Args:
+            leader: a boolean indicating the leader status
+        """
+        restart = False
+        leader = self.unit.is_leader()
+
+        if (
+            self.containers["replication"].get_plan().services
+            != self._build_replication(leader).services
+        ):
+            restart = True
+
+        litestream_config = {"addr": ":9876", "dbs": [{"path": "/var/lib/grafana/grafana.db"}]}
+
+        if not leader:
+            litestream_config["dbs"][0].update({"upstream": {"url": "http://${LITESTREAM_UPSTREAM_URL}"}})  # type: ignore
+
+        container = self.containers["replication"]
+        if container.can_connect():
+            container.push("/etc/litestream.yml", yaml.dump(litestream_config), make_dirs=True)
+
+        if restart:
+            self.restart_litestream(leader)
+
+    def _on_grafana_source_changed(self, _: GrafanaSourceEvents) -> None:
         """When a grafana-source is added or modified, update the config.
 
         Args:
@@ -193,7 +242,7 @@ class GrafanaCharm(CharmBase):
         already stored in the charm. If either the base Grafana config
         or the datasource config differs, restart Grafana.
         """
-        if not self.container.can_connect():
+        if not self.containers["workload"].can_connect():
             return
 
         logger.debug("Handling grafana-k8a configuration change")
@@ -218,9 +267,11 @@ class GrafanaCharm(CharmBase):
             self._update_datasource_config(grafana_datasources)
             logger.info("Updated Grafana's datasource configuration")
 
-            restart = True
+            # Non-leaders will get updates from litestream
+            if self.unit.is_leader():
+                restart = True
 
-        if self.container.get_plan().services != self._build_layer().services:
+        if self.containers["workload"].get_plan().services != self._build_layer().services:
             restart = True
 
         if not self.resource_patch.is_ready():
@@ -253,7 +304,7 @@ class GrafanaCharm(CharmBase):
             config: A :str: containing the datasource configuration
         """
         try:
-            self.container.push(CONFIG_PATH, config, make_dirs=True)
+            self.containers["workload"].push(CONFIG_PATH, config, make_dirs=True)
         except ConnectionError:
             logger.error(
                 "Could not push datasource config. Pebble refused connection. Shutting down?"
@@ -297,6 +348,7 @@ class GrafanaCharm(CharmBase):
             "providers": [
                 {
                     "name": "Default",
+                    "updateIntervalSeconds": "5",
                     "type": "file",
                     "options": {"path": dashboard_path},
                 }
@@ -309,6 +361,7 @@ class GrafanaCharm(CharmBase):
         if not os.path.exists(dashboard_path):
             try:
                 container.push(default_config, default_config_string, make_dirs=True)
+                self.restart_grafana()
             except ConnectionError:
                 logger.warning(
                     "Could not push default dashboard configuration. Pebble shutting down?"
@@ -350,7 +403,6 @@ class GrafanaCharm(CharmBase):
                     container.remove_path(dashboard_file_path)
                     logger.debug("Removed dashboard %s", dashboard_file_path)
 
-            self.restart_grafana()
         except ConnectionError:
             logger.exception("Could not update dashboards. Pebble shutting down?")
 
@@ -385,6 +437,28 @@ class GrafanaCharm(CharmBase):
         """Only consider a DB connection if we have config info."""
         rel = self.model.get_relation(DATABASE)
         return len(rel.units) > 0 if rel is not None else False
+
+    def _on_peer_data_changed(self, _: RelationChangedEvent) -> None:
+        """Get the replica primary address from peer data so we can check whether to restart.
+
+        Args:
+            event: A :class:`RelationChangedEvent` from a `grafana` source
+        """
+        primary_addr = self.get_peer_data("replica_primary")
+
+        # If we found a key for the address of a primary, ensure that replication reflects the
+        # current state. It is necessary to watch for peer_data_changed events, since a
+        # leader election may not run any in specific order. Checking here ensures that, once
+        # a new leader is elected AND updates the bucket with its address, that secondaries
+        # are notified of where they should look to replication stream now, and restart their
+        # clients. It is, generally, a way to guarantee the ordering between:
+        #   - new leader elected
+        #   - leader restarts litestream in "primary" mode (no `upstream:` in the config)
+        #   - leader sets `replica_primary` in the peer databag as part of _build_replication
+        #   - other units get on_peer_data_changed
+        #   - secondaries get the "correct" primary and restart
+        if primary_addr:
+            self._configure_replication()
 
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
         """Sets configuration information for database connection.
@@ -505,21 +579,63 @@ class GrafanaCharm(CharmBase):
         Note that Grafana does not support SIGHUP, so a full restart is needed.
         """
         layer = self._build_layer()
-
         try:
-            plan = self.container.get_plan()
-            if plan.services != layer.services:
-                self.container.add_layer(self.name, layer, combine=True)
-                if self.container.get_service(self.name).is_running():
-                    self.container.stop(self.name)
+            self.containers["workload"].add_layer(self.name, layer, combine=True)
+            if self.containers["workload"].get_service(self.name).is_running():
+                self.containers["workload"].stop(self.name)
 
-                self.container.start(self.name)
-                logger.info("Restarted grafana-k8s")
+            self.containers["workload"].start(self.name)
+            logger.info("Restarted grafana-k8s")
+
+            if self._poll_container(self.containers["workload"].can_connect):
+                # We should also make sure sqlite is in WAL mode for replication
+                self.containers["workload"].push(
+                    "/usr/local/bin/sqlite3",
+                    Path("sqlite-static").read_bytes(),
+                    permissions=0o755,
+                    make_dirs=True,
+                )
+
+                pragma = self.containers["workload"].exec(
+                    [
+                        "/usr/local/bin/sqlite3",
+                        "/var/lib/grafana/grafana.db",
+                        "pragma journal_mode=wal;",
+                    ]
+                )
+                pragma.wait()
 
             self.unit.status = ActiveStatus()
+        except ExecError as e:
+            # debug because, on initial container startup when Grafana has an open lock and is
+            # populating, this comes up with ERRCODE: 26
+            logger.debug("Could not apply journal_mode pragma. Exit code: {}".format(e.exit_code))
         except ConnectionError:
             logger.error(
                 "Could not restart grafana-k8s -- Pebble socket does "
+                "not exist or is not responsive"
+            )
+
+    def restart_litestream(self, leader: bool) -> None:
+        """Restart the pebble container.
+
+        `container.replan()` is intentionally avoided, since if no environment
+        variables are changed, this will not actually restart Litestream.
+        """
+        layer = self._build_replication(leader)
+
+        try:
+            plan = self.containers["replication"].get_plan()
+            if plan.services != layer.services:
+                self.containers["replication"].add_layer("litestream", layer, combine=True)
+                if self.containers["replication"].get_service("litestream").is_running():
+                    self.containers["replication"].stop("litestream")
+
+                self.containers["replication"].start("litestream")
+                logger.info("Restarted replication")
+        except ConnectionError:
+            logger.error(
+                "Could not restart replication -- Pebble socket does "
                 "not exist or is not responsive"
             )
 
@@ -579,13 +695,47 @@ class GrafanaCharm(CharmBase):
                         "command": "grafana-server -config {}".format(CONFIG_PATH),
                         "startup": "enabled",
                         "environment": {
-                            "GF_SERVER_HTTP_PORT": PORT,
+                            "GF_SERVER_HTTP_PORT": str(PORT),
                             "GF_LOG_LEVEL": self.model.config["log_level"],
-                            "GF_PLUGINS_ENABLE_ALPHA": True,
+                            "GF_PLUGINS_ENABLE_ALPHA": "true",
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
                             **extra_info,
+                        },
+                    }
+                },
+            }
+        )
+
+        return layer
+
+    def _build_replication(self, primary: bool) -> Layer:
+        """Construct the pebble layer information for litestream."""
+        config = {}
+
+        if primary:
+            self.set_peer_data("replica_primary", socket.gethostbyname(socket.getfqdn()))
+            config["LITESTREAM_ADDR"] = "{}:{}".format(
+                socket.gethostbyname(socket.getfqdn()), "9876"
+            )
+        else:
+            config["LITESTREAM_UPSTREAM_URL"] = "{}:{}".format(
+                self.get_peer_data("replica_primary"), "9876"
+            )
+
+        layer = Layer(
+            {
+                "summary": "litestream layer",
+                "description": "litestream layer",
+                "services": {
+                    "litestream": {
+                        "override": "replace",
+                        "summary": "litestream service",
+                        "command": "litestream replicate -config /etc/litestream.yml",
+                        "startup": "enabled",
+                        "environment": {
+                            **config,
                         },
                     }
                 },
@@ -628,9 +778,9 @@ class GrafanaCharm(CharmBase):
         Args:
             file: a `str` filepath to read
         """
-        if self.container.can_connect():
+        if self.containers["workload"].can_connect():
             try:
-                content = self.container.pull(file)
+                content = self.containers["workload"].pull(file)
                 hash = hashlib.sha256(str(content.read()).encode("utf-8")).hexdigest()
                 return hash
             except (FileNotFoundError, ProtocolError, PathError) as e:
@@ -709,6 +859,28 @@ class GrafanaCharm(CharmBase):
             self._stored.admin_password = self._generate_password()
 
         return self._stored.admin_password
+
+    def _poll_container(self, func: Callable, timeout: float = 2.0, delay: float = 0.1) -> bool:
+        """Try to poll the container to work around Container.is_connect() being point-in-time.
+
+        Args:
+            func: a :Callable: to check, which should return a boolean.
+            timeout: a :float: to time out after
+            delay: a :float: to wait between checks
+
+        """
+        deadline = time.time() + timeout
+
+        while time.time() < deadline:
+            try:
+                if func():
+                    return True
+
+                time.sleep(delay)
+            except (APIError, ConnectionError, ProtocolError):
+                logger.debug("Failed to poll the container due to a Pebble error")
+
+        return False
 
     def _generate_password(self) -> str:
         """Generates a random 12 character password."""

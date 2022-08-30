@@ -4,17 +4,18 @@
 
 
 import logging
-from pathlib import Path
 
 import pytest
-import yaml
-from helpers import check_grafana_is_ready, get_config_values
+from helpers import check_grafana_is_ready, get_config_values, oci_image
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-app_name = METADATA["name"]
+app_name = "grafana"
 config = {"log_level": "error", "admin_user": "jimmy"}
+grafana_resources = {
+    "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
+    "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
+}
 
 
 @pytest.mark.abort_on_fail
@@ -22,9 +23,8 @@ async def test_deploy_from_local_path(ops_test, grafana_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
 
-    resources = {"grafana-image": METADATA["resources"]["grafana-image"]["upstream-source"]}
     await ops_test.model.deploy(
-        grafana_charm, application_name=app_name, resources=resources, trust=True
+        grafana_charm, application_name=app_name, resources=grafana_resources, trust=True
     )
 
     # set some custom configs to later check they persisted across the test

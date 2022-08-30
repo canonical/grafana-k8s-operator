@@ -7,3 +7,4 @@ __pycache__
 .coverage
 venv
 tests/integration/grafana-tester/lib/charms/grafana_k8s/*
+sqlite-static
