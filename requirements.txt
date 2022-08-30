@@ -5,3 +5,4 @@ markupsafe == 2.0.1
 ops
 pyyaml
 urllib3
+jsonschema
