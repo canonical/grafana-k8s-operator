@@ -103,7 +103,7 @@ from ops.charm import (
 from ops.framework import EventBase, EventSource, Object, StoredDict, StoredList
 
 # The unique Charmhub library identifier, never change it
-LIBID = "dummy id until the lib is registered"
+LIBID = "e9e05109343345d4bcea3bce6eacf8ed"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
