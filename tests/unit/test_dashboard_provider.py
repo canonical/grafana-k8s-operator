@@ -23,6 +23,7 @@ RELATION_TEMPLATES_DATA = {
     "file:first": {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAKdGVzdF9maXJzdAoAAIC4BxCQe2GHAAEjC8Ib/QkftvN9AQAAAAAEWVo=",
+        "inject_dropdowns": True,
         "juju_topology": {
             "model": "testing",
             "model_uuid": "abcdefgh-1234",
@@ -33,6 +34,7 @@ RELATION_TEMPLATES_DATA = {
     "file:other": {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9zZWNvbmQKAEby/qNFFKmEAAEkDKYY2NgftvN9AQAAAAAEWVo=",
+        "inject_dropdowns": True,
         "juju_topology": {
             "model": "testing",
             "model_uuid": "abcdefgh-1234",
@@ -46,6 +48,22 @@ MANUAL_TEMPLATE_DATA = {
     "file:manual": {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
+        "inject_dropdowns": True,
+        "juju_topology": {
+            "application": "provider-tester",
+            "model": "testing",
+            "model_uuid": "abcdefgh-1234",
+            "unit": "provider-tester/0",
+        },
+    }
+}
+
+
+MANUAL_TEMPLATE_DATA_NO_DROPDOWNS = {
+    "file:manual": {
+        "charm": "provider-tester",
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
+        "inject_dropdowns": False,
         "juju_topology": {
             "application": "provider-tester",
             "model": "testing",
@@ -137,6 +155,7 @@ class TestDashboardProvider(unittest.TestCase):
         expected_templates["prog:uC2Arx+2"] = {  # type: ignore
             "charm": "provider-tester",
             "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAEdGhpcmQAAAAAtr5hbOrisy0AAR0FuC2Arx+2830BAAAAAARZWg==",
+            "inject_dropdowns": True,
             "juju_topology": {
                 "model": "testing",
                 "model_uuid": "abcdefgh-1234",
@@ -195,6 +214,29 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": MANUAL_TEMPLATE_DATA,
+            "uuid": "12345678",
+        }
+        self.assertDictEqual(expected_data, actual_data)
+
+    def test_provider_can_rescan_and_avoid_dropdowns(self):
+        rel_id = self.harness.add_relation("grafana-dashboard", "other_app")
+        self.harness.add_relation_unit(rel_id, "other_app/0")
+        actual_data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+        expected_data = {
+            "templates": RELATION_TEMPLATES_DATA,
+            "uuid": "12345678",
+        }
+        self.assertDictEqual(expected_data, actual_data)
+
+        self.harness.charm.provider._dashboards_path = "./tests/unit/manual_dashboards"
+        self.harness.charm.provider._reinitialize_dashboard_data(inject_dropdowns=False)
+        actual_data = json.loads(
+            self.harness.get_relation_data(rel_id, self.harness.model.app.name)["dashboards"]
+        )
+        expected_data = {
+            "templates": MANUAL_TEMPLATE_DATA_NO_DROPDOWNS,
             "uuid": "12345678",
         }
         self.assertDictEqual(expected_data, actual_data)
