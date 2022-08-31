@@ -24,7 +24,7 @@ Example:
 An example on how to use the AuthProvider with proxy mode using default configuration options.
 The default arguments are:
     `charm : CharmBase`
-    `relationship_name: str : grafana-auth`
+    `relation_name: str : grafana-auth`
     `header_name: str : X-WEBAUTH-USER`
     `header_property: str : username`
     `auto_sign_up: bool : True`
@@ -77,12 +77,12 @@ from ops.charm import CharmBase
 class ExampleRequirerCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
-        self.grafana_auth_requirer = AuthRequirer(
+        self.auth_requirer = AuthRequirer(
             self,
-            grafana_auth_requirer=["https://grafana.example.com/"]
+            auth_requirer=["https://example.com/"]
         )
         self.framework.observe(
-            self.grafana_auth_requirer.on.auth_conf_available, self._on_auth_conf_available
+            self.auth_requirer.on.auth_conf_available, self._on_auth_conf_available
         )
 ```
 """  # noqa
@@ -271,34 +271,37 @@ class AuthProviderCharmEvents(CharmEvents):
 
 
 class AuthProvider(Object):
-    """Authentication configuration provider class to be initialized by auth providers."""
+    """Base class for authentication configuration provider classes.
+
+    This class shouldn't be initialized,
+    Its children classes define the authentication mode and configuration to be used."""
 
     on = AuthProviderCharmEvents()
 
-    def __init__(self, charm: CharmBase, relationship_name: str):
-        super().__init__(charm, relationship_name)
+    def __init__(self, charm: CharmBase, relation_name: str):
+        super().__init__(charm, relation_name)
         self._auth_config = {}  # type: Dict[str, Dict[str, Any]]
         self._charm = charm
-        self._relationship_name = relationship_name
+        self._relation_name = relation_name
         container = list(self._charm.meta.containers.values())[0]
         if len(self._charm.meta.containers) == 1:
             refresh_event = self._charm.on[container.name.replace("-", "_")].pebble_ready
             self.framework.observe(refresh_event, self._get_urls_from_relation_data)
         self.framework.observe(
-            self._charm.on[relationship_name].relation_joined,
+            self._charm.on[relation_name].relation_joined,
             self._set_auth_config_in_relation_data,
         )
         self.framework.observe(
             self._charm.on.leader_elected, self._set_auth_config_in_relation_data
         )
         self.framework.observe(
-            self._charm.on[relationship_name].relation_changed, self._get_urls_from_relation_data
+            self._charm.on[relation_name].relation_changed, self._get_urls_from_relation_data
         )
 
     def _set_auth_config_in_relation_data(
         self, event: Union[LeaderElectedEvent, RelationJoinedEvent]
     ) -> None:
-        """Handler triggered on relation joined event.
+        """Handler triggered on relation joined and leader elected events.
 
         Adds authentication config to relation data.
 
@@ -311,9 +314,9 @@ class AuthProvider(Object):
         if not self._charm.unit.is_leader():
             return
 
-        relation = self._charm.model.get_relation(self._relationship_name)
+        relation = self._charm.model.get_relation(self._relation_name)
         if not relation:
-            logger.warning("Relation {} has not been created yet".format(self._relationship_name))
+            logger.warning("Relation {} has not been created yet".format(self._relation_name))
             return
 
         if not self._auth_config:
@@ -348,13 +351,13 @@ class AuthProvider(Object):
         if not self._charm.unit.is_leader():
             return
 
-        relation = self._charm.model.get_relation(self._relationship_name)
+        relation = self._charm.model.get_relation(self._relation_name)
         if not relation:
-            logger.warning("Relation {} has not been created yet".format(self._relationship_name))
+            logger.warning("Relation {} has not been created yet".format(self._relation_name))
             return
         urls_json = relation.data[relation.app].get("urls", "")  # type: ignore
         if not urls_json:
-            logger.warning("No urls found in {} relation data".format(self._relationship_name))
+            logger.warning("No urls found in {} relation data".format(self._relation_name))
             return
 
         urls = json.loads(urls_json)
@@ -362,11 +365,8 @@ class AuthProvider(Object):
         self.on.urls_available.emit(urls=urls, relation_id=relation.id)
 
     def _validate_auth_config_json_schema(self) -> bool:
-        """Validates authentication configuration using json schemas.
-        Returns:
-            bool: Whether the configuration is valid or not based on the json schema.
-        """  # noqa
-        return False
+        """Implemented in children classes."""
+        raise NotImplementedError
 
 
 class AuthConfAvailableEvent(EventBase):
@@ -397,7 +397,7 @@ class AuthRequirerCharmEvents(CharmEvents):
 
 
 class AuthRequirer(Object):
-    """Authentication configuration requirer class to be initialized by auth requirers."""
+    """Authentication configuration requirer class."""
 
     on = AuthRequirerCharmEvents()
 
@@ -405,22 +405,38 @@ class AuthRequirer(Object):
         self,
         charm,
         urls: List[str],
-        relationship_name: str = DEFAULT_RELATION_NAME,
+        relation_name: str = DEFAULT_RELATION_NAME,
     ):
-        super().__init__(charm, relationship_name)
+        """Constructs an authentication requirer that consumes authentication configuration.
+
+        The charm initializing this class requires authentication configuration,
+        and it's expected to provide a list of url(s) to the service it's authenticating to.
+        This class can be initialized as follows:
+
+            self.auth_requirer = AuthRequirer(
+            self,
+            auth_requirer=["https://example.com/"]
+            )
+
+        Args:
+            charm: CharmBase: the charm which manages this object.
+            urls: List[str]: a list of urls to access the service the charm needs to authenticate to.
+            relation_name: str: name of the relation in `metadata.yaml` that has the `grafana_auth` interface.
+        """
+        super().__init__(charm, relation_name)
         self._charm = charm
-        self._relationship_name = relationship_name
+        self._relation_name = relation_name
         self._urls = urls
         container = list(self._charm.meta.containers.values())[0]
         if len(self._charm.meta.containers) == 1:
             refresh_event = self._charm.on[container.name.replace("-", "_")].pebble_ready
             self.framework.observe(refresh_event, self._get_auth_config_from_relation_data)
         self.framework.observe(
-            self._charm.on[relationship_name].relation_changed,
+            self._charm.on[relation_name].relation_changed,
             self._get_auth_config_from_relation_data,
         )
         self.framework.observe(
-            self._charm.on[relationship_name].relation_joined, self._set_urls_in_relation_data
+            self._charm.on[relation_name].relation_joined, self._set_urls_in_relation_data
         )
         self.framework.observe(self._charm.on.leader_elected, self._set_urls_in_relation_data)
 
@@ -438,9 +454,9 @@ class AuthRequirer(Object):
         if not self._charm.unit.is_leader():
             return
 
-        relation = self._charm.model.get_relation(self._relationship_name)
+        relation = self._charm.model.get_relation(self._relation_name)
         if not relation:
-            logger.warning("Relation {} has not been created yet".format(self._relationship_name))
+            logger.warning("Relation {} has not been created yet".format(self._relation_name))
             return
 
         if not self._urls:
@@ -479,9 +495,9 @@ class AuthRequirer(Object):
         if not self._charm.unit.is_leader():
             return
 
-        relation = self._charm.model.get_relation(self._relationship_name)
+        relation = self._charm.model.get_relation(self._relation_name)
         if not relation:
-            logger.warning("Relation {} has not been created yet".format(self._relationship_name))
+            logger.warning("Relation {} has not been created yet".format(self._relation_name))
             return
 
         auth_conf_json = relation.data[relation.app].get(AUTH, "")
@@ -489,7 +505,7 @@ class AuthRequirer(Object):
         if not auth_conf_json:
             logger.warning(
                 "No authentication config found in {} relation data".format(
-                    self._relationship_name
+                    self._relation_name
                 )
             )
             return
@@ -503,10 +519,10 @@ class AuthRequirer(Object):
 
 
 class GrafanaAuthProxyProvider(AuthProvider):
-    """Provider object for Grafana Auth.
+    """Authentication configuration provider class.
 
-    Uses Proxy as the authentication mode and provider and interface to configure Proxy authentication to Grafana
-    """  # noqa
+    Provides proxy mode for authentication to Grafana.
+    """
 
     _AUTH_TYPE = "proxy"
     _ENABLED = True
@@ -514,7 +530,7 @@ class GrafanaAuthProxyProvider(AuthProvider):
     def __init__(
         self,
         charm: CharmBase,
-        relationship_name: str = DEFAULT_RELATION_NAME,
+        relation_name: str = DEFAULT_RELATION_NAME,
         header_name: str = "X-WEBAUTH-USER",
         header_property: str = "username",
         auto_sign_up: bool = True,
@@ -526,32 +542,37 @@ class GrafanaAuthProxyProvider(AuthProvider):
     ) -> None:
         """Constructs GrafanaAuthProxyProvider.
 
+        The charm initializing this object configures the authentication to grafana using proxy authentication mode.
+        This object can be initialized as follows:
+
+            self.grafana_auth_proxy_provider = GrafanaAuthProxyProvider(self)
+
         Args:
-            charm : CharmBase : the charm which manages this object.
-            relationship_name : str : name of the relation that provider the Grafana authentication config.
-            header_name : str : HTTP Header name that will contain the username or email
-            header_property : str : HTTP Header property, defaults to username but can also be email.
-            auto_sign_up : bool : Set to `true` to enable auto sign up of users who do not exist in Grafana DB.
-            sync_ttl : int : Define cache time to live in minutes.
-            whitelist : list[str] : Limits where auth proxy requests come from by configuring a list of IP addresses.
-            headers : list[str]
-            headers_encoded : bool
-            enable_login_token : bool
+            charm: CharmBase: the charm which manages this object.
+            relation_name: str: name of the relation in `metadata.yaml` that has the `grafana_auth` interface.
+            header_name: str: HTTP Header name that will contain the username or email
+            header_property: str: HTTP Header property, defaults to username but can also be `email`.
+            auto_sign_up: bool: Set to `true` to enable auto sign-up of users who do not exist in Grafana DB.
+            sync_ttl: int: Define cache time to live in minutes.
+            whitelist: list[str]: Limits where auth proxy requests come from by configuring a list of IP addresses.
+            headers: list[str]: Optionally define more headers to sync other user attributes.
+            headers_encoded: bool: Non-ASCII strings in header values are encoded using quoted-printable encoding
+            enable_login_token: bool
 
         Returns:
             None
         """  # noqa
-        super().__init__(charm, relationship_name)
+        super().__init__(charm, relation_name)
         self._auth_config[self._AUTH_TYPE] = {}
         self._auth_config[self._AUTH_TYPE]["enabled"] = self._ENABLED
         self._auth_config[self._AUTH_TYPE]["header_name"] = header_name
         self._auth_config[self._AUTH_TYPE]["header_property"] = header_property
         self._auth_config[self._AUTH_TYPE]["auto_sign_up"] = auto_sign_up
-        if sync_ttl is not None:
+        if sync_ttl:
             self._auth_config[self._AUTH_TYPE]["sync_ttl"] = sync_ttl
-        if whitelist is not None and whitelist:
+        if whitelist:
             self._auth_config[self._AUTH_TYPE]["whitelist"] = whitelist
-        if headers is not None and headers:
+        if headers:
             self._auth_config[self._AUTH_TYPE]["headers"] = headers
         if headers_encoded is not None:
             self._auth_config[self._AUTH_TYPE]["headers_encoded"] = headers_encoded

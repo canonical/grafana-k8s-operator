@@ -184,7 +184,7 @@ class TestNonDefaultGrafanaAuthProxyProvider(unittest.TestCase):
 class MissingModeProviderCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
-        self.proxy_provider = AuthProvider(self, relationship_name="grafana-auth")
+        self.proxy_provider = AuthProvider(self, relation_name="grafana-auth")
 
 
 class TestMissingModeProvider(unittest.TestCase):
@@ -198,5 +198,4 @@ class TestMissingModeProvider(unittest.TestCase):
     ):
         relation_id = self.harness.add_relation("grafana-auth", "requirer")
         self.harness.add_relation_unit(relation_id, "requirer/0")
-        relation_data = self.harness.get_relation_data(relation_id, self.harness.model.app.name)
-        self.assertNotIn("auth", relation_data)
+        self.assertRaises(NotImplementedError)
