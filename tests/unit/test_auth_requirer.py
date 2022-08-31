@@ -45,6 +45,38 @@ class TestAuthRequirer(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
 
+    @patch(
+        f"{CHARM_LIB_PATH}.AuthRequirer._get_auth_config_from_relation_data",
+    )
+    def test_given_charm_has_one_container_and_refresh_event_not_specified_when_initialized_then_pebble_ready_is_set_as_refresh_event(
+        self,
+        mock_get_auth_config_from_relation_data,
+    ):
+        self.harness.container_pebble_ready("auth-tester")
+        mock_get_auth_config_from_relation_data.assert_called_once()
+
+    @patch(
+        f"{CHARM_LIB_PATH}.AuthRequirer._get_auth_config_from_relation_data",
+        autospec=True,
+    )
+    def test_given_charm_has_multiple_containers_and_refresh_event_not_specified_when_initialized_then_update_status_is_set_as_refresh_event(
+        self,
+        mock_get_auth_config_from_relation_data,
+    ):
+        meta = """
+        name: requirer-tester
+        containers:
+            auth-tester:
+            another-container:
+        requires:
+            grafana-auth:
+                interface: grafana_auth
+        """
+        harness = testing.Harness(RequirerCharm, meta=meta)
+        harness.begin()
+        harness.charm.on.update_status.emit()
+        mock_get_auth_config_from_relation_data.assert_called_once()
+
     def test_given_unit_is_leader_when_auth_relation_joined_event_then_urls_are_set_in_relation_data(
         self,
     ):
@@ -69,7 +101,7 @@ class TestAuthRequirer(unittest.TestCase):
         f"{CHARM_LIB_PATH}.AuthRequirerCharmEvents.auth_conf_available",
         new_callable=PropertyMock,
     )
-    def test_given_auth_conf_in_relation_data_and_unit_is_leader_when_pebble_ready_event_then_auth_conf_avaialble_event_is_emitted(
+    def test_given_auth_conf_in_relation_data_and_unit_is_leader_when_refresh_event_then_auth_conf_avaialble_event_is_emitted(
         self, mock_auth_conf_available_event
     ):
         relation_id = self.harness.add_relation("grafana-auth", "provider")
@@ -114,7 +146,7 @@ class TestAuthRequirer(unittest.TestCase):
         f"{CHARM_LIB_PATH}.AuthRequirerCharmEvents.auth_conf_available",
         new_callable=PropertyMock,
     )
-    def test_given_relation_not_yet_created_when_pebble_ready_event_then_auth_conf_avaialble_event_is_not_emitted(
+    def test_given_relation_not_yet_created_when_refresh_event_then_auth_conf_avaialble_event_is_not_emitted(
         self, mock_auth_conf_available_event
     ):
         self.harness.container_pebble_ready("auth-tester")
@@ -136,7 +168,7 @@ class TestAuthRequirer(unittest.TestCase):
         f"{CHARM_LIB_PATH}.AuthRequirerCharmEvents.auth_conf_available",
         new_callable=PropertyMock,
     )
-    def test_given_auth_conf_not_in_relation_data_when_pebble_ready_event_then_auth_conf_avaialble_event_is_not_emitted(
+    def test_given_auth_conf_not_in_relation_data_when_refresh_event_then_auth_conf_avaialble_event_is_not_emitted(
         self, mock_auth_conf_available_event
     ):
         relation_id = self.harness.add_relation("grafana-auth", "provider")

@@ -89,7 +89,13 @@ class ExampleRequirerCharm(CharmBase):
 
 import json
 import logging
-from typing import Any, Dict, List, Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Union,
+    Optional,
+)
 
 from jsonschema import validate  # type: ignore[import]
 from ops.charm import (
@@ -100,7 +106,14 @@ from ops.charm import (
     RelationChangedEvent,
     RelationJoinedEvent,
 )
-from ops.framework import EventBase, EventSource, Object, StoredDict, StoredList
+from ops.framework import (
+    EventBase,
+    EventSource,
+    Object,
+    StoredDict,
+    StoredList,
+    BoundEvent,
+)
 
 # The unique Charmhub library identifier, never change it
 LIBID = "e9e05109343345d4bcea3bce6eacf8ed"
@@ -278,15 +291,28 @@ class AuthProvider(Object):
 
     on = AuthProviderCharmEvents()
 
-    def __init__(self, charm: CharmBase, relation_name: str):
+    def __init__(
+        self,
+        charm: CharmBase,
+        relation_name: str,
+        refresh_event: Optional[BoundEvent] = None,
+    ):
         super().__init__(charm, relation_name)
         self._auth_config = {}  # type: Dict[str, Dict[str, Any]]
         self._charm = charm
         self._relation_name = relation_name
-        container = list(self._charm.meta.containers.values())[0]
-        if len(self._charm.meta.containers) == 1:
-            refresh_event = self._charm.on[container.name.replace("-", "_")].pebble_ready
-            self.framework.observe(refresh_event, self._get_urls_from_relation_data)
+        if not refresh_event:
+            container = list(self._charm.meta.containers.values())[0]
+            if len(self._charm.meta.containers) == 1:
+                refresh_event = self._charm.on[container.name.replace("-", "_")].pebble_ready
+            else:
+                logger.warning(
+                    "%d containers are present in metadata.yaml and "
+                    "refresh_event was not specified. Defaulting to update_status. ",
+                    len(self._charm.meta.containers),
+                )
+                refresh_event = self._charm.on.update_status
+        self.framework.observe(refresh_event, self._get_urls_from_relation_data)
         self.framework.observe(
             self._charm.on[relation_name].relation_joined,
             self._set_auth_config_in_relation_data,
@@ -404,6 +430,7 @@ class AuthRequirer(Object):
         charm,
         urls: List[str],
         relation_name: str = DEFAULT_RELATION_NAME,
+        refresh_event: Optional[BoundEvent] = None,
     ):
         """Constructs an authentication requirer that consumes authentication configuration.
 
@@ -420,15 +447,26 @@ class AuthRequirer(Object):
             charm: CharmBase: the charm which manages this object.
             urls: List[str]: a list of urls to access the service the charm needs to authenticate to.
             relation_name: str: name of the relation in `metadata.yaml` that has the `grafana_auth` interface.
+            refresh_event: an optional bound event which will be observed to re-set authentication configuration.
         """
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
         self._urls = urls
-        container = list(self._charm.meta.containers.values())[0]
-        if len(self._charm.meta.containers) == 1:
-            refresh_event = self._charm.on[container.name.replace("-", "_")].pebble_ready
-            self.framework.observe(refresh_event, self._get_auth_config_from_relation_data)
+        if not refresh_event:
+            container = list(self._charm.meta.containers.values())[0]
+            if len(self._charm.meta.containers) == 1:
+                refresh_event = self._charm.on[container.name.replace("-", "_")].pebble_ready
+            else:
+                logger.warning(
+                    "%d containers are present in metadata.yaml and "
+                    "refresh_event was not specified. Defaulting to update_status. ",
+                    len(self._charm.meta.containers),
+                )
+                refresh_event = self._charm.on.update_status
+
+        self.framework.observe(refresh_event, self._get_auth_config_from_relation_data)
+
         self.framework.observe(
             self._charm.on[relation_name].relation_changed,
             self._get_auth_config_from_relation_data,
@@ -526,6 +564,7 @@ class GrafanaAuthProxyProvider(AuthProvider):
         self,
         charm: CharmBase,
         relation_name: str = DEFAULT_RELATION_NAME,
+        refresh_event: Optional[BoundEvent] = None,
         header_name: str = "X-WEBAUTH-USER",
         header_property: str = "username",
         auto_sign_up: bool = True,
@@ -545,6 +584,7 @@ class GrafanaAuthProxyProvider(AuthProvider):
         Args:
             charm: CharmBase: the charm which manages this object.
             relation_name: str: name of the relation in `metadata.yaml` that has the `grafana_auth` interface.
+            refresh_event: an optional bound event which will be observed to re-set urls.
             header_name: str: HTTP Header name that will contain the username or email
             header_property: str: HTTP Header property, defaults to username but can also be `email`.
             auto_sign_up: bool: Set to `true` to enable auto sign-up of users who do not exist in Grafana DB.
@@ -557,7 +597,7 @@ class GrafanaAuthProxyProvider(AuthProvider):
         Returns:
             None
         """  # noqa
-        super().__init__(charm, relation_name)
+        super().__init__(charm, relation_name, refresh_event)
         self._auth_config[self._AUTH_TYPE] = {}
         self._auth_config[self._AUTH_TYPE]["enabled"] = self._ENABLED
         self._auth_config[self._AUTH_TYPE]["header_name"] = header_name
