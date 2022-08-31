@@ -117,6 +117,7 @@ class TestCharm(unittest.TestCase):
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
         self.addCleanup(self.patch_exec)
+        self.harness.set_model_name("testmodel")
         self.harness.begin()
         self.harness.add_relation("grafana", "grafana")
 
@@ -218,18 +219,6 @@ class TestCharm(unittest.TestCase):
         )
 
     @k8s_resource_multipatch
-    def test_config_is_updated_with_subpath(self):
-        self.harness.set_leader(True)
-
-        self.harness.update_config({"web_external_url": "/grafana"})
-
-        services = (
-            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
-        )
-        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
-        self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
-
-    @k8s_resource_multipatch
     def test_datasource_timeout_value_overrides_config_if_larger(self):
         self.harness.set_leader(True)
 
@@ -276,6 +265,73 @@ class TestCharm(unittest.TestCase):
     def test_workload_version_is_set(self):
         self.harness.container_pebble_ready("grafana")
         self.assertEqual(self.harness.get_workload_version(), "1.0.0")
+
+    @k8s_resource_multipatch
+    @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
+    def test_bare_charm_has_no_subpath_set_in_layer(self):
+        self.harness.set_leader(True)
+        layer = self.harness.charm._build_layer()
+        self.assertNotIn(
+            "GF_SERVER_ROOT_URL", layer.to_dict()["services"]["grafana"]["environment"]
+        )
+
+    @k8s_resource_multipatch
+    def test_config_is_updated_with_subpath(self):
+        self.harness.set_leader(True)
+
+        self.harness.update_config({"web_external_url": "/grafana"})
+
+        services = (
+            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
+        )
+        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
+        self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
+
+    @k8s_resource_multipatch
+    @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
+    @patch("socket.gethostbyname", new=lambda *args: "1.2.3.4")
+    @patch("socket.getfqdn", new=lambda *args: "grafana-k8s-0.testmodel.svc.cluster.local")
+    def test_ingress_relation_sets_options_and_rel_data(self):
+        self.harness.set_leader(True)
+        self.harness.container_pebble_ready("grafana")
+        rel_id = self.harness.add_relation("ingress", "traefik")
+        self.harness.add_relation_unit(rel_id, "traefik/0")
+
+        services = (
+            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
+        )
+        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
+        self.assertTrue(
+            services["environment"]["GF_SERVER_ROOT_URL"].endswith("/testmodel-grafana-k8s")
+        )
+
+        expected_rel_data = {
+            "http": {
+                "routers": {
+                    "juju-testmodel-grafana-k8s-router": {
+                        "entryPoints": ["web"],
+                        "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
+                        "service": "juju-testmodel-grafana-k8s-service",
+                    }
+                },
+                "services": {
+                    "juju-testmodel-grafana-k8s-service": {
+                        "loadBalancer": {
+                            "servers": [
+                                {
+                                    "url": "http://grafana-k8s-0.grafana-k8s-endpoints.testmodel.svc.cluster.local:3000"
+                                }
+                            ]
+                        }
+                    }
+                },
+            }
+        }
+        rel_data = self.harness.get_relation_data(rel_id, self.harness.charm.app.name)
+
+        # The insanity of YAML here. It works for the lib, but a single load just strips off
+        # the extra quoting and leaves regular YAML. Double parse it for the tests
+        self.assertEqual(yaml.safe_load(yaml.safe_load(rel_data["config"])), expected_rel_data)
 
 
 class TestCharmReplication(unittest.TestCase):
