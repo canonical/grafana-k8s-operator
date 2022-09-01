@@ -947,11 +947,7 @@ class GrafanaCharm(CharmBase):
             return web_external_url
 
         if self.ingress.is_ready():
-            return "{}/{}".format(
-                baseurl,
-                urlparse(web_external_url).path
-                or "{}-{}".format(self.model.name, self.model.app.name),
-            )
+            return "{}/{}".format(baseurl, "{}-{}".format(self.model.name, self.model.app.name))
 
         return baseurl
 
