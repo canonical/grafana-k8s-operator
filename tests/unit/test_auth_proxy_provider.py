@@ -32,44 +32,20 @@ class DefaultAuthProxyProviderCharm(CharmBase):
         )
 
 
+class DefaultAuthProxyProviderCharmRefreshEvent(CharmBase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+        self.proxy_provider = GrafanaAuthProxyProvider(
+            self, refresh_event=self.on.auth_tester_pebble_ready
+        )
+
+
 class TestDefaultGrafanaAuthProxyProvider(unittest.TestCase):
     def setUp(self):
         self.harness = testing.Harness(DefaultAuthProxyProviderCharm, meta=METADATA)
         self.harness.set_leader(True)
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
-
-    @patch(
-        f"{CHARM_LIB_PATH}.AuthProvider._get_urls_from_relation_data",
-    )
-    def test_given_charm_has_one_container_and_refresh_event_not_specified_when_initialized_then_pebble_ready_is_set_as_refresh_event(
-        self,
-        mock_get_auth_config_from_relation_data,
-    ):
-        self.harness.container_pebble_ready("auth-tester")
-        mock_get_auth_config_from_relation_data.assert_called_once()
-
-    @patch(
-        f"{CHARM_LIB_PATH}.AuthProvider._get_urls_from_relation_data",
-        autospec=True,
-    )
-    def test_given_charm_has_multiple_containers_and_refresh_event_not_specified_when_initialized_then_update_status_is_set_as_refresh_event(
-        self,
-        mock_get_auth_config_from_relation_data,
-    ):
-        meta = """
-        name: provider-tester
-        containers:
-            auth-tester:
-            another-container:
-        provides:
-            grafana-auth:
-                interface: grafana_auth
-        """
-        harness = testing.Harness(DefaultAuthProxyProviderCharm, meta=meta)
-        harness.begin()
-        harness.charm.on.update_status.emit()
-        mock_get_auth_config_from_relation_data.assert_called_once()
 
     def test_given_unit_is_leader_when_auth_relation_joined_event_then_default_auth_config_is_set_in_relation_data(
         self,
@@ -106,7 +82,6 @@ class TestDefaultGrafanaAuthProxyProvider(unittest.TestCase):
         self, mock_urls_available_event
     ):
         relation_id = self.harness.add_relation("grafana-auth", "requirer")
-        self.harness.add_relation_unit(relation_id, "requirer/0")
         urls = {"urls": json.dumps(EXAMPLE_URLS)}
         self.harness.update_relation_data(
             relation_id=relation_id, key_values=urls, app_or_unit="requirer"
@@ -132,7 +107,6 @@ class TestDefaultGrafanaAuthProxyProvider(unittest.TestCase):
         self, mock_urls_available_event
     ):
         relation_id = self.harness.add_relation("grafana-auth", "requirer")
-        self.harness.add_relation_unit(relation_id, "requirer/0")
         urls = {"urls": json.dumps(EXAMPLE_URLS)}
         self.harness.update_relation_data(relation_id, "requirer", urls)
         calls = [
@@ -161,7 +135,6 @@ class TestDefaultGrafanaAuthProxyProvider(unittest.TestCase):
         self, mock_urls_available_event
     ):
         relation_id = self.harness.add_relation("grafana-auth", "requirer")
-        self.harness.add_relation_unit(relation_id, "requirer/0")
         self.harness.update_relation_data(relation_id, "requirer", {})
         mock_urls_available_event.assert_not_called()
 
@@ -172,10 +145,87 @@ class TestDefaultGrafanaAuthProxyProvider(unittest.TestCase):
     def test_given_urls_are_not_in_relation_data_when_refresh_event_then_urls_avaialble_event_is_not_emitted(
         self, mock_urls_available_event
     ):
-        relation_id = self.harness.add_relation("grafana-auth", "requirer")
-        self.harness.add_relation_unit(relation_id, "requirer/0")
+        self.harness.add_relation("grafana-auth", "requirer")
         self.harness.container_pebble_ready("auth-tester")
         mock_urls_available_event.assert_not_called()
+
+    @patch(
+        f"{CHARM_LIB_PATH}.AuthProviderCharmEvents.urls_available",
+        new_callable=PropertyMock,
+    )
+    def test_default_refresh_event_is_update_status_for_multiple_containers(
+        self,
+        mock_urls_available_event,
+    ):
+        meta = """
+        name: provider-tester
+        containers:
+            auth-tester:
+            another-container:
+        provides:
+            grafana-auth:
+                interface: grafana_auth
+        """
+        harness = testing.Harness(DefaultAuthProxyProviderCharm, meta=meta)
+        harness.set_leader(True)
+        harness.begin()
+        relation_id = harness.add_relation("grafana-auth", "requirer")
+        harness.add_relation_unit(relation_id, "requirer/0")
+        urls = {"urls": json.dumps(EXAMPLE_URLS)}
+        harness.update_relation_data(
+            relation_id=relation_id, key_values=urls, app_or_unit="requirer"
+        )
+        harness.charm.on.update_status.emit()
+        calls = [
+            call().emit(
+                urls=EXAMPLE_URLS,
+                relation_id=relation_id,
+            ),
+            call().emit(
+                urls=EXAMPLE_URLS,
+                relation_id=relation_id,
+            ),
+        ]
+        mock_urls_available_event.assert_has_calls(calls, any_order=True)
+
+    @patch(
+        f"{CHARM_LIB_PATH}.AuthProviderCharmEvents.urls_available",
+        new_callable=PropertyMock,
+    )
+    def test_refresh_event_is_pebble_ready_when_provided_as_parameter(
+        self,
+        mock_urls_available_event,
+    ):
+        meta = """
+        name: provider-tester
+        containers:
+            auth-tester:
+            another-container:
+        provides:
+            grafana-auth:
+                interface: grafana_auth
+        """
+        harness = testing.Harness(DefaultAuthProxyProviderCharmRefreshEvent, meta=meta)
+        harness.set_leader(True)
+        harness.begin()
+        relation_id = harness.add_relation("grafana-auth", "requirer")
+        harness.add_relation_unit(relation_id, "requirer/0")
+        urls = {"urls": json.dumps(EXAMPLE_URLS)}
+        harness.update_relation_data(
+            relation_id=relation_id, key_values=urls, app_or_unit="requirer"
+        )
+        harness.container_pebble_ready("auth-tester")
+        calls = [
+            call().emit(
+                urls=EXAMPLE_URLS,
+                relation_id=relation_id,
+            ),
+            call().emit(
+                urls=EXAMPLE_URLS,
+                relation_id=relation_id,
+            ),
+        ]
+        mock_urls_available_event.assert_has_calls(calls, any_order=True)
 
 
 class ProviderNonDefaultCharm(CharmBase):

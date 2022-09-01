@@ -6,8 +6,8 @@
 This library implements the grafana-auth relation interface,
 it contains the Requirer and Provider classes for handling
 the interface.
-This library is designed to allow charms to configure authentication to Grafana,
-the provider will set the authentication mode that it needs,
+With this library charms can to configure authentication to Grafana.
+The provider will set the authentication mode that it needs,
 and will pass the necessary configuration of that authentication mode.
 The requirer will consume the authentication configuration to authenticate to Grafana.
 
@@ -341,21 +341,14 @@ class AuthProvider(Object):
             return
 
         relation = self._charm.model.get_relation(self._relation_name)
-        if not relation:
-            logger.warning("Relation %s has not been created yet", self._relation_name)
-            return
-
-        if not self._auth_config:
-            logger.warning(
-                "No authentication configuration was given by the application, it won't be set in relation %d",
-                relation.id
-                )
+        if not relation or not self._auth_config:
             return
         if not self._validate_auth_config_json_schema():
             logger.warning(
                 "Authentication configuration provided by application did not pass JSON schema validation, it won't be set in relation %d",
                 relation.id
-                )
+            )
+            return
         relation_data = relation.data[self._charm.app]
         relation_data[AUTH] = json.dumps(self._auth_config)
 
@@ -491,15 +484,7 @@ class AuthRequirer(Object):
             return
 
         relation = self._charm.model.get_relation(self._relation_name)
-        if not relation:
-            logger.warning("Relation %s has not been created yet", self._relation_name)
-            return
-
-        if not self._urls:
-            logger.warning(
-                "No urls were given for application, urls won't be set in relation %d",
-                relation.id
-            )
+        if not relation or not self._urls:
             return
         try:
             validate({"application-data": {"urls": self._urls}}, REQUIRER_JSON_SCHEMA)

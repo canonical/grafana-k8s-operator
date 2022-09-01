@@ -16,11 +16,10 @@ resources:
     type: oci-image
     description: upstream docker image for grafana-tester
     upstream-source: k8s.gcr.io/pause:3.1
-requires:
-  grafana-auth:
-    interface: grafana_auth
 provides:
   grafana-source:
     interface: grafana_datasource
   grafana-dashboard:
     interface: grafana_dashboard
+  grafana-auth:
+    interface: grafana_auth

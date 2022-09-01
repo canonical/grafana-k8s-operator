@@ -6,12 +6,13 @@
 
 import logging
 
-from charms.grafana_auth.v0.grafana_auth import AuthRequirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus
+
+from lib.charms.grafana_auth.v0.grafana_auth import GrafanaAuthProxyProvider
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,9 @@ class GrafanaTesterCharm(CharmBase):
         self._name = "grafana-tester"
         self.grafana_source = GrafanaSourceProvider(self, source_type="prometheus")
         self.grafana_dashboard = GrafanaDashboardProvider(self)
-        self.grafana_auth_proxy_provider = AuthRequirer(self, urls=["https://wwww.example.com"])
+        self.grafana_auth_proxy_provider = GrafanaAuthProxyProvider(
+            self, relation_name="grafana-auth"
+        )
         self.framework.observe(
             self.on.grafana_tester_pebble_ready, self._on_grafana_tester_pebble_ready
         )
@@ -34,6 +37,10 @@ class GrafanaTesterCharm(CharmBase):
         self.framework.observe(
             self.grafana_auth_proxy_provider.on.auth_conf_available,
             self._on_auth_config_available,
+        )
+
+        self.framework.observe(
+            self.grafana_auth_proxy_provider.on.urls_available, self._on_urls_available
         )
 
     def _on_grafana_tester_pebble_ready(self, _):
@@ -49,12 +56,12 @@ class GrafanaTesterCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-    def _on_auth_config_available(self, event):
-        if not event.auth:
-            self.unit.status = BlockedStatus("Waiting for authentication configuration")
+    def _on_urls_available(self, event):
+        if not event.urls:
+            self.unit.status = BlockedStatus("Waiting for grafana urls")
+            event.defer()
             return
-        self.auth = event.auth
-        logger.info("auth config has been set: {}".format(self.auth))
+        self.urls = event.urls
         self.unit.status = ActiveStatus()
 
 

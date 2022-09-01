@@ -7,84 +7,45 @@
 It tests that the charms are able to relate and to exchange data.
 """
 
+import asyncio
 import logging
-import os
-from pathlib import Path
-from typing import Optional
 
 import pytest
-import yaml
+from helpers import check_grafana_is_ready, oci_image
 
 logger = logging.getLogger(__name__)
 
-PROVIDER_METADATA = yaml.safe_load(
-    Path("tests/integration/auth-provider-tester/metadata.yaml").read_text()
-)
-REQUIRER_METADATA = yaml.safe_load(
-    Path("tests/integration/grafana-tester/metadata.yaml").read_text()
-)
-PROVIDER_CHARM_NAME = PROVIDER_METADATA["name"]
-REQUIRER_CHARM_NAME = REQUIRER_METADATA["name"]
-DEPLOY_TIMEOUT = 1000
-PROVIDER_APPLICATION_NAME = "auth-provider-tester"
-REQUIRER_APPLICATION_NAME = "grafana-tester"
+tester_resources = {
+    "grafana-tester-image": oci_image(
+        "./tests/integration/grafana-tester/metadata.yaml", "grafana-tester-image"
+    )
+}
+grafana_resources = {"grafana-image": oci_image("./metadata.yaml", "grafana-image")}
 
 
-class TestAuthLib:
-    @pytest.fixture(scope="module")
-    @pytest.mark.abort_on_fail
-    async def setup(self, ops_test):
-        await self._deploy_provider(ops_test)
-        await self._deploy_requirer(ops_test)
+@pytest.mark.abort_on_fail
+async def test_deploy_and_relate_auth_provider_and_requirer(
+    ops_test, grafana_charm, grafana_tester_charm
+):
+    grafana_app_name = "grafana"
+    tester_app_name = "grafana-tester"
 
-    def _find_charm(self, charm_dir: str, charm_file_name: str) -> Optional[str]:
-        for root, _, files in os.walk(charm_dir):
-            for file in files:
-                if file == charm_file_name:
-                    return os.path.join(root, file)
-        return None
-
-    async def _deploy_provider(self, ops_test):
-        provider_charm = self._find_charm(
-            "tests/integration/auth-provider-tester/", PROVIDER_CHARM_NAME
-        )
-        if not provider_charm:
-            provider_charm = await ops_test.build_charm("tests/integration/auth-provider-tester/")
-        resources = {
-            f"{PROVIDER_CHARM_NAME}-image": PROVIDER_METADATA["resources"][
-                f"{PROVIDER_CHARM_NAME}-image"
-            ]["upstream-source"],
-        }
-        await ops_test.model.deploy(
-            provider_charm,
-            resources=resources,
-            application_name=PROVIDER_APPLICATION_NAME,
+    await asyncio.gather(
+        ops_test.model.deploy(
+            grafana_charm,
+            resources=grafana_resources,
+            application_name=grafana_app_name,
             trust=True,
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[PROVIDER_APPLICATION_NAME], status="active", timeout=1000
-        )
-
-    async def _deploy_requirer(self, ops_test):
-        requirer_charm = self._find_charm("tests/integration/grafana-tester/", REQUIRER_CHARM_NAME)
-        if not requirer_charm:
-            requirer_charm = await ops_test.build_charm("tests/integration/grafana-tester/")
-        resources = {
-            f"{REQUIRER_CHARM_NAME}-image": REQUIRER_METADATA["resources"][
-                f"{REQUIRER_CHARM_NAME}-image"
-            ]["upstream-source"],
-        }
-        await ops_test.model.deploy(
-            requirer_charm,
-            resources=resources,
-            application_name=REQUIRER_APPLICATION_NAME,
-            trust=True,
-        )
-
-    async def test_relate_and_wait_for_idle(self, ops_test, setup):
-        await ops_test.model.add_relation(
-            relation1=REQUIRER_APPLICATION_NAME, relation2=PROVIDER_APPLICATION_NAME
-        )
-        await ops_test.model.wait_for_idle(
-            apps=[REQUIRER_APPLICATION_NAME], status="active", timeout=1000
-        )
+        ),
+        ops_test.model.deploy(
+            grafana_tester_charm, resources=tester_resources, application_name=tester_app_name
+        ),
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[grafana_app_name, tester_app_name], status="active", wait_for_units=1, timeout=300
+    )
+    await check_grafana_is_ready(ops_test, grafana_app_name, 0)
+    await ops_test.model.add_relation(
+        "{}:grafana-source".format(grafana_app_name), "{}:grafana-source".format(tester_app_name)
+    )
+    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
