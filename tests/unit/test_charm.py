@@ -71,6 +71,8 @@ url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
 
 """
 
+AUTH_PROVIDER_APPLICATION = "auth_provider"
+
 
 def datasource_config(config):
     config_dict = yaml.safe_load(config)
@@ -115,6 +117,9 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
         self.harness.add_relation("grafana", "grafana")
+        self.grafana_auth_rel_id = self.harness.add_relation(
+            "grafana-auth", AUTH_PROVIDER_APPLICATION
+        )
 
         self.minimal_datasource_hash = hashlib.sha256(
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
@@ -270,3 +275,24 @@ class TestCharm(unittest.TestCase):
     def test_workload_version_is_set(self):
         self.harness.container_pebble_ready("grafana")
         self.assertEqual(self.harness.get_workload_version(), "1.0.0")
+
+    @k8s_resource_multipatch
+    def test_config_is_updated_with_authentication_config(self):
+        self.harness.set_leader(True)
+        example_auth_conf = {
+            "proxy": {
+                "enabled": True,
+                "header_name": "X-WEBAUTH-USER",
+                "header_property": "email",
+                "auto_sign_up": False,
+                "sync_ttl": 10,
+            }
+        }
+        self.harness.update_relation_data(
+            self.grafana_auth_rel_id,
+            AUTH_PROVIDER_APPLICATION,
+            {"auth": json.dumps(example_auth_conf)},
+        )
+        services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
+        self.assertIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())
+        self.assertEquals(services["environment"]["GF_AUTH_PROXY_ENABLED"], "True")
