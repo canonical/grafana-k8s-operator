@@ -46,6 +46,6 @@ async def test_deploy_and_relate_auth_provider_and_requirer(
     )
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
     await ops_test.model.add_relation(
-        "{}:grafana-source".format(grafana_app_name), "{}:grafana-source".format(tester_app_name)
+        "{}:grafana-auth".format(grafana_app_name), "{}:grafana-auth".format(tester_app_name)
     )
     await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")

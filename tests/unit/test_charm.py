@@ -45,6 +45,7 @@ DASHBOARD_CONFIG = {
     "providers": [
         {
             "name": "Default",
+            "updateIntervalSeconds": "5",
             "type": "file",
             "options": {"path": "/etc/grafana/provisioning/dashboards"},
         }
@@ -113,8 +114,11 @@ class TestCharm(unittest.TestCase):
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     def setUp(self, *unused):
+        patch_exec = patch("ops.testing._TestingPebbleClient.exec", MagicMock())
+        self.patch_exec = patch_exec.start()
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
+        self.addCleanup(self.patch_exec)
         self.harness.begin()
         self.harness.add_relation("grafana", "grafana")
         self.grafana_auth_rel_id = self.harness.add_relation(
@@ -139,7 +143,7 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
 
     @k8s_resource_multipatch
@@ -155,13 +159,13 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
 
         rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
         self.harness.charm.on["grafana-source"].relation_departed.emit(rel)
 
-        config = yaml.safe_load(self.harness.charm.container.pull(DATASOURCES_PATH))
+        config = yaml.safe_load(self.harness.charm.containers["workload"].pull(DATASOURCES_PATH))
         self.assertEqual(config.get("datasources"), [])
         self.assertEqual(
             config.get("deleteDatasources"),
@@ -180,7 +184,7 @@ class TestCharm(unittest.TestCase):
             DB_CONFIG,
         )
 
-        config = self.harness.charm.container.pull(CONFIG_PATH)
+        config = self.harness.charm.containers["workload"].pull(CONFIG_PATH)
         self.assertEqual(config.read(), DATABASE_CONFIG_INI)
 
     def test_dashboard_path_is_initialized(self):
@@ -189,7 +193,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.init_dashboard_provisioning(PROVISIONING_PATH + "/dashboards")
 
         dashboards_dir_path = PROVISIONING_PATH + "/dashboards/default.yaml"
-        config = self.harness.charm.container.pull(dashboards_dir_path)
+        config = self.harness.charm.containers["workload"].pull(dashboards_dir_path)
         self.assertEqual(yaml.safe_load(config), DASHBOARD_CONFIG)
 
     def test_can_get_password(self):
@@ -224,7 +228,9 @@ class TestCharm(unittest.TestCase):
 
         self.harness.update_config({"web_external_url": "/grafana"})
 
-        services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
+        services = (
+            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
+        )
         self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
         self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
 
@@ -244,7 +250,7 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         expected_source_data = BASIC_DATASOURCES.copy()
         expected_source_data[0]["jsonData"]["timeout"] = 600
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
@@ -265,7 +271,7 @@ class TestCharm(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:1234"}
         )
 
-        config = self.harness.charm.container.pull(DATASOURCES_PATH)
+        config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         expected_source_data = BASIC_DATASOURCES.copy()
         expected_source_data[0]["jsonData"]["timeout"] = 300
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
@@ -293,6 +299,73 @@ class TestCharm(unittest.TestCase):
             AUTH_PROVIDER_APPLICATION,
             {"auth": json.dumps(example_auth_conf)},
         )
-        services = self.harness.charm.container.get_plan().services["grafana"].to_dict()
+        services = (
+            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
+        )
         self.assertIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())
         self.assertEquals(services["environment"]["GF_AUTH_PROXY_ENABLED"], "True")
+
+
+class TestCharmReplication(unittest.TestCase):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *unused):
+        patch_exec = patch("ops.testing._TestingPebbleClient.exec", MagicMock())
+        self.patch_exec = patch_exec.start()
+        self.harness = Harness(GrafanaCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.addCleanup(self.patch_exec)
+        self.harness.add_relation("grafana", "grafana")
+        self.harness.add_relation("grafana-auth", AUTH_PROVIDER_APPLICATION)
+        self.harness.set_leader(True)
+        self.harness.begin()
+
+        self.minimal_datasource_hash = hashlib.sha256(
+            str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
+        ).hexdigest()
+
+    @patch("socket.getfqdn", lambda: "1.2.3.4")
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test_primary_sets_correct_peer_data(self, mock_unit_ip):
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "grafana-0", "value": "1.2.3.4"}],
+                }
+            ]
+        }
+        mock_unit_ip.return_value = fake_network
+        self.harness.set_leader(True)
+        self.harness.charm.on.config_changed.emit()
+        rel = self.harness.model.get_relation("grafana")
+        self.harness.add_relation_unit(rel.id, "grafana/1")
+
+        unit_ip = str(self.harness.charm.model.get_binding("grafana").network.bind_address)
+        replica_address = self.harness.charm.get_peer_data("replica_primary")
+
+        self.assertEqual(unit_ip, replica_address)
+
+    @patch("socket.getfqdn", lambda: "2.3.4.5")
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test_replicas_get_correct_environment_variables(self, mock_unit_ip):
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "grafana-0", "value": "2.3.4.5"}],
+                }
+            ]
+        }
+        mock_unit_ip.return_value = fake_network
+        self.harness.set_leader(False)
+        rel = self.harness.model.get_relation("grafana")
+        self.harness.add_relation_unit(rel.id, "grafana/1")
+        self.harness.update_relation_data(
+            rel.id, "grafana-k8s", {"replica_primary": json.dumps("1.2.3.4")}
+        )
+        primary = self.harness.charm._build_replication(False).to_dict()["services"]["litestream"][
+            "environment"
+        ]["LITESTREAM_UPSTREAM_URL"]
+
+        self.assertEqual(primary, "1.2.3.4:9876")

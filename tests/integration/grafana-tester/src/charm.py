@@ -35,11 +35,6 @@ class GrafanaTesterCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
         self.framework.observe(
-            self.grafana_auth_proxy_provider.on.auth_conf_available,
-            self._on_auth_config_available,
-        )
-
-        self.framework.observe(
             self.grafana_auth_proxy_provider.on.urls_available, self._on_urls_available
         )
 

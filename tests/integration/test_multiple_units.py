@@ -23,7 +23,10 @@ tester_resources = {
         "./tests/integration/grafana-tester/metadata.yaml", "grafana-tester-image"
     )
 }
-grafana_resources = {"grafana-image": oci_image("./metadata.yaml", "grafana-image")}
+grafana_resources = {
+    "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
+    "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
+}
 
 
 @pytest.mark.abort_on_fail
@@ -97,7 +100,7 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
             "{}:grafana-dashboard".format(tester_app_name),
         ),
     )
-    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
+    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active", idle_period=30)
     tester_dashboards = await asyncio.gather(
         get_dashboard_by_search(ops_test, grafana_app_name, 0, "Grafana Tester"),
         get_dashboard_by_search(ops_test, grafana_app_name, 1, "Grafana Tester"),

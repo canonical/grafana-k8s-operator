@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 app_name = "grafana"
-grafana_resources = {"grafana-image": oci_image("./metadata.yaml", "grafana-image")}
+grafana_resources = {
+    "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
+    "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
+}
 
 
 async def test_setup_env(ops_test):
