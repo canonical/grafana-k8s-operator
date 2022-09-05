@@ -310,7 +310,7 @@ class TestCharmReplication(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.charm.on.config_changed.emit()
         rel = self.harness.model.get_relation("grafana")
-        self.harness.add_relation_unit(rel.id, "grafana/1")
+        self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
 
         unit_ip = str(self.harness.charm.model.get_binding("grafana").network.bind_address)
         replica_address = self.harness.charm.get_peer_data("replica_primary")
@@ -331,7 +331,7 @@ class TestCharmReplication(unittest.TestCase):
         mock_unit_ip.return_value = fake_network
         self.harness.set_leader(False)
         rel = self.harness.model.get_relation("grafana")
-        self.harness.add_relation_unit(rel.id, "grafana/1")
+        self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
         self.harness.update_relation_data(
             rel.id, "grafana-k8s", {"replica_primary": json.dumps("1.2.3.4")}
         )
