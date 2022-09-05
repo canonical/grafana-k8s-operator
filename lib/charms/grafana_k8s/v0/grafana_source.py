@@ -652,6 +652,9 @@ class GrafanaSourceConsumer(Object):
         """On upgrade, ensure stored data maintains compatibility."""
         # self._stored.sources may have hyphens instead of underscores in key names.
         # Make sure they reconcile.
+        if not self._charm.unit.is_leader():
+            return
+
         self._set_default_data()
         sources = _type_convert_stored(self._stored.sources)
         for rel_id in sources.keys():

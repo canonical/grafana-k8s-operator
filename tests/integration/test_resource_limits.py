@@ -13,7 +13,10 @@ from helpers import oci_image
 logger = logging.getLogger(__name__)
 
 app_name = "grafana"
-grafana_resources = {"grafana-image": oci_image("./metadata.yaml", "grafana-image")}
+grafana_resources = {
+    "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
+    "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
+}
 
 
 @pytest.mark.abort_on_fail
