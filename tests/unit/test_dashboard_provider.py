@@ -23,6 +23,7 @@ RELATION_TEMPLATES_DATA = {
     "file:first": {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAKdGVzdF9maXJzdAoAAIC4BxCQe2GHAAEjC8Ib/QkftvN9AQAAAAAEWVo=",
+        "dashboard_alt_uid": "6291687b37603a46",
         "juju_topology": {
             "model": "testing",
             "model_uuid": "abcdefgh-1234",
@@ -33,6 +34,7 @@ RELATION_TEMPLATES_DATA = {
     "file:other": {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9zZWNvbmQKAEby/qNFFKmEAAEkDKYY2NgftvN9AQAAAAAEWVo=",
+        "dashboard_alt_uid": "a44939b79a5ba1d4",
         "juju_topology": {
             "model": "testing",
             "model_uuid": "abcdefgh-1234",
@@ -46,6 +48,7 @@ MANUAL_TEMPLATE_DATA = {
     "file:manual": {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
+        "dashboard_alt_uid": "0b73d01f7b214e98",
         "juju_topology": {
             "application": "provider-tester",
             "model": "testing",
@@ -137,6 +140,7 @@ class TestDashboardProvider(unittest.TestCase):
         expected_templates["prog:uC2Arx+2"] = {  # type: ignore
             "charm": "provider-tester",
             "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAEdGhpcmQAAAAAtr5hbOrisy0AAR0FuC2Arx+2830BAAAAAARZWg==",
+            "dashboard_alt_uid": "9f3746a8f16304dd",
             "juju_topology": {
                 "model": "testing",
                 "model_uuid": "abcdefgh-1234",

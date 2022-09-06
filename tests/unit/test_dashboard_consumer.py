@@ -44,7 +44,6 @@ DASHBOARD_DATA = {
 DASHBOARD_RENDERED = json.dumps(
     {
         "panels": {"data": "label_values(up, juju_unit)"},
-        "uid": "abcdefgh-provid",
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
 )
@@ -71,7 +70,6 @@ VARIABLE_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
         ],
-        "uid": "abcdefgh-provid",
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
 )
@@ -101,7 +99,6 @@ INPUT_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
         ],
-        "uid": "abcdefgh-provid",
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
 )
@@ -127,7 +124,6 @@ NULL_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "Row separator", "datasource": None},
         ],
-        "uid": "abcdefgh-provid",
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
 )
@@ -148,7 +144,6 @@ EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
             "datasource": "${leave_me_alone}"
         }
     ],
-    "uid": "abcdefgh-provid",
     "templating": {
         "list": [
             {
@@ -178,7 +173,6 @@ EXISTING_VARIABLE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_application)", "datasource": "${prometheusds}"},
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
-        "uid": "abcdefgh-provid",
         "templating": {
             "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
@@ -231,7 +225,6 @@ EXISTING_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
-        "uid": "abcdefgh-provid",
         "templating": {
             "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
@@ -325,12 +318,21 @@ class TestDashboardConsumer(unittest.TestCase):
 
         return rel_ids
 
-    def test_consumer_notifies_and_creates_uid_on_new_dashboards(self):
+    def test_consumer_notifies_on_new_dashboards(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         self.setup_charm_relations()
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
+        # print(self.harness.charm.grafana_consumer.dashboards)
+        # print([
+        #         {
+        #             "id": "file:tester",
+        #             "relation_id": "2",
+        #             "charm": "grafana-k8s",
+        #             "content": DASHBOARD_RENDERED,
+        #         }
+        #     ])
         self.assertEqual(
             self.harness.charm.grafana_consumer.dashboards,
             [
