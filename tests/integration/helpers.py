@@ -127,7 +127,13 @@ def get_datasource_for(suffix: str, datasources: list) -> dict:
     Returns:
         a datasource config dict
     """
-    return [d for d in datasources if d["name"].endswith(suffix)].pop()
+    assert datasources, "'datasources' argument cannot be empty"
+
+    datasource_filtered = [d for d in datasources if d["name"].endswith(suffix)]
+    if not datasource_filtered:
+        raise ValueError("No data source was found for suffix {}".format(suffix))
+
+    return datasource_filtered.pop()
 
 
 async def get_grafana_dashboards(ops_test: OpsTest, app_name: str, unit_num: int) -> list:
