@@ -2,6 +2,6 @@ jinja2 < 3
 kubernetes
 lightkube >= 0.11
 markupsafe == 2.0.1
-ops
+git+https://github.com/canonical/operator#egg=ops
 pyyaml
 urllib3
