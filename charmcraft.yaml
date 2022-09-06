@@ -12,3 +12,11 @@ parts:
   charm:
     build-packages:
       - git
+  static-sqlite3:
+    plugin: dump
+    source: .
+    build-packages:
+      - curl
+    override-pull: |
+      curl -L https://github.com/CompuRoot/static-sqlite3/releases/latest/download/sqlite3 -o sqlite-static
+      chmod +x sqlite-static
