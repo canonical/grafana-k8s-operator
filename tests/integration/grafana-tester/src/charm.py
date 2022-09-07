@@ -52,7 +52,7 @@ class GrafanaTesterCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     def _on_urls_available(self, event):
-        if not event.urls:
+        if not self.urls and not event.urls:
             self.unit.status = BlockedStatus("Waiting for grafana urls")
             event.defer()
             return
