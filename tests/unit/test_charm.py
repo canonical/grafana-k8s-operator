@@ -120,10 +120,10 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.addCleanup(self.patch_exec)
         self.harness.begin()
-        self.harness.add_relation("grafana", "grafana")
         self.grafana_auth_rel_id = self.harness.add_relation(
             "grafana-auth", AUTH_PROVIDER_APPLICATION
         )
+        self.harness.add_relation("grafana", "grafana-k8s")
 
         self.minimal_datasource_hash = hashlib.sha256(
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
@@ -315,8 +315,8 @@ class TestCharmReplication(unittest.TestCase):
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
         self.addCleanup(self.patch_exec)
-        self.harness.add_relation("grafana", "grafana")
         self.harness.add_relation("grafana-auth", AUTH_PROVIDER_APPLICATION)
+        self.harness.add_relation("grafana", "grafana-k8s")
         self.harness.set_leader(True)
         self.harness.begin()
 
@@ -339,7 +339,7 @@ class TestCharmReplication(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.charm.on.config_changed.emit()
         rel = self.harness.model.get_relation("grafana")
-        self.harness.add_relation_unit(rel.id, "grafana/1")
+        self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
 
         unit_ip = str(self.harness.charm.model.get_binding("grafana").network.bind_address)
         replica_address = self.harness.charm.get_peer_data("replica_primary")
@@ -360,7 +360,7 @@ class TestCharmReplication(unittest.TestCase):
         mock_unit_ip.return_value = fake_network
         self.harness.set_leader(False)
         rel = self.harness.model.get_relation("grafana")
-        self.harness.add_relation_unit(rel.id, "grafana/1")
+        self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
         self.harness.update_relation_data(
             rel.id, "grafana-k8s", {"replica_primary": json.dumps("1.2.3.4")}
         )
