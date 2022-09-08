@@ -8,9 +8,10 @@ import unittest
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import yaml
+from helpers import FakeProcessVersionCheck
+from ops.model import Container
 from ops.testing import Harness
 
-import grafana_server
 from charm import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH, GrafanaCharm
 
 MINIMAL_CONFIG = {"grafana-image-path": "grafana/grafana", "port": 3000}
@@ -272,10 +273,10 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
 
     @k8s_resource_multipatch
-    @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def test_workload_version_is_set(self):
         self.harness.container_pebble_ready("grafana")
-        self.assertEqual(self.harness.get_workload_version(), "1.0.0")
+        self.assertEqual(self.harness.get_workload_version(), "0.1.0")
 
 
 class TestCharmReplication(unittest.TestCase):
