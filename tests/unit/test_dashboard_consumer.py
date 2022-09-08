@@ -324,15 +324,6 @@ class TestDashboardConsumer(unittest.TestCase):
         self.setup_charm_relations()
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
-        # print(self.harness.charm.grafana_consumer.dashboards)
-        # print([
-        #         {
-        #             "id": "file:tester",
-        #             "relation_id": "2",
-        #             "charm": "grafana-k8s",
-        #             "content": DASHBOARD_RENDERED,
-        #         }
-        #     ])
         self.assertEqual(
             self.harness.charm.grafana_consumer.dashboards,
             [
