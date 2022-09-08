@@ -115,7 +115,6 @@ class GrafanaCharm(CharmBase):
         self.grafana_service = Grafana("localhost", PORT)
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
-        self._auth_env_vars = None
         self._stored.set_default(k8s_service_patched=False, admin_password="")
 
         # -- Prometheus self-monitoring
@@ -912,19 +911,28 @@ class GrafanaCharm(CharmBase):
     def _on_resource_patch_failed(self, event: K8sResourcePatchFailedEvent):
         self.unit.status = BlockedStatus(event.message)
 
+    @property
+    def _auth_env_vars(self):
+        return self.get_peer_data("auth_conf_env_vars")
+
     def _on_grafana_auth_conf_available(self, event: AuthRequirerCharmEvents):
         """Event handler for the auth_conf_available event.
 
         It sets authentication configuration environment variables if they have not been set yet.
+        Environment variables are stored in peer data.
         The event can be emitted even there are no changes to the configuration so call `_configure` to check
         and avoid restarting if that is not needed.
 
         Args:
             event: a :class:`AuthRequirerCharmEvents` auth config sent from the provider
         """
+        if not self.unit.is_leader():
+            return
         if not self._auth_env_vars:
-            self._auth_env_vars = self.generate_auth_env_vars(event.auth)  # type: ignore[attr-defined]
-        self._configure()
+            env_vars = self.generate_auth_env_vars(event.auth)  # type: ignore[attr-defined]
+            if env_vars:
+                self.set_peer_data("auth_conf_env_vars", env_vars)
+                self._configure()
 
     def generate_auth_env_vars(self, conf: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
         """Generates a dictionary of environment variables from the authentication config it gets.
