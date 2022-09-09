@@ -279,7 +279,7 @@ class TestDashboardConsumer(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
-        self.harness.add_relation("grafana", "grafana")
+        self.harness.add_relation("grafana", "grafana-k8s")
 
     def setup_charm_relations(self) -> list:
         """Create relations used by test cases."""

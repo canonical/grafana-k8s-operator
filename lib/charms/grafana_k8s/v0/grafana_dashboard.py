@@ -176,6 +176,7 @@ The consuming charm should decompress the dashboard.
 """
 
 import base64
+import hashlib
 import json
 import logging
 import lzma
@@ -213,7 +214,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 14
+LIBPATCH = 15
 
 logger = logging.getLogger(__name__)
 
@@ -820,9 +821,11 @@ class GrafanaDashboardProvider(Object):
         # Use as id the first chars of the encoded dashboard, so that
         # it is predictable across units.
         id = "prog:{}".format(encoded_dashboard[-24:-16])
+
         stored_dashboard_templates[id] = self._content_to_dashboard_object(
             encoded_dashboard, inject_dropdowns
         )
+        stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -876,12 +879,24 @@ class GrafanaDashboardProvider(Object):
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes()), inject_dropdowns
                 )
+                stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
             self._stored.dashboard_templates = stored_dashboard_templates
 
             if self._charm.unit.is_leader():
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
                     self._upset_dashboards_on_relation(dashboard_relation)
+
+    def _generate_alt_uid(self, key: str) -> str:
+        """Generate alternative uid for dashboards.
+
+        Args:
+            key: A string used (along with charm.meta.name) to build the hash uid.
+
+        Returns: A hash string.
+        """
+        raw_dashboard_alt_uid = "{}-{}".format(self._charm.meta.name, key)
+        return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
 
     def _reinitialize_dashboard_data(self, inject_dropdowns: bool = True) -> None:
         """Triggers a reload of dashboard outside of an eventing workflow.
@@ -1170,6 +1185,7 @@ class GrafanaDashboardConsumer(Object):
                 decoded_content = _decode_dashboard_content(template["content"])
                 inject_dropdowns = template.get("inject_dropdowns", True)
                 content = Template(decoded_content).render()
+                content = self._manage_dashboard_uid(content, template)
                 content = _encode_dashboard_content(
                     _convert_dashboard_fields(content, inject_dropdowns)
                 )
@@ -1242,6 +1258,15 @@ class GrafanaDashboardConsumer(Object):
                 stored_dashboards[relation.id] = stored_data
                 self.set_peer_data("dashboards", stored_dashboards)
                 return True
+
+    def _manage_dashboard_uid(self, dashboard: str, template: dict) -> str:
+        """Add an uid to the dashboard if it is not present."""
+        dashboard = json.loads(dashboard)
+
+        if not dashboard.get("uid", None) and "dashboard_alt_uid" in template:
+            dashboard["uid"] = template["dashboard_alt_uid"]
+
+        return json.dumps(dashboard)
 
     def _remove_all_dashboards_for_relation(self, relation: Relation) -> None:
         """If an errored dashboard is in stored data, remove it and trigger a deletion."""

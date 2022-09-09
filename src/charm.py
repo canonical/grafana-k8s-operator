@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import socket
 import string
@@ -113,7 +114,7 @@ class GrafanaCharm(CharmBase):
         self.grafana_service = Grafana("localhost", PORT)
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
-        self._stored.set_default(k8s_service_patched=False, admin_password="")
+        self._stored.set_default(k8s_service_patched=False, admin_password="")  # type: ignore
 
         # -- Prometheus self-monitoring
         self.metrics_endpoint = MetricsEndpointProvider(
@@ -414,7 +415,7 @@ class GrafanaCharm(CharmBase):
 
     def _patch_k8s_service(self):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
-        if self.unit.is_leader() and not self._stored.k8s_service_patched:
+        if self.unit.is_leader() and not self._stored.k8s_service_patched:  # type: ignore
             service_ports = [
                 (self.app.name, PORT, PORT),
             ]
@@ -423,7 +424,7 @@ class GrafanaCharm(CharmBase):
             except PatchFailed as e:
                 logger.error("Unable to patch the Kubernetes service: %s", str(e))
             else:
-                self._stored.k8s_service_patched = True
+                self._stored.k8s_service_patched = True  # type: ignore
                 logger.info("Successfully patched the Kubernetes service!")
 
     #####################################
@@ -471,7 +472,7 @@ class GrafanaCharm(CharmBase):
 
         # Get required information
         database_fields = {
-            field: event.relation.data[event.app].get(field) for field in REQUIRED_DATABASE_FIELDS
+            field: event.relation.data[event.app].get(field) for field in REQUIRED_DATABASE_FIELDS  # type: ignore
         }
 
         # if any required fields are missing, warn the user and return
@@ -566,8 +567,13 @@ class GrafanaCharm(CharmBase):
     def _on_pebble_ready(self, event) -> None:
         """When Pebble is ready, start everything up."""
         self._configure()
-        if version := self.grafana_version:
+        version = self.grafana_version
+        if version is not None:
             self.unit.set_workload_version(version)
+        else:
+            logger.debug(
+                "Cannot set workload version at this time: could not get Alertmanager version."
+            )
 
     def restart_grafana(self) -> None:
         """Restart the pebble container.
@@ -746,11 +752,21 @@ class GrafanaCharm(CharmBase):
 
     @property
     def grafana_version(self):
-        """Grafana server version."""
-        info = self.grafana_service.build_info
-        if info:
-            return info.get("version", None)
-        return None
+        """Grafana server version.
+
+        Returns:
+            A string equal to the Grafana server version.
+        """
+        container = self.containers["workload"]
+        if not container.can_connect():
+            return None
+        version_output, _ = container.exec(["grafana-server", "-v"]).wait_output()
+        # Output looks like this:
+        # Version 8.2.6 (commit: d2cccfe, branch: HEAD)
+        result = re.search(r"Version (\d*\.\d*\.\d*)", version_output)
+        if result is None:
+            return result
+        return result.group(1)
 
     @property
     def grafana_config_ini_hash(self) -> str:
@@ -855,10 +871,10 @@ class GrafanaCharm(CharmBase):
 
     def _get_admin_password(self) -> str:
         """Returns the password for the admin user."""
-        if not self._stored.admin_password:
-            self._stored.admin_password = self._generate_password()
+        if not self._stored.admin_password:  # type: ignore
+            self._stored.admin_password = self._generate_password()  # type: ignore
 
-        return self._stored.admin_password
+        return self._stored.admin_password  # type: ignore
 
     def _poll_container(self, func: Callable, timeout: float = 2.0, delay: float = 0.1) -> bool:
         """Try to poll the container to work around Container.is_connect() being point-in-time.
