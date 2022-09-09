@@ -472,7 +472,7 @@ class GrafanaCharm(CharmBase):
 
         # Get required information
         database_fields = {
-            field: event.relation.data[event.app].get(field) for field in REQUIRED_DATABASE_FIELDS
+            field: event.relation.data[event.app].get(field) for field in REQUIRED_DATABASE_FIELDS  # type: ignore
         }
 
         # if any required fields are missing, warn the user and return
@@ -874,7 +874,7 @@ class GrafanaCharm(CharmBase):
         if not self._stored.admin_password:
             self._stored.admin_password = self._generate_password()
 
-        return self._stored.admin_password
+        return self._stored.admin_password  # type: ignore
 
     def _poll_container(self, func: Callable, timeout: float = 2.0, delay: float = 0.1) -> bool:
         """Try to poll the container to work around Container.is_connect() being point-in-time.
