@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import socket
 import string
@@ -577,8 +578,13 @@ class GrafanaCharm(CharmBase):
     def _on_pebble_ready(self, event) -> None:
         """When Pebble is ready, start everything up."""
         self._configure()
-        if version := self.grafana_version:
+        version = self.grafana_version
+        if version is not None:
             self.unit.set_workload_version(version)
+        else:
+            logger.debug(
+                "Cannot set workload version at this time: could not get Alertmanager version."
+            )
 
     def restart_grafana(self) -> None:
         """Restart the pebble container.
@@ -760,11 +766,21 @@ class GrafanaCharm(CharmBase):
 
     @property
     def grafana_version(self):
-        """Grafana server version."""
-        info = self.grafana_service.build_info
-        if info:
-            return info.get("version", None)
-        return None
+        """Grafana server version.
+
+        Returns:
+            A string equal to the Grafana server version.
+        """
+        container = self.containers["workload"]
+        if not container.can_connect():
+            return None
+        version_output, _ = container.exec(["grafana-server", "-v"]).wait_output()
+        # Output looks like this:
+        # Version 8.2.6 (commit: d2cccfe, branch: HEAD)
+        result = re.search(r"Version (\d*\.\d*\.\d*)", version_output)
+        if result is None:
+            return result
+        return result.group(1)
 
     @property
     def grafana_config_ini_hash(self) -> str:

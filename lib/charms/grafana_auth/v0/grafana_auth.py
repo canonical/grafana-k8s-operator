@@ -453,7 +453,7 @@ class AuthRequirer(Object):
             else:
                 logger.warning(
                     "%d containers are present in metadata.yaml and "
-                    "refresh_event was not specified. Defaulting to update_status. ",
+                    "refresh_event was not specified. Defaulting to update_status.",
                     len(self._charm.meta.containers),
                 )
                 refresh_event = self._charm.on.update_status
