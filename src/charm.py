@@ -114,7 +114,7 @@ class GrafanaCharm(CharmBase):
         self.grafana_service = Grafana("localhost", PORT)
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
-        self._stored.set_default(k8s_service_patched=False, admin_password="")  # type: ignore
+        self._stored.set_default(k8s_service_patched=False, admin_password="")
 
         # -- Prometheus self-monitoring
         self.metrics_endpoint = MetricsEndpointProvider(
@@ -415,7 +415,7 @@ class GrafanaCharm(CharmBase):
 
     def _patch_k8s_service(self):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
-        if self.unit.is_leader() and not self._stored.k8s_service_patched:  # type: ignore
+        if self.unit.is_leader() and not self._stored.k8s_service_patched:
             service_ports = [
                 (self.app.name, PORT, PORT),
             ]
@@ -424,7 +424,7 @@ class GrafanaCharm(CharmBase):
             except PatchFailed as e:
                 logger.error("Unable to patch the Kubernetes service: %s", str(e))
             else:
-                self._stored.k8s_service_patched = True  # type: ignore
+                self._stored.k8s_service_patched = True
                 logger.info("Successfully patched the Kubernetes service!")
 
     #####################################
@@ -472,7 +472,7 @@ class GrafanaCharm(CharmBase):
 
         # Get required information
         database_fields = {
-            field: event.relation.data[event.app].get(field) for field in REQUIRED_DATABASE_FIELDS  # type: ignore
+            field: event.relation.data[event.app].get(field) for field in REQUIRED_DATABASE_FIELDS
         }
 
         # if any required fields are missing, warn the user and return
@@ -871,10 +871,10 @@ class GrafanaCharm(CharmBase):
 
     def _get_admin_password(self) -> str:
         """Returns the password for the admin user."""
-        if not self._stored.admin_password:  # type: ignore
-            self._stored.admin_password = self._generate_password()  # type: ignore
+        if not self._stored.admin_password:
+            self._stored.admin_password = self._generate_password()
 
-        return self._stored.admin_password  # type: ignore
+        return self._stored.admin_password
 
     def _poll_container(self, func: Callable, timeout: float = 2.0, delay: float = 0.1) -> bool:
         """Try to poll the container to work around Container.is_connect() being point-in-time.
