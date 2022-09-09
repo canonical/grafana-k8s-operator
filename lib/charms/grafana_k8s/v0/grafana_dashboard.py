@@ -223,7 +223,7 @@ DEFAULT_RELATION_NAME = "grafana-dashboard"
 DEFAULT_PEER_NAME = "grafana"
 RELATION_INTERFACE_NAME = "grafana_dashboard"
 
-TEMPLATE_DROPDOWNS = [
+TOPOLOGY_TEMPLATE_DROPDOWNS = [  # type: ignore
     {
         "allValue": None,
         "datasource": "${prometheusds}",
@@ -324,6 +324,9 @@ TEMPLATE_DROPDOWNS = [
         "type": "query",
         "useTags": False,
     },
+]
+
+DATASOURCE_TEMPLATE_DROPDOWNS = [  # type: ignore
     {
         "description": None,
         "error": None,
@@ -532,7 +535,7 @@ def _decode_dashboard_content(encoded_content: str) -> str:
     return lzma.decompress(base64.b64decode(encoded_content.encode("utf-8"))).decode()
 
 
-def _convert_dashboard_fields(content: str) -> str:
+def _convert_dashboard_fields(content: str, inject_dropdowns: bool = True) -> str:
     """Make sure values are present for Juju topology.
 
     Inserts Juju topology variables and selectors into the template, as well as
@@ -541,6 +544,12 @@ def _convert_dashboard_fields(content: str) -> str:
     dict_content = json.loads(content)
     datasources = {}
     existing_templates = False
+
+    template_dropdowns = (
+        TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS  # type: ignore
+        if inject_dropdowns
+        else DATASOURCE_TEMPLATE_DROPDOWNS
+    )
 
     # If the dashboard has __inputs, get the names to replace them. These are stripped
     # from reactive dashboards in GrafanaDashboardAggregator, but charm authors in
@@ -553,7 +562,7 @@ def _convert_dashboard_fields(content: str) -> str:
 
     # If no existing template variables exist, just insert our own
     if "templating" not in dict_content:
-        dict_content["templating"] = {"list": [d for d in TEMPLATE_DROPDOWNS]}
+        dict_content["templating"] = {"list": [d for d in template_dropdowns]}  # type: ignore
     else:
         # Otherwise, set a flag so we can go back later
         existing_templates = True
@@ -564,7 +573,7 @@ def _convert_dashboard_fields(content: str) -> str:
                 datasources[template_value["name"]] = template_value["query"].lower()
 
         # Put our own variables in the template
-        for d in TEMPLATE_DROPDOWNS:
+        for d in template_dropdowns:  # type: ignore
             if d not in dict_content["templating"]["list"]:
                 dict_content["templating"]["list"].insert(0, d)
 
@@ -793,13 +802,15 @@ class GrafanaDashboardProvider(Object):
             self._on_grafana_dashboard_relation_changed,
         )
 
-    def add_dashboard(self, content: str) -> None:
+    def add_dashboard(self, content: str, inject_dropdowns: bool = True) -> None:
         """Add a dashboard to the relation managed by this :class:`GrafanaDashboardProvider`.
 
         Args:
             content: a string representing a Jinja template. Currently, no
                 global variables are added to the Jinja template evaluation
                 context.
+            inject_dropdowns: a :boolean: indicating whether topology dropdowns should be
+                added to the dashboard
         """
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
@@ -810,7 +821,10 @@ class GrafanaDashboardProvider(Object):
         # Use as id the first chars of the encoded dashboard, so that
         # it is predictable across units.
         id = "prog:{}".format(encoded_dashboard[-24:-16])
-        stored_dashboard_templates[id] = self._content_to_dashboard_object(encoded_dashboard)
+
+        stored_dashboard_templates[id] = self._content_to_dashboard_object(
+            encoded_dashboard, inject_dropdowns
+        )
         stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
         if self._charm.unit.is_leader():
@@ -838,7 +852,9 @@ class GrafanaDashboardProvider(Object):
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
                 self._upset_dashboards_on_relation(dashboard_relation)
 
-    def _update_all_dashboards_from_dir(self, _: Optional[HookEvent] = None) -> None:
+    def _update_all_dashboards_from_dir(
+        self, _: Optional[HookEvent] = None, inject_dropdowns: bool = True
+    ) -> None:
         """Scans the built-in dashboards and updates relations with changes."""
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
@@ -854,14 +870,14 @@ class GrafanaDashboardProvider(Object):
 
             # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
             # custom function for the filter
-            def _is_dashbaord(p: Path) -> bool:
+            def _is_dashboard(p: Path) -> bool:
                 return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
 
-            for path in filter(_is_dashbaord, Path(self._dashboards_path).glob("*")):
+            for path in filter(_is_dashboard, Path(self._dashboards_path).glob("*")):
                 # path = Path(path)
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
-                    _encode_dashboard_content(path.read_bytes())
+                    _encode_dashboard_content(path.read_bytes()), inject_dropdowns
                 )
                 stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
@@ -882,14 +898,17 @@ class GrafanaDashboardProvider(Object):
         raw_dashboard_alt_uid = "{}-{}".format(self._charm.meta.name, key)
         return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
 
-    def _reinitialize_dashboard_data(self) -> None:
+    def _reinitialize_dashboard_data(self, inject_dropdowns: bool = True) -> None:
         """Triggers a reload of dashboard outside of an eventing workflow.
+
+        Args:
+            inject_dropdowns: a :bool: used to indicate whether topology dropdowns should be added
 
         This will destroy any existing relation data.
         """
         try:
             _resolve_dir_against_charm_path(self._charm, self._dashboards_path)
-            self._update_all_dashboards_from_dir()
+            self._update_all_dashboards_from_dir(inject_dropdowns=inject_dropdowns)
 
         except InvalidDirectoryPathError as e:
             logger.warning(
@@ -950,11 +969,12 @@ class GrafanaDashboardProvider(Object):
 
         relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
-    def _content_to_dashboard_object(self, content: str) -> Dict:
+    def _content_to_dashboard_object(self, content: str, inject_dropdowns: bool = True) -> Dict:
         return {
             "charm": self._charm.meta.name,
             "content": content,
             "juju_topology": self._juju_topology,
+            "inject_dropdowns": inject_dropdowns,
         }
 
     # This is not actually used in the dashboards, but is present to provide a secondary
@@ -1163,9 +1183,12 @@ class GrafanaDashboardConsumer(Object):
             error = None
             try:
                 decoded_content = _decode_dashboard_content(template["content"])
+                inject_dropdowns = template.get("inject_dropdowns", True)
                 content = Template(decoded_content).render()
                 content = self._manage_dashboard_uid(content, template)
-                content = _encode_dashboard_content(_convert_dashboard_fields(content))
+                content = _encode_dashboard_content(
+                    _convert_dashboard_fields(content, inject_dropdowns)
+                )
             except lzma.LZMAError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True
@@ -1545,10 +1568,10 @@ class GrafanaDashboardAggregator(Object):
 
         if dashboards_path:
 
-            def _is_dashbaord(p: Path) -> bool:
+            def _is_dashboard(p: Path) -> bool:
                 return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
 
-            for path in filter(_is_dashbaord, Path(dashboards_path).glob("*")):
+            for path in filter(_is_dashboard, Path(dashboards_path).glob("*")):
                 # path = Path(path)
                 if event.app.name in path.name:
                     id = "file:{}".format(path.stem)
@@ -1563,6 +1586,7 @@ class GrafanaDashboardAggregator(Object):
             "charm": event.app.name,
             "content": content,
             "juju_topology": self._juju_topology(event),
+            "inject_dropdowns": True,
         }
 
     # This is not actually used in the dashboards, but is present to provide a secondary
