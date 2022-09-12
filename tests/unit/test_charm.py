@@ -8,9 +8,10 @@ import unittest
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import yaml
+from helpers import FakeProcessVersionCheck
+from ops.model import Container
 from ops.testing import Harness
 
-import grafana_server
 from charm import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH, GrafanaCharm
 
 MINIMAL_CONFIG = {"grafana-image-path": "grafana/grafana", "port": 3000}
@@ -119,7 +120,7 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.patch_exec)
         self.harness.set_model_name("testmodel")
         self.harness.begin()
-        self.harness.add_relation("grafana", "grafana")
+        self.harness.add_relation("grafana", "grafana-k8s")
 
         self.minimal_datasource_hash = hashlib.sha256(
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
@@ -261,10 +262,10 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
 
     @k8s_resource_multipatch
-    @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def test_workload_version_is_set(self):
         self.harness.container_pebble_ready("grafana")
-        self.assertEqual(self.harness.get_workload_version(), "1.0.0")
+        self.assertEqual(self.harness.get_workload_version(), "0.1.0")
 
     @k8s_resource_multipatch
     @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
@@ -343,7 +344,7 @@ class TestCharmReplication(unittest.TestCase):
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
         self.addCleanup(self.patch_exec)
-        self.harness.add_relation("grafana", "grafana")
+        self.harness.add_relation("grafana", "grafana-k8s")
         self.harness.set_leader(True)
         self.harness.begin()
 
@@ -366,7 +367,7 @@ class TestCharmReplication(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.charm.on.config_changed.emit()
         rel = self.harness.model.get_relation("grafana")
-        self.harness.add_relation_unit(rel.id, "grafana/1")
+        self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
 
         unit_ip = str(self.harness.charm.model.get_binding("grafana").network.bind_address)
         replica_address = self.harness.charm.get_peer_data("replica_primary")
@@ -387,7 +388,7 @@ class TestCharmReplication(unittest.TestCase):
         mock_unit_ip.return_value = fake_network
         self.harness.set_leader(False)
         rel = self.harness.model.get_relation("grafana")
-        self.harness.add_relation_unit(rel.id, "grafana/1")
+        self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
         self.harness.update_relation_data(
             rel.id, "grafana-k8s", {"replica_primary": json.dumps("1.2.3.4")}
         )
