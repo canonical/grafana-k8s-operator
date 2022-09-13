@@ -50,6 +50,7 @@ from ops.charm import (
     ActionEvent,
     CharmBase,
     ConfigChangedEvent,
+    HookEvent,
     RelationBrokenEvent,
     RelationChangedEvent,
     UpgradeCharmEvent,
@@ -146,6 +147,20 @@ class GrafanaCharm(CharmBase):
             self._on_grafana_source_changed,
         )
 
+        # -- self-monitoring
+        self.framework.observe(
+            self.source_consumer.on.sources_changed,
+            self._maybe_provision_own_dashboard,
+        )
+        self.framework.observe(
+            self.on["metrics-endpoint"].relation_joined,
+            self._maybe_provision_own_dashboard,
+        )
+        self.framework.observe(
+            self.on["metrics-endpoint"].relation_broken,
+            self._maybe_provision_own_dashboard,
+        )
+
         # -- grafana_dashboard relation observations
         self.dashboard_consumer = GrafanaDashboardConsumer(self, "grafana-dashboard")
         self.framework.observe(
@@ -220,10 +235,9 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`GrafanaSourceEvents` instance sent from the provider
         """
-        self._maybe_provision_own_dashboard()
         self._configure()
 
-    def _maybe_provision_own_dashboard(self) -> None:
+    def _maybe_provision_own_dashboard(self, event: HookEvent) -> None:
         """If all the prerequisites are enabled, provision a self-monitoring dashboard.
 
         Requires:
@@ -235,11 +249,11 @@ class GrafanaCharm(CharmBase):
         """
         container = self.unit.get_container(self.name)
         if not container.can_connect():
-            logger.debug("Cannot connect to Pebble yet, not provisioning own dashboard")
+            logger.warning("Cannot connect to Pebble yet, not provisioning own dashboard")
             return
 
-        source_related_apps = self.model.relations["grafana-source"]
-        scrape_related_apps = self.model.relations["metrics-endpoint"]
+        source_related_apps = [rel.app for rel in self.model.relations["grafana-source"]]
+        scrape_related_apps = [rel.app for rel in self.model.relations["metrics-endpoint"]]
 
         has_relation = any(
             [source for source in source_related_apps if source in scrape_related_apps]
@@ -254,12 +268,13 @@ class GrafanaCharm(CharmBase):
             # to squash all of the `validate_relation_direction` and structure around smashing
             # the datastructures for a self-monitoring use case. This is built-in in Grafana 9,
             # so it will FIXME be removed when we upgrade
-            container.push(dashboard_path, "src/self_dashboard.json", make_dirs=True)
-        elif not has_relation and "grafana_metrics.json" in container.list_files(
-            dashboards_dir_path, pattern="grafana_metrics.json"
-        ):
-            container.remove_path(dashboard_path)
-            logger.debug("Removed dashboard %s", dashboard_path)
+            container.push(
+                dashboard_path, Path("src/self_dashboard.json").read_bytes(), make_dirs=True
+            )
+        elif not has_relation or isinstance(event, RelationBrokenEvent):
+            if container.list_files(dashboards_dir_path, pattern="grafana_metrics.json"):
+                container.remove_path(dashboard_path)
+                logger.debug("Removed dashboard %s", dashboard_path)
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
         """Re-provision Grafana and its datasources on upgrade.
