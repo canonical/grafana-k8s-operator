@@ -528,7 +528,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by (statuscode) (irate(http_request_total{juju_charm=\"grafana-k8s\"}[5m]))",
+          "expr": "sum by (statuscode) (irate(grafana_http_request_duration_seconds_bucket{juju_charm=\"grafana-k8s\"}[5m]))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 3,
@@ -726,7 +726,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort(topk(8, sum by (handler) (http_request_total{juju_charm=\"grafana-k8s\"})))",
+          "expr": "sort(topk(8, sum by (handler) (grafana_http_request_duration_seconds_bucket{juju_charm=\"grafana-k8s\"})))",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -959,7 +959,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{juju_charm=\"grafana-k8s\"}[$__interval])) by (le,handler))",
+          "expr": "histogram_quantile(0.95, sum(rate(grafana_http_request_duration_seconds_bucket{juju_charm=\"grafana-k8s\"}[$__interval])) by (le,handler))",
           "interval": "",
           "legendFormat": "{{ handler }}",
           "refId": "A"
