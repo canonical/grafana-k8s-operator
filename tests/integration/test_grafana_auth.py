@@ -11,7 +11,7 @@ import asyncio
 import logging
 
 import pytest
-from helpers import check_grafana_is_ready, oci_image
+from helpers import check_grafana_is_ready, get_grafana_environment_variable, oci_image
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +24,7 @@ grafana_resources = {"grafana-image": oci_image("./metadata.yaml", "grafana-imag
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_and_relate_auth_provider_and_requirer(
-    ops_test, grafana_charm, grafana_tester_charm
-):
+async def test_auth_proxy_is_set(ops_test, grafana_charm, grafana_tester_charm):
     grafana_app_name = "grafana"
     tester_app_name = "grafana-tester"
 
@@ -49,3 +47,11 @@ async def test_deploy_and_relate_auth_provider_and_requirer(
         "{}:grafana-auth".format(grafana_app_name), "{}:grafana-auth".format(tester_app_name)
     )
     await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
+
+    _, actual_variable_value, _ = await get_grafana_environment_variable(
+        ops_test=ops_test,
+        app_name=grafana_app_name,
+        container_name="grafana",
+        env_var="GF_AUTH_PROXY_ENABLED",
+    )
+    assert actual_variable_value == "True"
