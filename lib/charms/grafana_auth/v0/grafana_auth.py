@@ -344,10 +344,6 @@ class AuthProvider(Object):
         if not relation or not self._auth_config:
             return
         if not self._validate_auth_config_json_schema():
-            logger.warning(
-                "Authentication configuration provided by application did not pass JSON schema validation, it won't be set in relation %d",
-                relation.id
-            )
             return
         relation_data = relation.data[self._charm.app]
         relation_data[AUTH] = json.dumps(self._auth_config)
@@ -370,7 +366,6 @@ class AuthProvider(Object):
 
         relation = self._charm.model.get_relation(self._relation_name)
         if not relation:
-            logger.warning("Relation %s has not been created yet", self._relation_name)
             return
         urls_json = relation.data[relation.app].get("urls", "")  # type: ignore
         if not urls_json:
@@ -489,10 +484,6 @@ class AuthRequirer(Object):
         try:
             validate({"application-data": {"urls": self._urls}}, REQUIRER_JSON_SCHEMA)
         except:  # noqa: E722
-            logger.warning(
-                "urls provided by application did not pass JSON schema validation, urls won't be set in relation %d",
-                relation.id
-            )
             return
         relation_data = relation.data[self._charm.app]
         relation_data["urls"] = json.dumps(self._urls)
@@ -516,7 +507,6 @@ class AuthRequirer(Object):
 
         relation = self._charm.model.get_relation(self._relation_name)
         if not relation:
-            logger.warning("Relation %s has not been created yet", self._relation_name)
             return
 
         auth_conf_json = relation.data[relation.app].get(AUTH, "")
