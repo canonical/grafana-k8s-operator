@@ -12,6 +12,7 @@ from helpers import FakeProcessVersionCheck
 from ops.model import Container
 from ops.testing import Harness
 
+import grafana_server
 from charm import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH, GrafanaCharm
 
 MINIMAL_CONFIG = {"grafana-image-path": "grafana/grafana", "port": 3000}
@@ -282,6 +283,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @k8s_resource_multipatch
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def test_config_is_updated_with_subpath(self):
         self.harness.set_leader(True)
 
@@ -295,6 +297,7 @@ class TestCharm(unittest.TestCase):
 
     @k8s_resource_multipatch
     @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     @patch("socket.gethostbyname", new=lambda *args: "1.2.3.4")
     @patch("socket.getfqdn", new=lambda *args: "grafana-k8s-0.testmodel.svc.cluster.local")
     def test_ingress_relation_sets_options_and_rel_data(self):
@@ -339,8 +342,11 @@ class TestCharm(unittest.TestCase):
         # the extra quoting and leaves regular YAML. Double parse it for the tests
         self.assertEqual(yaml.safe_load(yaml.safe_load(rel_data["config"])), expected_rel_data)
 
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
+    @k8s_resource_multipatch
     def test_config_is_updated_with_authentication_config(self):
         self.harness.set_leader(True)
+        self.harness.container_pebble_ready("grafana")
         example_auth_conf = {
             "proxy": {
                 "enabled": True,

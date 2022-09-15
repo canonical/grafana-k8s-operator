@@ -779,7 +779,7 @@ class GrafanaCharm(CharmBase):
         if self._auth_env_vars:
             extra_info.update(self._auth_env_vars)
 
-        grafana_path = self.model.config.get("web_external_url", "")
+        grafana_path = self.external_url
 
         # We have to do this dance because urlparse() doesn't have any good
         # truthiness, and parsing an empty string is still 'true'
@@ -1075,6 +1075,7 @@ class GrafanaCharm(CharmBase):
 
         return yaml.safe_dump({"http": {"routers": routers, "services": services}})
 
+    @property
     def _auth_env_vars(self):
         return self.get_peer_data("auth_conf_env_vars")
 
