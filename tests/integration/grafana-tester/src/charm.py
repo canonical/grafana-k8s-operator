@@ -12,6 +12,8 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus
 
+from lib.charms.grafana_auth.v0.grafana_auth import GrafanaAuthProxyProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,11 +25,18 @@ class GrafanaTesterCharm(CharmBase):
         self._name = "grafana-tester"
         self.grafana_source = GrafanaSourceProvider(self, source_type="prometheus")
         self.grafana_dashboard = GrafanaDashboardProvider(self)
+        self.grafana_auth_proxy_provider = GrafanaAuthProxyProvider(
+            self, relation_name="grafana-auth"
+        )
         self.framework.observe(
             self.on.grafana_tester_pebble_ready, self._on_grafana_tester_pebble_ready
         )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+
+        self.framework.observe(
+            self.grafana_auth_proxy_provider.on.urls_available, self._on_urls_available
+        )
 
     def _on_grafana_tester_pebble_ready(self, _):
         """Just set it ready. It's a pause image."""
@@ -40,6 +49,10 @@ class GrafanaTesterCharm(CharmBase):
             self.unit.status = BlockedStatus("Waiting for Pebble ready")
             return
 
+        self.unit.status = ActiveStatus()
+
+    def _on_urls_available(self, event):
+        self.urls = event.urls
         self.unit.status = ActiveStatus()
 
 
