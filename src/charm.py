@@ -707,6 +707,9 @@ class GrafanaCharm(CharmBase):
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
                             "GF_SECURITY_ADMIN_USER": self.model.config["admin_user"],
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
+                            "GF_USERS_AUTO_ASSIGN_ORG": self.model.config[
+                                "enable_auto_assign_org"
+                            ],
                             **extra_info,
                         },
                     }

@@ -29,6 +29,12 @@ options:
       host or a bare A record, this may be omitted.
     type: string
     default: ""
+  enable_auto_assign_org:
+    description: |
+      Set to true to automatically add new users to the main organization (id 1). When set to
+      false, new users automatically cause a new organization to be created for that new user.
+    type: boolean
+    default: true
   datasource_query_timeout:
     description: |
       The default timeout for querying a Grafana datasource. Each datasource can
