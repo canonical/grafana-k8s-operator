@@ -217,3 +217,12 @@ async def get_config_values(ops_test, app_name) -> dict:
     """Return the app's config, but filter out keys that do not have a value."""
     config = await ops_test.model.applications[app_name].get_config()
     return {key: config[key]["value"] for key in config if "value" in config[key]}
+
+
+async def get_grafana_environment_variable(
+    ops_test: OpsTest, app_name: str, container_name: str, env_var: str
+) -> str:
+    rc, stdout, stderr = await ops_test.juju(
+        "ssh", "--container", f"{container_name}", f"{app_name}/0", "echo", f"${env_var}"
+    )
+    return rc, stdout, stderr

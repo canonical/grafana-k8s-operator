@@ -55,8 +55,12 @@ def timed_memoizer(func):
 def copy_grafana_libraries_into_tester_charm(ops_test: OpsTest) -> None:
     """Ensure that the tester charm uses the current Grafana libraries."""
     libs = [
-        Path("lib/charms/grafana_k8s/v0/", lib)
-        for lib in ["grafana_dashboard.py", "grafana_source.py"]
+        Path("lib/charms/", lib)
+        for lib in [
+            "grafana_k8s/v0/grafana_dashboard.py",
+            "grafana_k8s/v0/grafana_source.py",
+            "grafana_auth/v0/grafana_auth.py",
+        ]
     ]
     for lib in libs:
         Path("tests/integration/grafana-tester", lib.parent).mkdir(parents=True, exist_ok=True)

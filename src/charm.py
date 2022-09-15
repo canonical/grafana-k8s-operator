@@ -29,10 +29,11 @@ import string
 import time
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Dict
 from urllib.parse import ParseResult, urlparse
 
 import yaml
+from charms.grafana_auth.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
@@ -80,6 +81,7 @@ REQUIRED_DATABASE_FIELDS = {
 }
 
 VALID_DATABASE_TYPES = {"mysql", "postgres", "sqlite3"}
+VALID_AUTHENTICATION_MODES = {"proxy"}
 
 CONFIG_PATH = "/etc/grafana/grafana-config.ini"
 PROVISIONING_PATH = "/etc/grafana/provisioning"
@@ -164,6 +166,16 @@ class GrafanaCharm(CharmBase):
             self, self.name, resource_reqs_func=self._resource_reqs_from_config
         )
         self.framework.observe(self.resource_patch.on.patch_failed, self._on_resource_patch_failed)
+        # -- grafana_auth relation observations
+        self.grafana_auth_requirer = AuthRequirer(
+            self,
+            relation_name="grafana-auth",
+            urls=[f"{self.app.name}:{PORT}"],
+            refresh_event=self.on.grafana_pebble_ready,
+        )
+        self.framework.observe(
+            self.grafana_auth_requirer.on.auth_conf_available, self._on_grafana_auth_conf_available
+        )
 
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
@@ -245,7 +257,6 @@ class GrafanaCharm(CharmBase):
         """
         if not self.containers["workload"].can_connect():
             return
-
         logger.debug("Handling grafana-k8a configuration change")
         restart = False
 
@@ -671,6 +682,9 @@ class GrafanaCharm(CharmBase):
             "GF_DATABASE_TYPE": "sqlite3",
         }
 
+        if self._auth_env_vars:
+            extra_info.update(self._auth_env_vars)
+
         grafana_path = self.model.config.get("web_external_url", "")
 
         # We have to do this dance because urlparse() doesn't have any good
@@ -912,6 +926,47 @@ class GrafanaCharm(CharmBase):
 
     def _on_resource_patch_failed(self, event: K8sResourcePatchFailedEvent):
         self.unit.status = BlockedStatus(event.message)
+
+    @property
+    def _auth_env_vars(self):
+        return self.get_peer_data("auth_conf_env_vars")
+
+    def _on_grafana_auth_conf_available(self, event: AuthRequirerCharmEvents):
+        """Event handler for the auth_conf_available event.
+
+        It sets authentication configuration environment variables if they have not been set yet.
+        Environment variables are stored in peer data.
+        The event can be emitted even there are no changes to the configuration so call `_configure` to check
+        and avoid restarting if that is not needed.
+
+        Args:
+            event: a :class:`AuthRequirerCharmEvents` auth config sent from the provider
+        """
+        if not self.unit.is_leader():
+            return
+        if not self._auth_env_vars:
+            env_vars = self.generate_auth_env_vars(event.auth)  # type: ignore[attr-defined]
+            if env_vars:
+                self.set_peer_data("auth_conf_env_vars", env_vars)
+                self._configure()
+
+    def generate_auth_env_vars(self, conf: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
+        """Generates a dictionary of environment variables from the authentication config it gets.
+
+        Args:
+            conf: grafana authentication configuration that has the authentication mode as top level key.
+        """
+        auth_mode = next(iter(conf))
+        if auth_mode not in VALID_AUTHENTICATION_MODES:
+            logger.warning("Invalid authentication mode")
+            return {}
+        env_vars = {}
+        auth_var_prefix = "GF_AUTH_" + auth_mode.upper() + "_"
+        mode_enabled_var = auth_var_prefix + "ENABLED"
+        env_vars[mode_enabled_var] = "True"
+        for var in conf[auth_mode].keys():
+            env_vars[auth_var_prefix + str(var).upper()] = str(conf[auth_mode][var])
+        return env_vars
 
 
 if __name__ == "__main__":
