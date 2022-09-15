@@ -51,6 +51,7 @@ from ops.charm import (
     ActionEvent,
     CharmBase,
     ConfigChangedEvent,
+    HookEvent,
     RelationBrokenEvent,
     RelationChangedEvent,
     UpgradeCharmEvent,
@@ -148,6 +149,20 @@ class GrafanaCharm(CharmBase):
             self._on_grafana_source_changed,
         )
 
+        # -- self-monitoring
+        self.framework.observe(
+            self.source_consumer.on.sources_changed,
+            self._maybe_provision_own_dashboard,
+        )
+        self.framework.observe(
+            self.on["metrics-endpoint"].relation_joined,
+            self._maybe_provision_own_dashboard,
+        )
+        self.framework.observe(
+            self.on["metrics-endpoint"].relation_broken,
+            self._maybe_provision_own_dashboard,
+        )
+
         # -- grafana_dashboard relation observations
         self.dashboard_consumer = GrafanaDashboardConsumer(self, "grafana-dashboard")
         self.framework.observe(
@@ -233,6 +248,45 @@ class GrafanaCharm(CharmBase):
             event: a :class:`GrafanaSourceEvents` instance sent from the provider
         """
         self._configure()
+
+    def _maybe_provision_own_dashboard(self, event: HookEvent) -> None:
+        """If all the prerequisites are enabled, provision a self-monitoring dashboard.
+
+        Requires:
+            A Prometheus relation on self.prometheus_scrape
+            The SAME Prometheus relation again on grafana_source
+
+        If those are true, we have a Prometheus scraping this Grafana, and we should
+        provision our dashboard.
+        """
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            logger.warning("Cannot connect to Pebble yet, not provisioning own dashboard")
+            return
+
+        source_related_apps = [rel.app for rel in self.model.relations["grafana-source"]]
+        scrape_related_apps = [rel.app for rel in self.model.relations["metrics-endpoint"]]
+
+        has_relation = any(
+            [source for source in source_related_apps if source in scrape_related_apps]
+        )
+
+        dashboards_dir_path = os.path.join(PROVISIONING_PATH, "dashboards")
+        self.init_dashboard_provisioning(dashboards_dir_path)
+
+        dashboard_path = os.path.join(dashboards_dir_path, "grafana_metrics.json")
+        if has_relation and self.unit.is_leader():
+            # This is not going through the library due to the massive refactor needed in order
+            # to squash all of the `validate_relation_direction` and structure around smashing
+            # the datastructures for a self-monitoring use case. This is built-in in Grafana 9,
+            # so it will FIXME be removed when we upgrade
+            container.push(
+                dashboard_path, Path("src/self_dashboard.json").read_bytes(), make_dirs=True
+            )
+        elif not has_relation or isinstance(event, RelationBrokenEvent):
+            if container.list_files(dashboards_dir_path, pattern="grafana_metrics.json"):
+                container.remove_path(dashboard_path)
+                logger.debug("Removed dashboard %s", dashboard_path)
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
         """Re-provision Grafana and its datasources on upgrade.
