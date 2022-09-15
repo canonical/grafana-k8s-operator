@@ -21,3 +21,5 @@ provides:
     interface: grafana_datasource
   grafana-dashboard:
     interface: grafana_dashboard
+  grafana-auth:
+    interface: grafana_auth

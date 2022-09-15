@@ -73,6 +73,8 @@ url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
 
 """
 
+AUTH_PROVIDER_APPLICATION = "auth_provider"
+
 
 def datasource_config(config):
     config_dict = yaml.safe_load(config)
@@ -120,6 +122,9 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.patch_exec)
         self.harness.set_model_name("testmodel")
         self.harness.begin()
+        self.grafana_auth_rel_id = self.harness.add_relation(
+            "grafana-auth", AUTH_PROVIDER_APPLICATION
+        )
         self.harness.add_relation("grafana", "grafana-k8s")
 
         self.minimal_datasource_hash = hashlib.sha256(
@@ -334,6 +339,28 @@ class TestCharm(unittest.TestCase):
         # the extra quoting and leaves regular YAML. Double parse it for the tests
         self.assertEqual(yaml.safe_load(yaml.safe_load(rel_data["config"])), expected_rel_data)
 
+    def test_config_is_updated_with_authentication_config(self):
+        self.harness.set_leader(True)
+        example_auth_conf = {
+            "proxy": {
+                "enabled": True,
+                "header_name": "X-WEBAUTH-USER",
+                "header_property": "email",
+                "auto_sign_up": False,
+                "sync_ttl": 10,
+            }
+        }
+        self.harness.update_relation_data(
+            self.grafana_auth_rel_id,
+            AUTH_PROVIDER_APPLICATION,
+            {"auth": json.dumps(example_auth_conf)},
+        )
+        services = (
+            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
+        )
+        self.assertIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())
+        self.assertEquals(services["environment"]["GF_AUTH_PROXY_ENABLED"], "True")
+
 
 class TestCharmReplication(unittest.TestCase):
     @k8s_resource_multipatch
@@ -344,6 +371,7 @@ class TestCharmReplication(unittest.TestCase):
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
         self.addCleanup(self.patch_exec)
+        self.harness.add_relation("grafana-auth", AUTH_PROVIDER_APPLICATION)
         self.harness.add_relation("grafana", "grafana-k8s")
         self.harness.set_leader(True)
         self.harness.begin()

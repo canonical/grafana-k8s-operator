@@ -5,3 +5,4 @@ markupsafe == 2.0.1
 git+https://github.com/canonical/operator#egg=ops
 pyyaml
 urllib3
+jsonschema

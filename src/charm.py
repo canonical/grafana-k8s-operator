@@ -29,10 +29,11 @@ import string
 import time
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Dict
 from urllib.parse import ParseResult, urlparse
 
 import yaml
+from charms.grafana_auth.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
@@ -83,6 +84,7 @@ REQUIRED_DATABASE_FIELDS = {
 }
 
 VALID_DATABASE_TYPES = {"mysql", "postgres", "sqlite3"}
+VALID_AUTHENTICATION_MODES = {"proxy"}
 
 CONFIG_PATH = "/etc/grafana/grafana-config.ini"
 PROVISIONING_PATH = "/etc/grafana/provisioning"
@@ -148,6 +150,20 @@ class GrafanaCharm(CharmBase):
             self._on_grafana_source_changed,
         )
 
+        # -- self-monitoring
+        self.framework.observe(
+            self.source_consumer.on.sources_changed,
+            self._maybe_provision_own_dashboard,
+        )
+        self.framework.observe(
+            self.on["metrics-endpoint"].relation_joined,
+            self._maybe_provision_own_dashboard,
+        )
+        self.framework.observe(
+            self.on["metrics-endpoint"].relation_broken,
+            self._maybe_provision_own_dashboard,
+        )
+
         # -- grafana_dashboard relation observations
         self.dashboard_consumer = GrafanaDashboardConsumer(self, "grafana-dashboard")
         self.framework.observe(
@@ -166,6 +182,16 @@ class GrafanaCharm(CharmBase):
             self, self.name, resource_reqs_func=self._resource_reqs_from_config
         )
         self.framework.observe(self.resource_patch.on.patch_failed, self._on_resource_patch_failed)
+        # -- grafana_auth relation observations
+        self.grafana_auth_requirer = AuthRequirer(
+            self,
+            relation_name="grafana-auth",
+            urls=[f"{self.app.name}:{PORT}"],
+            refresh_event=self.on.grafana_pebble_ready,
+        )
+        self.framework.observe(
+            self.grafana_auth_requirer.on.auth_conf_available, self._on_grafana_auth_conf_available
+        )
 
         # -- ingress via raw traefik_route
         # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
@@ -262,6 +288,45 @@ class GrafanaCharm(CharmBase):
         """
         self._configure()
 
+    def _maybe_provision_own_dashboard(self, event: HookEvent) -> None:
+        """If all the prerequisites are enabled, provision a self-monitoring dashboard.
+
+        Requires:
+            A Prometheus relation on self.prometheus_scrape
+            The SAME Prometheus relation again on grafana_source
+
+        If those are true, we have a Prometheus scraping this Grafana, and we should
+        provision our dashboard.
+        """
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            logger.warning("Cannot connect to Pebble yet, not provisioning own dashboard")
+            return
+
+        source_related_apps = [rel.app for rel in self.model.relations["grafana-source"]]
+        scrape_related_apps = [rel.app for rel in self.model.relations["metrics-endpoint"]]
+
+        has_relation = any(
+            [source for source in source_related_apps if source in scrape_related_apps]
+        )
+
+        dashboards_dir_path = os.path.join(PROVISIONING_PATH, "dashboards")
+        self.init_dashboard_provisioning(dashboards_dir_path)
+
+        dashboard_path = os.path.join(dashboards_dir_path, "grafana_metrics.json")
+        if has_relation and self.unit.is_leader():
+            # This is not going through the library due to the massive refactor needed in order
+            # to squash all of the `validate_relation_direction` and structure around smashing
+            # the datastructures for a self-monitoring use case. This is built-in in Grafana 9,
+            # so it will FIXME be removed when we upgrade
+            container.push(
+                dashboard_path, Path("src/self_dashboard.json").read_bytes(), make_dirs=True
+            )
+        elif not has_relation or isinstance(event, RelationBrokenEvent):
+            if container.list_files(dashboards_dir_path, pattern="grafana_metrics.json"):
+                container.remove_path(dashboard_path)
+                logger.debug("Removed dashboard %s", dashboard_path)
+
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
         """Re-provision Grafana and its datasources on upgrade.
 
@@ -285,7 +350,6 @@ class GrafanaCharm(CharmBase):
         """
         if not self.containers["workload"].can_connect():
             return
-
         logger.debug("Handling grafana-k8a configuration change")
         restart = False
 
@@ -712,6 +776,10 @@ class GrafanaCharm(CharmBase):
         }
 
         grafana_path = self.external_url
+        if self._auth_env_vars:
+            extra_info.update(self._auth_env_vars)
+
+        grafana_path = self.model.config.get("web_external_url", "")
 
         # We have to do this dance because urlparse() doesn't have any good
         # truthiness, and parsing an empty string is still 'true'
@@ -1006,6 +1074,46 @@ class GrafanaCharm(CharmBase):
         }
 
         return yaml.safe_dump({"http": {"routers": routers, "services": services}})
+
+    def _auth_env_vars(self):
+        return self.get_peer_data("auth_conf_env_vars")
+
+    def _on_grafana_auth_conf_available(self, event: AuthRequirerCharmEvents):
+        """Event handler for the auth_conf_available event.
+
+        It sets authentication configuration environment variables if they have not been set yet.
+        Environment variables are stored in peer data.
+        The event can be emitted even there are no changes to the configuration so call `_configure` to check
+        and avoid restarting if that is not needed.
+
+        Args:
+            event: a :class:`AuthRequirerCharmEvents` auth config sent from the provider
+        """
+        if not self.unit.is_leader():
+            return
+        if not self._auth_env_vars:
+            env_vars = self.generate_auth_env_vars(event.auth)  # type: ignore[attr-defined]
+            if env_vars:
+                self.set_peer_data("auth_conf_env_vars", env_vars)
+                self._configure()
+
+    def generate_auth_env_vars(self, conf: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
+        """Generates a dictionary of environment variables from the authentication config it gets.
+
+        Args:
+            conf: grafana authentication configuration that has the authentication mode as top level key.
+        """
+        auth_mode = next(iter(conf))
+        if auth_mode not in VALID_AUTHENTICATION_MODES:
+            logger.warning("Invalid authentication mode")
+            return {}
+        env_vars = {}
+        auth_var_prefix = "GF_AUTH_" + auth_mode.upper() + "_"
+        mode_enabled_var = auth_var_prefix + "ENABLED"
+        env_vars[mode_enabled_var] = "True"
+        for var in conf[auth_mode].keys():
+            env_vars[auth_var_prefix + str(var).upper()] = str(conf[auth_mode][var])
+        return env_vars
 
 
 if __name__ == "__main__":
