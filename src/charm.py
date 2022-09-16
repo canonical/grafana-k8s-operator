@@ -47,6 +47,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     adjust_resource_requirements,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.charm import (
     ActionEvent,
     CharmBase,
@@ -54,6 +55,7 @@ from ops.charm import (
     HookEvent,
     RelationBrokenEvent,
     RelationChangedEvent,
+    RelationJoinedEvent,
     UpgradeCharmEvent,
 )
 from ops.framework import StoredState
@@ -89,7 +91,6 @@ PROVISIONING_PATH = "/etc/grafana/provisioning"
 DATASOURCES_PATH = "/etc/grafana/provisioning/datasources/datasources.yaml"
 DATABASE = "database"
 PEER = "grafana"
-
 PORT = 3000
 
 
@@ -192,6 +193,14 @@ class GrafanaCharm(CharmBase):
             self.grafana_auth_requirer.on.auth_conf_available, self._on_grafana_auth_conf_available
         )
 
+        # -- ingress via raw traefik_route
+        # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
+        # so this may be none. Rely on `self.ingress.is_ready` later to check
+        self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
+        self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
+        self.framework.observe(self.on.leader_elected, self._configure_ingress)
+        self.framework.observe(self.on.config_changed, self._configure_ingress)
+
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
         self._patch_k8s_service()
@@ -209,6 +218,36 @@ class GrafanaCharm(CharmBase):
         """
         self._configure()
         self._configure_replication()
+
+    def _configure_ingress(self, event: HookEvent) -> None:
+        """Set up ingress if a relation is joined, config changed, or a new leader election.
+
+        Since ingress-per-unit and ingress-per-app are not appropriate, as only the Grafana
+        leader must be exposed over ingress in order for interactions with sqlite replication
+        to work as expected to propagate changes across to follower units, ensuring that things
+        are configured correctly on election is crucial.
+
+        Also since :class:`TraefikRouteRequirer` may not have been constructed with an existing
+        relation if a :class:`RelationJoinedEvent` comes through during the charm lifecycle, if we
+        get one here, we should recreate it, but OF will give us grief about "two objects claiming
+        to be ...", so manipulate its private `_relation` variable instead.
+
+        Args:
+            event: a :class:`HookEvent` to signal a change we may need to respond to.
+        """
+        if not self.unit.is_leader():
+            return
+
+        # If it's a RelationJoinedEvent, set it in the ingress object
+        if isinstance(event, RelationJoinedEvent):
+            self.ingress._relation = event.relation
+
+        # No matter what, check readiness -- this blindly checks whether `ingress._relation` is not
+        # None, so it overlaps a little with the above, but works as expected on leader elections
+        # and config-change
+        if self.ingress.is_ready():
+            self._configure()
+            self.ingress.submit_to_traefik(self._ingress_config)
 
     def _configure_replication(self) -> None:
         """Checks to ensure that the leader is streaming DB changes, and others are listening.
@@ -736,10 +775,11 @@ class GrafanaCharm(CharmBase):
             "GF_DATABASE_TYPE": "sqlite3",
         }
 
+        grafana_path = self.external_url
         if self._auth_env_vars:
             extra_info.update(self._auth_env_vars)
 
-        grafana_path = self.model.config.get("web_external_url", "")
+        grafana_path = self.external_url
 
         # We have to do this dance because urlparse() doesn't have any good
         # truthiness, and parsing an empty string is still 'true'
@@ -980,6 +1020,60 @@ class GrafanaCharm(CharmBase):
 
     def _on_resource_patch_failed(self, event: K8sResourcePatchFailedEvent):
         self.unit.status = BlockedStatus(event.message)
+
+    @property
+    def external_url(self) -> str:
+        """Return the external hostname configured, if any."""
+        baseurl = "http://{}:{}".format(socket.getfqdn(), PORT)
+        web_external_url = self.model.config.get("web_external_url", "")
+
+        if web_external_url:
+            return web_external_url
+
+        if self.ingress.is_ready():
+            return "{}/{}".format(baseurl, "{}-{}".format(self.model.name, self.model.app.name))
+
+        return baseurl
+
+    @property
+    def _ingress_config(self) -> str:
+        """Build a raw ingress configuration for Traefik."""
+        fqdn = urlparse(socket.getfqdn()).path
+        domain = fqdn.split(
+            "{}.{}.".format(self.model.unit.name.replace("/", "-"), self.model.name)
+        )[1]
+
+        external_path = urlparse(self.external_url).path or "{}-{}".format(
+            self.model.name, self.model.app.name
+        )
+
+        routers = {
+            "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
+                "entryPoints": ["web"],
+                "rule": "PathPrefix(`{}`)".format(external_path),
+                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
+            }
+        }
+
+        services = {
+            "juju-{}-{}-service".format(self.model.name, self.model.app.name): {
+                "loadBalancer": {
+                    "servers": [
+                        {
+                            "url": "http://{}.{}-endpoints.{}.{}:{}".format(
+                                self.model.unit.name.replace("/", "-"),
+                                self.model.app.name,
+                                self.model.name,
+                                domain,
+                                PORT,
+                            )
+                        }
+                    ]
+                }
+            }
+        }
+
+        return yaml.safe_dump({"http": {"routers": routers, "services": services}})
 
     @property
     def _auth_env_vars(self):

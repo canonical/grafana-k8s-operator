@@ -6,13 +6,12 @@
 
 import logging
 
+from charms.grafana_auth.v0.grafana_auth import GrafanaAuthProxyProvider
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus
-
-from lib.charms.grafana_auth.v0.grafana_auth import GrafanaAuthProxyProvider
 
 logger = logging.getLogger(__name__)
 

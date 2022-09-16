@@ -20,7 +20,10 @@ tester_resources = {
         "./tests/integration/grafana-tester/metadata.yaml", "grafana-tester-image"
     )
 }
-grafana_resources = {"grafana-image": oci_image("./metadata.yaml", "grafana-image")}
+grafana_resources = {
+    "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
+    "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
+}
 
 
 @pytest.mark.abort_on_fail
