@@ -89,13 +89,7 @@ class ExampleRequirerCharm(CharmBase):
 
 import json
 import logging
-from typing import (
-    Any,
-    Dict,
-    List,
-    Union,
-    Optional,
-)
+from typing import Any, Dict, List, Optional, Union
 
 from jsonschema import validate  # type: ignore[import]
 from ops.charm import (
@@ -107,12 +101,12 @@ from ops.charm import (
     RelationJoinedEvent,
 )
 from ops.framework import (
+    BoundEvent,
     EventBase,
     EventSource,
     Object,
     StoredDict,
     StoredList,
-    BoundEvent,
 )
 
 # The unique Charmhub library identifier, never change it
@@ -287,7 +281,8 @@ class AuthProvider(Object):
     """Base class for authentication configuration provider classes.
 
     This class shouldn't be initialized,
-    Its children classes define the authentication mode and configuration to be used."""
+    Its children classes define the authentication mode and configuration to be used.
+    """
 
     on = AuthProviderCharmEvents()
 
@@ -513,8 +508,7 @@ class AuthRequirer(Object):
 
         if not auth_conf_json:
             logger.warning(
-                "No authentication config found in %s relation data",
-                self._relation_name
+                "No authentication config found in %s relation data", self._relation_name
             )
             return
 
