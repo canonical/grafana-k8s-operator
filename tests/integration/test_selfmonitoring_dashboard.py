@@ -25,11 +25,11 @@ grafana_resources = {
     "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
 }
 grafana_app_name = "grafana"
-tester_app_name = "grafana-tester"
+prometheus_app_name = "prometheus"
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy(ops_test, grafana_charm, grafana_tester_charm):
+async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.deploy(
             grafana_charm,
@@ -38,11 +38,14 @@ async def test_deploy(ops_test, grafana_charm, grafana_tester_charm):
             trust=True,
         ),
         ops_test.model.deploy(
-            grafana_tester_charm, resources=tester_resources, application_name=tester_app_name
+            "prometheus-k8s", channel="edge", trust=True, application_name=prometheus_app_name
         ),
     )
     await ops_test.model.wait_for_idle(
-        apps=[grafana_app_name, tester_app_name], status="active", wait_for_units=1, timeout=300
+        apps=[grafana_app_name, prometheus_app_name],
+        status="active",
+        wait_for_units=1,
+        timeout=300,
     )
 
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
@@ -51,25 +54,35 @@ async def test_deploy(ops_test, grafana_charm, grafana_tester_charm):
 
 
 @pytest.mark.abort_on_fail
-async def test_grafana_dashboard_relation_data_with_grafana_tester(ops_test):
-    """Test basic functionality of grafana-dashboard relation interface."""
-    await ops_test.model.add_relation(
-        "{}:grafana-dashboard".format(grafana_app_name),
-        "{}:grafana-dashboard".format(tester_app_name),
+async def test_grafana_self_monitoring_dashboard_is_present(ops_test):
+    """Relate and ensure the dashboard is present."""
+    await asyncio.gather(
+        ops_test.model.add_relation(
+            "{}:metrics-endpoint".format(grafana_app_name),
+            "{}".format(prometheus_app_name),
+        ),
+        ops_test.model.add_relation(
+            "{}:grafana-source".format(prometheus_app_name),
+            "{}".format(grafana_app_name),
+        ),
     )
-    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
+    await ops_test.model.wait_for_idle(
+        apps=[grafana_app_name, prometheus_app_name], status="active", idle_period=30
+    )
 
-    tester_dashboard = await get_dashboard_by_search(
-        ops_test, grafana_app_name, 0, "Grafana Tester"
+    self_dashboard = await get_dashboard_by_search(
+        ops_test, grafana_app_name, 0, "Grafana Self Monitoring"
     )
-    assert tester_dashboard != {}
+    assert self_dashboard != {}
 
 
 @pytest.mark.abort_on_fail
 async def test_remove(ops_test):
-    logger.info("Removing %s", tester_app_name)
-    await ops_test.model.applications[tester_app_name].remove()
-    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active", timeout=300)
+    logger.info("Removing %s", prometheus_app_name)
+    await ops_test.model.applications[prometheus_app_name].remove()
+    await ops_test.model.wait_for_idle(
+        apps=[grafana_app_name], status="active", timeout=300, idle_period=60
+    )
 
     relation_removed_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)
     assert relation_removed_dashboards == []

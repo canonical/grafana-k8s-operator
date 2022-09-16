@@ -9,9 +9,10 @@ import uuid
 from unittest.mock import patch
 
 from charms.grafana_k8s.v0.grafana_dashboard import (
-    TEMPLATE_DROPDOWNS,
+    DATASOURCE_TEMPLATE_DROPDOWNS,
+    TOPOLOGY_TEMPLATE_DROPDOWNS,
+    CosTool,
     GrafanaDashboardConsumer,
-    PromqlTransformer,
 )
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -22,6 +23,7 @@ if "unittest.util" in __import__("sys").modules:
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
 
 MODEL_INFO = {"name": "testing", "uuid": "abcdefgh-1234"}
+TEMPLATE_DROPDOWNS = TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS
 
 DASHBOARD_TEMPLATE = """
 {
@@ -210,7 +212,7 @@ class ConsumerCharm(CharmBase):
         super().__init__(*args)
         self._stored.set_default(dashboard_events=0)
 
-        self.transformer = PromqlTransformer(self)
+        self.transformer = CosTool(self)
         self.grafana_consumer = GrafanaDashboardConsumer(self)
         self.framework.observe(self.grafana_consumer.on.dashboards_changed, self.dashboard_events)
 
@@ -236,10 +238,6 @@ class TestDashboardLabelInjector(unittest.TestCase):
     def setUp(self):
         meta = open("metadata.yaml")
         self.harness = Harness(ConsumerCharm, meta=meta)
-        self.harness.add_resource(
-            "promql-transform-amd64",
-            open("./promql-transform", "rb").read(),
-        )
         self.harness.set_model_info(name=MODEL_INFO["name"], uuid=MODEL_INFO["uuid"])
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)

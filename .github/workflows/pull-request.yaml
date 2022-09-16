@@ -1,0 +1,13 @@
+name: Pull Requests
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pull-request:
+    name: PR
+    uses: canonical/observability/.github/workflows/pull-request.yaml@main
+    secrets: inherit
+

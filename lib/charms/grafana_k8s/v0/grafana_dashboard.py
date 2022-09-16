@@ -176,6 +176,7 @@ The consuming charm should decompress the dashboard.
 """
 
 import base64
+import hashlib
 import json
 import logging
 import lzma
@@ -183,10 +184,12 @@ import os
 import platform
 import re
 import subprocess
+import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
@@ -205,7 +208,7 @@ from ops.framework import (
     StoredList,
     StoredState,
 )
-from ops.model import ModelError, Relation
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -215,7 +218,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 15
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +227,7 @@ DEFAULT_RELATION_NAME = "grafana-dashboard"
 DEFAULT_PEER_NAME = "grafana"
 RELATION_INTERFACE_NAME = "grafana_dashboard"
 
-TEMPLATE_DROPDOWNS = [
+TOPOLOGY_TEMPLATE_DROPDOWNS = [  # type: ignore
     {
         "allValue": None,
         "datasource": "${prometheusds}",
@@ -325,6 +328,9 @@ TEMPLATE_DROPDOWNS = [
         "type": "query",
         "useTags": False,
     },
+]
+
+DATASOURCE_TEMPLATE_DROPDOWNS = [  # type: ignore
     {
         "description": None,
         "error": None,
@@ -533,7 +539,7 @@ def _decode_dashboard_content(encoded_content: str) -> str:
     return lzma.decompress(base64.b64decode(encoded_content.encode("utf-8"))).decode()
 
 
-def _convert_dashboard_fields(content: str) -> str:
+def _convert_dashboard_fields(content: str, inject_dropdowns: bool = True) -> str:
     """Make sure values are present for Juju topology.
 
     Inserts Juju topology variables and selectors into the template, as well as
@@ -543,20 +549,35 @@ def _convert_dashboard_fields(content: str) -> str:
     datasources = {}
     existing_templates = False
 
+    template_dropdowns = (
+        TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS  # type: ignore
+        if inject_dropdowns
+        else DATASOURCE_TEMPLATE_DROPDOWNS
+    )
+
+    # If the dashboard has __inputs, get the names to replace them. These are stripped
+    # from reactive dashboards in GrafanaDashboardAggregator, but charm authors in
+    # newer charms may import them directly from the marketplace
+    if "__inputs" in dict_content:
+        for field in dict_content["__inputs"]:
+            if "type" in field and field["type"] == "datasource":
+                datasources[field["name"]] = field["pluginName"].lower()
+        del dict_content["__inputs"]
+
     # If no existing template variables exist, just insert our own
     if "templating" not in dict_content:
-        dict_content["templating"] = {"list": [d for d in TEMPLATE_DROPDOWNS]}
+        dict_content["templating"] = {"list": [d for d in template_dropdowns]}  # type: ignore
     else:
         # Otherwise, set a flag so we can go back later
         existing_templates = True
-        for maybe in dict_content["templating"]["list"]:
+        for template_value in dict_content["templating"]["list"]:
             # Build a list of `datasource_name`: `datasource_type` mappings
             # The "query" field is actually "prometheus", "loki", "influxdb", etc
-            if "type" in maybe and maybe["type"] == "datasource":
-                datasources[maybe["name"]] = maybe["query"]
+            if "type" in template_value and template_value["type"] == "datasource":
+                datasources[template_value["name"]] = template_value["query"].lower()
 
         # Put our own variables in the template
-        for d in TEMPLATE_DROPDOWNS:
+        for d in template_dropdowns:  # type: ignore
             if d not in dict_content["templating"]["list"]:
                 dict_content["templating"]["list"].insert(0, d)
 
@@ -593,7 +614,7 @@ def _replace_template_fields(  # noqa: C901
             if not existing_templates:
                 panel["datasource"] = "${prometheusds}"
             else:
-                if panel["datasource"] in replacements.values():
+                if panel["datasource"].lower() in replacements.values():
                     # Already a known template variable
                     continue
                 if not panel["datasource"]:
@@ -621,8 +642,8 @@ def _replace_template_fields(  # noqa: C901
     return dict_content
 
 
-def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer") -> str:
-    """Inject Juju topology into panel expressions via PromqlTransformer.
+def _inject_labels(content: str, topology: dict, transformer: "CosTool") -> str:
+    """Inject Juju topology into panel expressions via CosTool.
 
     A dashboard will have a structure approximating:
         {
@@ -658,7 +679,7 @@ def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer
     targets. It could have multiple targets of which only one has an `expr` to evaluate. We need
     to try to handle all of these concisely.
 
-    `promql-transform` (`github.com/prometheus/prometheus/promql/parser` as a Go module in general)
+    `cos-tool` (`github.com/canonical/cos-tool` as a Go module in general)
     does not know "Grafana-isms", such as using `[$_variable]` to modify the query from the user
     interface, so we add placeholders (as `5y`, since it must parse, but a dashboard looking for
     five years for a panel query would be unusual).
@@ -666,7 +687,7 @@ def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer
     Args:
         content: dashboard content as a string
         topology: a dict containing topology values
-        transformer: a 'PromqlTransformer' instance
+        transformer: a 'CosTool' instance
     Returns:
         dashboard content with replaced values.
     """
@@ -696,13 +717,13 @@ def _inject_labels(content: str, topology: dict, transformer: "PromqlTransformer
     return json.dumps(dict_content)
 
 
-def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer") -> dict:
-    """Inject Juju topology into panel expressions via PromqlTransformer.
+def _modify_panel(panel: dict, topology: dict, transformer: "CosTool") -> dict:
+    """Inject Juju topology into panel expressions via CosTool.
 
     Args:
         panel: a dashboard panel as a dict
         topology: a dict containing topology values
-        transformer: a 'PromqlTransformer' instance
+        transformer: a 'CosTool' instance
     Returns:
         the panel with injected values
     """
@@ -739,7 +760,7 @@ def _modify_panel(panel: dict, topology: dict, transformer: "PromqlTransformer")
         # actual type is without re-implementing a complete dashboard parser, but no
         # harm will some from passing invalid promql -- we'll just get the original back.
         #
-        replacement = transformer.apply_label_matcher(expr, topology)
+        replacement = transformer.inject_label_matchers(expr, topology, "promql")
 
         if replacement == target["expr"]:
             # promql-tranform caught an error. Move on
@@ -818,19 +839,25 @@ class GrafanaDashboardEvent(EventBase):
     Enables us to set a clear status on the provider.
     """
 
-    def __init__(self, handle, error_message: str = "", valid: bool = False):
+    def __init__(self, handle, errors: List[Dict[str, str]] = [], valid: bool = False):
         super().__init__(handle)
-        self.error_message = error_message
+        self.errors = errors
+        self.error_message = "; ".join([error["error"] for error in errors if "error" in error])
         self.valid = valid
 
     def snapshot(self) -> Dict:
         """Save grafana source information."""
-        return {"error_message": self.error_message, "valid": self.valid}
+        return {
+            "error_message": self.error_message,
+            "valid": self.valid,
+            "errors": json.dumps(self.errors),
+        }
 
     def restore(self, snapshot):
         """Restore grafana source information."""
         self.error_message = snapshot["error_message"]
         self.valid = snapshot["valid"]
+        self.errors = json.loads(snapshot["errors"])
 
 
 class GrafanaProviderEvents(ObjectEvents):
@@ -935,13 +962,15 @@ class GrafanaDashboardProvider(Object):
             self._on_grafana_dashboard_relation_changed,
         )
 
-    def add_dashboard(self, content: str) -> None:
+    def add_dashboard(self, content: str, inject_dropdowns: bool = True) -> None:
         """Add a dashboard to the relation managed by this :class:`GrafanaDashboardProvider`.
 
         Args:
             content: a string representing a Jinja template. Currently, no
                 global variables are added to the Jinja template evaluation
                 context.
+            inject_dropdowns: a :boolean: indicating whether topology dropdowns should be
+                added to the dashboard
         """
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
@@ -952,7 +981,11 @@ class GrafanaDashboardProvider(Object):
         # Use as id the first chars of the encoded dashboard, so that
         # it is predictable across units.
         id = "prog:{}".format(encoded_dashboard[-24:-16])
-        stored_dashboard_templates[id] = self._content_to_dashboard_object(encoded_dashboard)
+
+        stored_dashboard_templates[id] = self._content_to_dashboard_object(
+            encoded_dashboard, inject_dropdowns
+        )
+        stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -979,7 +1012,9 @@ class GrafanaDashboardProvider(Object):
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
                 self._upset_dashboards_on_relation(dashboard_relation)
 
-    def _update_all_dashboards_from_dir(self, _: Optional[HookEvent] = None) -> None:
+    def _update_all_dashboards_from_dir(
+        self, _: Optional[HookEvent] = None, inject_dropdowns: bool = True
+    ) -> None:
         """Scans the built-in dashboards and updates relations with changes."""
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
@@ -994,15 +1029,17 @@ class GrafanaDashboardProvider(Object):
                     del stored_dashboard_templates[dashboard_id]
 
             # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
-            # lambda for the filter
-            for path in filter(
-                lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
-                Path(self._dashboards_path).glob("*"),
-            ):
+            # custom function for the filter
+            def _is_dashboard(p: Path) -> bool:
+                return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+
+            for path in filter(_is_dashboard, Path(self._dashboards_path).glob("*")):
+                # path = Path(path)
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
-                    _encode_dashboard_content(path.read_bytes())
+                    _encode_dashboard_content(path.read_bytes()), inject_dropdowns
                 )
+                stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
             self._stored.dashboard_templates = stored_dashboard_templates
 
@@ -1010,14 +1047,28 @@ class GrafanaDashboardProvider(Object):
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
                     self._upset_dashboards_on_relation(dashboard_relation)
 
-    def _reinitialize_dashboard_data(self) -> None:
+    def _generate_alt_uid(self, key: str) -> str:
+        """Generate alternative uid for dashboards.
+
+        Args:
+            key: A string used (along with charm.meta.name) to build the hash uid.
+
+        Returns: A hash string.
+        """
+        raw_dashboard_alt_uid = "{}-{}".format(self._charm.meta.name, key)
+        return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
+
+    def _reinitialize_dashboard_data(self, inject_dropdowns: bool = True) -> None:
         """Triggers a reload of dashboard outside of an eventing workflow.
+
+        Args:
+            inject_dropdowns: a :bool: used to indicate whether topology dropdowns should be added
 
         This will destroy any existing relation data.
         """
         try:
             _resolve_dir_against_charm_path(self._charm, self._dashboards_path)
-            self._update_all_dashboards_from_dir()
+            self._update_all_dashboards_from_dir(inject_dropdowns=inject_dropdowns)
 
         except InvalidDirectoryPathError as e:
             logger.warning(
@@ -1078,11 +1129,12 @@ class GrafanaDashboardProvider(Object):
 
         relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
-    def _content_to_dashboard_object(self, content: str) -> Dict:
+    def _content_to_dashboard_object(self, content: str, inject_dropdowns: bool = True) -> Dict:
         return {
             "charm": self._charm.meta.name,
             "content": content,
             "juju_topology": self._juju_topology,
+            "inject_dropdowns": inject_dropdowns,
         }
 
     # This is not actually used in the dashboards, but is present to provide a secondary
@@ -1152,7 +1204,7 @@ class GrafanaDashboardConsumer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self._tranformer = PromqlTransformer(self._charm)
+        self._tranformer = CosTool(self._charm)
 
         self._stored.set_default(dashboards=dict())
 
@@ -1206,7 +1258,7 @@ class GrafanaDashboardConsumer(Object):
             return
         self.on.dashboards_changed.emit()
 
-    def update_dashboards(self, relation: Optional[Relation] = None) -> None:
+    def update_dashboards(self, relation: Relation = None) -> None:
         """Re-establish dashboards on one or more relations.
 
         If something changes between this library and a datasource, try to re-establish
@@ -1224,7 +1276,7 @@ class GrafanaDashboardConsumer(Object):
             )
 
             for relation in relations:
-                self._render_dashboards_and_signal_changed(relation)  # type: ignore
+                self._render_dashboards_and_signal_changed(relation)
 
         if changes:
             self.on.dashboards_changed.emit()
@@ -1255,7 +1307,7 @@ class GrafanaDashboardConsumer(Object):
         """
         other_app = relation.app
 
-        raw_data = relation.data[other_app].get("dashboards", {})
+        raw_data = relation.data[other_app].get("dashboards", {})  # type: ignore
 
         if not raw_data:
             logger.warning(
@@ -1272,8 +1324,8 @@ class GrafanaDashboardConsumer(Object):
 
         # Import only if a charmed operator uses the consumer, we don't impose these
         # dependencies on the client
-        from jinja2 import Template  # type: ignore
-        from jinja2.exceptions import TemplateSyntaxError  # type: ignore
+        from jinja2 import Template
+        from jinja2.exceptions import TemplateSyntaxError
 
         # The dashboards are WAY too big since this ultimately calls out to Juju to
         # set the relation data, and it overflows the maximum argument length for
@@ -1293,12 +1345,15 @@ class GrafanaDashboardConsumer(Object):
             topology = template.get("juju_topology", {})
             try:
                 decoded_content = _decode_dashboard_content(template["content"])
+                inject_dropdowns = template.get("inject_dropdowns", True)
                 content = Template(decoded_content).render()
-                content = _convert_dashboard_fields(content)
                 if topology:
                     content = _inject_labels(content, topology, self._tranformer)
 
-                content = _encode_dashboard_content(content)
+                content = self._manage_dashboard_uid(content, template)
+                content = _encode_dashboard_content(
+                    _convert_dashboard_fields(content, inject_dropdowns)
+                )
             except lzma.LZMAError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True
@@ -1369,6 +1424,15 @@ class GrafanaDashboardConsumer(Object):
                 self.set_peer_data("dashboards", stored_dashboards)
                 return True
 
+    def _manage_dashboard_uid(self, dashboard: str, template: dict) -> str:
+        """Add an uid to the dashboard if it is not present."""
+        dashboard = json.loads(dashboard)
+
+        if not dashboard.get("uid", None) and "dashboard_alt_uid" in template:
+            dashboard["uid"] = template["dashboard_alt_uid"]
+
+        return json.dumps(dashboard)
+
     def _remove_all_dashboards_for_relation(self, relation: Relation) -> None:
         """If an errored dashboard is in stored data, remove it and trigger a deletion."""
         if self._get_stored_dashboards(relation.id):
@@ -1415,11 +1479,11 @@ class GrafanaDashboardConsumer(Object):
 
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore
+        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore[attr-defined]
 
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
-        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore
+        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore[attr-defined]
         return json.loads(data) if data else {}
 
 
@@ -1668,10 +1732,12 @@ class GrafanaDashboardAggregator(Object):
             )
 
         if dashboards_path:
-            for path in filter(
-                lambda p: p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl")),
-                Path(dashboards_path).glob("*"),
-            ):
+
+            def _is_dashboard(p: Path) -> bool:
+                return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+
+            for path in filter(_is_dashboard, Path(dashboards_path).glob("*")):
+                # path = Path(path)
                 if event.app.name in path.name:
                     id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
@@ -1685,6 +1751,7 @@ class GrafanaDashboardAggregator(Object):
             "charm": event.app.name,
             "content": content,
             "juju_topology": self._juju_topology(event),
+            "inject_dropdowns": True,
         }
 
     # This is not actually used in the dashboards, but is present to provide a secondary
@@ -1699,8 +1766,8 @@ class GrafanaDashboardAggregator(Object):
         }
 
 
-class PromqlTransformer:
-    """Uses promql-transform to inject label matchers into alert rule expressions."""
+class CosTool:
+    """Uses cos-tool to inject label matchers into alert rule expressions and validate rules."""
 
     _path = None
     _disabled = False
@@ -1710,17 +1777,17 @@ class PromqlTransformer:
 
     @property
     def path(self):
-        """Lazy lookup of the path of promql-transform."""
+        """Lazy lookup of the path of cos-tool."""
         if self._disabled:
             return None
         if not self._path:
-            self._path = self._get_transformer_path()
+            self._path = self._get_tool_path()
             if not self._path:
                 logger.debug("Skipping injection of juju topology as label matchers")
                 self._disabled = True
         return self._path
 
-    def apply_label_matchers(self, rules):
+    def apply_label_matchers(self, rules: dict, type: str) -> dict:
         """Will apply label matchers to the expression of all alerts in all supplied groups."""
         if not self.path:
             return rules
@@ -1740,46 +1807,80 @@ class PromqlTransformer:
                     if label in rule["labels"]:
                         topology[label] = rule["labels"][label]
 
-                rule["expr"] = self.apply_label_matcher(rule["expr"], topology)
+                rule["expr"] = self.inject_label_matchers(rule["expr"], topology, type)
         return rules
 
-    def apply_label_matcher(self, expression: str, topology: dict) -> str:
-        """Apply label matchers to a single expression."""
+    def validate_alert_rules(self, rules: dict) -> Tuple[bool, str]:
+        """Will validate correctness of alert rules, returning a boolean and any errors."""
+        if not self.path:
+            logger.debug("`cos-tool` unavailable. Not validating alert correctness.")
+            return True, ""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rule_path = Path(tmpdir + "/validate_rule.yaml")
+
+            # Smash "our" rules format into what upstream actually uses, which is more like:
+            #
+            # groups:
+            #   - name: foo
+            #     rules:
+            #       - alert: SomeAlert
+            #         expr: up
+            #       - alert: OtherAlert
+            #         expr: up
+            transformed_rules = {"groups": []}  # type: ignore
+            for rule in rules["groups"]:
+                transformed = {"name": str(uuid.uuid4()), "rules": [rule]}
+                transformed_rules["groups"].append(transformed)
+
+            rule_path.write_text(yaml.dump(transformed_rules))
+
+            args = [str(self.path), "validate", str(rule_path)]
+            # noinspection PyBroadException
+            try:
+                self._exec(args)
+                return True, ""
+            except subprocess.CalledProcessError as e:
+                logger.debug("Validating the rules failed: %s", e.output)
+                return False, ", ".join([line for line in e.output if "error validating" in line])
+
+    def inject_label_matchers(self, expression: str, topology: dict, type: str) -> str:
+        """Add label matchers to an expression."""
         if not topology:
             return expression
         if not self.path:
-            logger.debug(
-                "`promql-transform` unavailable. leaving expression unchanged: %s", expression
-            )
+            logger.debug("`cos-tool` unavailable. Leaving expression unchanged: %s", expression)
             return expression
-        args = [str(self.path)]
+        args = [str(self.path), "--format", type, "transform"]
         args.extend(
             ["--label-matcher={}={}".format(key, value) for key, value in topology.items()]
         )
 
+        # Pass a leading "--" so expressions with a negation or subtraction aren't interpreted as
+        # flags
         args.extend(["--", "{}".format(expression)])
         # noinspection PyBroadException
         try:
             return self._exec(args)
         except subprocess.CalledProcessError as e:
-            logger.debug('Applying the expression failed: "{}", falling back to the original', e)
+            logger.debug('Applying the expression failed: "%s", falling back to the original', e)
             return expression
 
-    def _get_transformer_path(self) -> Optional[Path]:
-        arch = platform.processor()
+    def _get_tool_path(self) -> Optional[Path]:
+        arch = platform.machine()
         arch = "amd64" if arch == "x86_64" else arch
-        res = "promql-transform-{}".format(arch)
+        res = "cos-tool-{}".format(arch)
         try:
-            path = self._charm.model.resources.fetch(res)
-            os.chmod(path, 0o777)
+            path = Path(res).resolve()
+            path.chmod(0o777)
             return path
         except NotImplementedError:
             logger.debug("System lacks support for chmod")
-        except (NameError, ModelError):
-            logger.debug('No resource available for the platform "{}"'.format(arch))
+        except FileNotFoundError:
+            logger.debug('Could not locate cos-tool at: "{}"'.format(res))
         return None
 
-    def _exec(self, cmd):
+    def _exec(self, cmd) -> str:
         result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE)
         output = result.stdout.decode("utf-8").strip()
         return output

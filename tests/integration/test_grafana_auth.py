@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-# Copyright 2021 Canonical Ltd.
+# Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
+
+"""Tests the library using dummy requirer and provider charms.
+
+It tests that the charms are able to relate and to exchange data.
+"""
 
 import asyncio
 import logging
 
 import pytest
-from helpers import (
-    check_grafana_is_ready,
-    get_datasource_for,
-    get_grafana_datasources,
-    oci_image,
-)
+from helpers import check_grafana_is_ready, get_grafana_environment_variable, oci_image
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,7 @@ grafana_resources = {
 
 
 @pytest.mark.abort_on_fail
-async def test_grafana_source_relation_data_with_grafana_tester(
-    ops_test, grafana_charm, grafana_tester_charm
-):
-    """Test basic functionality of grafana-source relation interface."""
+async def test_auth_proxy_is_set(ops_test, grafana_charm, grafana_tester_charm):
     grafana_app_name = "grafana"
     tester_app_name = "grafana-tester"
 
@@ -48,26 +45,16 @@ async def test_grafana_source_relation_data_with_grafana_tester(
     await ops_test.model.wait_for_idle(
         apps=[grafana_app_name, tester_app_name], status="active", wait_for_units=1, timeout=300
     )
-
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
-    initial_datasources = await get_grafana_datasources(ops_test, grafana_app_name, 0)
-    assert initial_datasources == []
-
     await ops_test.model.add_relation(
-        "{}:grafana-source".format(grafana_app_name), "{}:grafana-source".format(tester_app_name)
+        "{}:grafana-auth".format(grafana_app_name), "{}:grafana-auth".format(tester_app_name)
     )
     await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
 
-    datasource_suffix = "{}_0".format(tester_app_name)
-    datasources_with_relation = await get_grafana_datasources(ops_test, grafana_app_name, 0)
-    tester_datasource = get_datasource_for(datasource_suffix, datasources_with_relation)
-    assert tester_datasource != {}
-
-    await ops_test.model.applications[tester_app_name].remove()
-    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
-
-    relation_removed_datasources = await get_grafana_datasources(ops_test, grafana_app_name, 0)
-    assert initial_datasources == relation_removed_datasources
-
-    await ops_test.model.applications[grafana_app_name].remove()
-    await ops_test.model.reset()
+    _, actual_variable_value, _ = await get_grafana_environment_variable(
+        ops_test=ops_test,
+        app_name=grafana_app_name,
+        container_name="grafana",
+        env_var="GF_AUTH_PROXY_ENABLED",
+    )
+    assert actual_variable_value == "True"

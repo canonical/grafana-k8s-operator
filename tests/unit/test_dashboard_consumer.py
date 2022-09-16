@@ -9,7 +9,8 @@ import uuid
 from unittest.mock import patch
 
 from charms.grafana_k8s.v0.grafana_dashboard import (
-    TEMPLATE_DROPDOWNS,
+    DATASOURCE_TEMPLATE_DROPDOWNS,
+    TOPOLOGY_TEMPLATE_DROPDOWNS,
     GrafanaDashboardConsumer,
 )
 from ops.charm import CharmBase
@@ -21,6 +22,7 @@ if "unittest.util" in __import__("sys").modules:
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
 
 MODEL_INFO = {"name": "testing", "uuid": "abcdefgh-1234"}
+TEMPLATE_DROPDOWNS = TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS
 
 DASHBOARD_TEMPLATE = """
 {
@@ -49,6 +51,14 @@ DASHBOARD_RENDERED = json.dumps(
 )
 
 
+DASHBOARD_RENDERED_NO_DROPDOWNS = json.dumps(
+    {
+        "panels": {"data": "label_values(up, juju_unit)"},
+        "templating": {"list": [d for d in DATASOURCE_TEMPLATE_DROPDOWNS]},
+    }
+)
+
+
 SOURCE_DATA = {
     "templates": {"file:tester": DASHBOARD_DATA},
     "uuid": "12345678",
@@ -66,6 +76,35 @@ VARIABLE_DASHBOARD_TEMPLATE = """
 """
 
 VARIABLE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
+INPUT_DASHBOARD_TEMPLATE = """
+{
+    "__inputs": [
+        {
+            "name": "DS_PROMETHEUS",
+            "label": "Prometheus",
+            "type": "datasource",
+            "pluginId": "prometheus",
+            "pluginName": "prometheus"
+        }
+    ],
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "$DS_PROMETHEUS"
+        }
+    ]
+}
+"""
+
+INPUT_DASHBOARD_RENDERED = json.dumps(
     {
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
@@ -124,7 +163,7 @@ EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
             },
             {
                 "name": "replace_me_also",
-                "query": "prometheus",
+                "query": "ProMeTheus",
                 "type": "datasource"
             },
             {
@@ -240,7 +279,7 @@ class TestDashboardConsumer(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
-        self.harness.add_relation("grafana", "grafana")
+        self.harness.add_relation("grafana", "grafana-k8s")
 
     def setup_charm_relations(self) -> list:
         """Create relations used by test cases."""
@@ -256,6 +295,35 @@ class TestDashboardConsumer(unittest.TestCase):
             "provider",
             {
                 "dashboards": json.dumps(SOURCE_DATA),
+            },
+        )
+
+        return rel_ids
+
+    def setup_without_dropdowns(self, template: str) -> list:
+        """Create relations used by test cases with alternate templates."""
+        rel_ids = []
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        source_rel_id = self.harness.add_relation("grafana-source", "source")
+        self.harness.add_relation_unit(source_rel_id, "source/0")
+        rel_id = self.harness.add_relation("grafana-dashboard", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        rel_ids.append(rel_id)
+
+        d = DASHBOARD_DATA.copy()
+        d["inject_dropdowns"] = False
+        d["content"] = template
+
+        data = {
+            "templates": {"file:tester": d},
+            "uuid": "12345678",
+        }
+
+        self.harness.update_relation_data(
+            rel_id,
+            "provider",
+            {
+                "dashboards": json.dumps(data),
             },
         )
 
@@ -303,6 +371,24 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    def test_consumer_notifies_on_new_dashboards_without_dropdowns(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_without_dropdowns(DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": DASHBOARD_RENDERED_NO_DROPDOWNS,
                 }
             ],
         )
@@ -398,6 +484,25 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": VARIABLE_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    def test_consumer_templates_dashboard_with_inputs(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(INPUT_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.maxDiff = None
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": INPUT_DASHBOARD_RENDERED,
                 }
             ],
         )

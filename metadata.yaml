@@ -22,6 +22,11 @@ containers:
     mounts:
       - storage: database
         location: /var/lib/grafana
+  litestream:
+    resource: litestream-image
+    mounts:
+      - storage: database
+        location: /var/lib/grafana
 storage:
   database:
     type: filesystem
@@ -30,8 +35,16 @@ requires:
     interface: grafana_datasource
   grafana-dashboard:
     interface: grafana_dashboard
+  grafana-auth:
+    interface: grafana_auth
   database:
     interface: db
+    limit: 1
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+  ingress:
+    interface: traefik_route
     limit: 1
 peers:
   grafana:
@@ -40,16 +53,8 @@ resources:
   grafana-image:
     type: oci-image
     description: upstream docker image for Grafana
-    upstream-source: docker.io/ubuntu/grafana@sha256:86c77082f25b4bce37df37fb1fb1c351477902c59481369b71ba2d328e98d793
-  promql-transform-amd64:
-    type: file
-    description: |
-      Promql-transform binary for adding label selectors on amd64. Promql-transform is available
-      as a stand-alone tool on https://github.com/canonical/promql-transform
-    filename: promql-transform-amd64
-  promql-transform-arm64:
-    type: file
-    description: |
-      Promql-transform binary for adding label selectors on arm64. Promql-transform is available
-      as a stand-alone tool on https://github.com/canonical/promql-transform
-    filename: promql-transform-arm64
+    upstream-source: docker.io/ubuntu/grafana:8.2-22.04_beta
+  litestream-image:
+    type: oci-image
+    description: upstream image for sqlite streaming
+    upstream-source: docker.io/litestream/litestream:0.4.0-beta.2

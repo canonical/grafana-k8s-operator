@@ -2,30 +2,34 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 from pathlib import Path
+from typing import Tuple
 
 import yaml
 from asyncstdlib import functools
+from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 from workload import Grafana
 
 
 @functools.cache
-async def unit_password(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
-    """Get the admin password for a unit. Memoize it to reduce turnaround time.
+async def grafana_password(ops_test: OpsTest, app_name: str) -> str:
+    """Get the admin password . Memoize it to reduce turnaround time.
 
     Args:
         ops_test: pytest-operator plugin
         app_name: string name of application
-        unit_num: integer number of a juju unit
 
     Returns:
         admin password as a string
     """
-    action = (
-        await ops_test.model.applications[app_name]
-        .units[unit_num]
-        .run_action("get-admin-password")
-    )
+    leader = None  # type: Unit
+    for unit in ops_test.model.applications[app_name].units:
+        is_leader = await unit.is_leader_from_status()
+        if is_leader:
+            leader = unit
+            break
+
+    action = await leader.run_action("get-admin-password")
     action = await action.wait()
     return action.results["admin-password"]
 
@@ -57,7 +61,7 @@ async def check_grafana_is_ready(ops_test: OpsTest, app_name: str, unit_num: int
         True if Grafana is responsive else False
     """
     host = await unit_address(ops_test, app_name, unit_num)
-    pw = await unit_password(ops_test, app_name, unit_num)
+    pw = await grafana_password(ops_test, app_name)
     grafana = Grafana(host=host, pw=pw)
     is_ready = await grafana.is_ready()
     assert is_ready
@@ -76,7 +80,7 @@ async def get_grafana_settings(ops_test: OpsTest, app_name: str, unit_num: int) 
         Grafana YAML configuration in string format.
     """
     host = await unit_address(ops_test, app_name, unit_num)
-    pw = await unit_password(ops_test, app_name, unit_num)
+    pw = await grafana_password(ops_test, app_name)
     grafana = Grafana(host=host, pw=pw)
     grafana = Grafana(host=host)
     settings = await grafana.settings()
@@ -90,7 +94,7 @@ async def get_grafana_health(ops_test: OpsTest, app_name: str, unit_num: int) ->
         Empty :dict: if it is not up, otherwise a dict containing basic API health
     """
     host = await unit_address(ops_test, app_name, unit_num)
-    pw = await unit_password(ops_test, app_name, unit_num)
+    pw = await grafana_password(ops_test, app_name)
     grafana = Grafana(host=host, pw=pw)
     grafana = Grafana(host=host)
     health = await grafana.health()
@@ -109,7 +113,7 @@ async def get_grafana_datasources(ops_test: OpsTest, app_name: str, unit_num: in
         a list of datasources
     """
     host = await unit_address(ops_test, app_name, unit_num)
-    pw = await unit_password(ops_test, app_name, unit_num)
+    pw = await grafana_password(ops_test, app_name)
     grafana = Grafana(host=host, pw=pw)
     datasources = await grafana.datasources()
     return datasources
@@ -124,7 +128,13 @@ def get_datasource_for(suffix: str, datasources: list) -> dict:
     Returns:
         a datasource config dict
     """
-    return [d for d in datasources if d["name"].endswith(suffix)].pop()
+    assert datasources, "'datasources' argument cannot be empty"
+
+    datasource_filtered = [d for d in datasources if d["name"].endswith(suffix)]
+    if not datasource_filtered:
+        raise ValueError("No data source was found for suffix {}".format(suffix))
+
+    return datasource_filtered.pop()
 
 
 async def get_grafana_dashboards(ops_test: OpsTest, app_name: str, unit_num: int) -> list:
@@ -141,7 +151,7 @@ async def get_grafana_dashboards(ops_test: OpsTest, app_name: str, unit_num: int
         a list of dashboards
     """
     host = await unit_address(ops_test, app_name, unit_num)
-    pw = await unit_password(ops_test, app_name, unit_num)
+    pw = await grafana_password(ops_test, app_name)
     grafana = Grafana(host=host, pw=pw)
     dashboards = await grafana.dashboards_all()
     return dashboards
@@ -164,7 +174,7 @@ async def get_dashboard_by_search(
         a dashboard as a dict
     """
     host = await unit_address(ops_test, app_name, unit_num)
-    pw = await unit_password(ops_test, app_name, unit_num)
+    pw = await grafana_password(ops_test, app_name)
     grafana = Grafana(host=host, pw=pw)
     dashboards = await grafana.dashboard_search(query_string)
     dashboard_json = await grafana.fetch_dashboard(dashboards[0]["uid"])
@@ -208,3 +218,26 @@ async def get_config_values(ops_test, app_name) -> dict:
     """Return the app's config, but filter out keys that do not have a value."""
     config = await ops_test.model.applications[app_name].get_config()
     return {key: config[key]["value"] for key in config if "value" in config[key]}
+
+
+async def get_grafana_environment_variable(
+    ops_test: OpsTest, app_name: str, container_name: str, env_var: str
+) -> Tuple[str, str, str]:
+    # tear the actual value out of /proc since it's an env variable for the process itself
+    rc, stdout, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        f"{container_name}",
+        f"{app_name}/0",
+        "xargs",
+        "-0",
+        "-L1",
+        "-a",
+        "/proc/$(pgrep grafana)/environ",
+        "echo",
+        f"${env_var}",
+    )
+
+    # If we do find one, split it into parts around `foo=bar` and return the value
+    value = next(iter([env for env in stdout.splitlines() if env_var in env])).split("=")[-1] or ""
+    return rc, value, stderr.strip

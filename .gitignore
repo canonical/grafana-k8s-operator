@@ -3,7 +3,9 @@ build
 .idea
 __pycache__
 .venv
+.tox
 .coverage
 venv
 tests/integration/grafana-tester/lib/charms/grafana_k8s/*
-promql-transform*
+cos-tool*
+sqlite-static
