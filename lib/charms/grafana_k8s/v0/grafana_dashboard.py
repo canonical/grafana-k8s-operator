@@ -582,7 +582,6 @@ def _convert_dashboard_fields(content: str, inject_dropdowns: bool = True) -> st
                 dict_content["templating"]["list"].insert(0, d)
 
     dict_content = _replace_template_fields(dict_content, datasources, existing_templates)
-
     return json.dumps(dict_content)
 
 
@@ -591,8 +590,7 @@ def _replace_template_fields(  # noqa: C901
 ) -> dict:
     """Make templated fields get cleaned up afterwards.
 
-    If existing datasource variables are present, try to substitute them, otherwise
-    assume they are all for Prometheus and put the prometheus variable there.
+    If existing datasource variables are present, try to substitute them.
     """
     replacements = {"loki": "${lokids}", "prometheus": "${prometheusds}"}
     used_replacements = []
@@ -612,13 +610,13 @@ def _replace_template_fields(  # noqa: C901
             if "datasource" not in panel or not panel.get("datasource", ""):
                 continue
             if not existing_templates:
-                panel["datasource"] = "${prometheusds}"
+                if "loki" in panel.get("datasource"):
+                    panel["datasource"] = "${lokids}"
+                else:
+                    panel["datasource"] = "${prometheusds}"
             else:
                 if panel["datasource"].lower() in replacements.values():
                     # Already a known template variable
-                    continue
-                if not panel["datasource"]:
-                    # Don't worry about null values
                     continue
                 # Strip out variable characters and maybe braces
                 ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
@@ -668,7 +666,8 @@ def _inject_labels(content: str, topology: dict, transformer: "CosTool") -> str:
                             "some_other": "field",
                             "expr": "sum(http_requests_total{instance="$foo"}[5m])}
                         }
-                    ]
+                    ],
+                    "datasource": "${someds}"
                 }
             ]
         }
@@ -735,6 +734,8 @@ def _modify_panel(panel: dict, topology: dict, transformer: "CosTool") -> dict:
     # Do the same for any offsets
     offset_re = re.compile(r"offset\s+(?P<value>-?\s*[$\w]+)")
 
+    known_datasources = {"${prometheusds}": "promql", "${lokids}": "logql"}
+
     targets = panel["targets"]
 
     # We need to use an index so we can insert the changed element back later
@@ -742,6 +743,12 @@ def _modify_panel(panel: dict, topology: dict, transformer: "CosTool") -> dict:
         # If there's no expression, we don't need to do anything
         if "expr" not in target.keys():
             continue
+
+        if "datasource" not in panel.keys():
+            continue
+        elif panel["datasource"] not in known_datasources:
+            continue
+        querytype = known_datasources[panel["datasource"]]
         expr = target["expr"]
 
         # Capture all values inside `[]` into a list which we'll iterate over later to
@@ -760,7 +767,7 @@ def _modify_panel(panel: dict, topology: dict, transformer: "CosTool") -> dict:
         # actual type is without re-implementing a complete dashboard parser, but no
         # harm will some from passing invalid promql -- we'll just get the original back.
         #
-        replacement = transformer.inject_label_matchers(expr, topology, "promql")
+        replacement = transformer.inject_label_matchers(expr, topology, querytype)
 
         if replacement == target["expr"]:
             # promql-tranform caught an error. Move on
@@ -1347,13 +1354,13 @@ class GrafanaDashboardConsumer(Object):
                 decoded_content = _decode_dashboard_content(template["content"])
                 inject_dropdowns = template.get("inject_dropdowns", True)
                 content = Template(decoded_content).render()
+                content = self._manage_dashboard_uid(content, template)
+                content = _convert_dashboard_fields(content, inject_dropdowns)
+
                 if topology:
                     content = _inject_labels(content, topology, self._tranformer)
 
-                content = self._manage_dashboard_uid(content, template)
-                content = _encode_dashboard_content(
-                    _convert_dashboard_fields(content, inject_dropdowns)
-                )
+                content = _encode_dashboard_content(content)
             except lzma.LZMAError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True

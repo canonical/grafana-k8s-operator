@@ -30,6 +30,7 @@ DASHBOARD_TEMPLATE = """
     "panels": [
         {
             "data": "label_values(up, juju_unit)",
+            "datasource": "${prometheusds}",
             "targets": [
                 {
                     "expr": "up{job='foo'}"
@@ -56,9 +57,54 @@ DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {
                 "data": "label_values(up, juju_unit)",
+                "datasource": "${prometheusds}",
                 "targets": [
                     {
                         "expr": 'up{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"}',
+                    },
+                ],
+            },
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
+LOKI_DASHBOARD_TEMPLATE = r"""
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "${lokids}",
+            "targets": [
+                {
+                    "expr": "{job=\".+\"}"
+                }
+            ]
+        }
+    ]
+}
+"""
+
+LOKI_DASHBOARD_DATA = {
+    "charm": "grafana-k8s",
+    "content": LOKI_DASHBOARD_TEMPLATE,
+    "juju_topology": {
+        "model": MODEL_INFO["name"],
+        "model_uuid": MODEL_INFO["uuid"],
+        "application": "provider-tester",
+        "unit": "provider-tester/0",
+    },
+}
+
+LOKI_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {
+                "data": "label_values(up, juju_unit)",
+                "datasource": "${lokids}",
+                "targets": [
+                    {
+                        "expr": r'{job=".+", juju_application="provider-tester", juju_model="testing", juju_model_uuid="abcdefgh-1234", juju_unit="provider-tester/0"}',
                     },
                 ],
             },
@@ -84,7 +130,8 @@ DASHBOARD_TEMPLATE_WITH_NEGATIVE = """
                 {
                     "expr": "-sum(up{job='foo'})"
                 }
-            ]
+            ],
+            "datasource": "${prometheusds}"
         }
     ]
 }
@@ -114,6 +161,7 @@ DASHBOARD_RENDERED_WITH_NEGATIVE = json.dumps(
                         "expr": '-sum(up{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"})',
                     },
                 ],
+                "datasource": "${prometheusds}",
             },
         ],
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
@@ -129,7 +177,8 @@ DASHBOARD_TEMPLATE_WITH_RANGES = """
                 {
                     "expr": "rate(http_requests_total{job='foo'}[$__interval]) / rate(http_requests_total{job='foo'}[5m]) >= 0"
                 }
-            ]
+            ],
+            "datasource": "${prometheusds}"
         }
     ]
 }
@@ -156,6 +205,7 @@ DASHBOARD_RENDERED_WITH_RANGES = json.dumps(
                         "expr": 'rate(http_requests_total{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"}[$__interval]) / rate(http_requests_total{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"}[5m]) >= 0',
                     },
                 ],
+                "datasource": "${prometheusds}",
             },
         ],
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
@@ -171,7 +221,8 @@ DASHBOARD_TEMPLATE_WITH_OFFSETS = """
                 {
                     "expr": "sum(http_requests_total{job='foo'} offset $__interval) - sum(http_requests_total{job='foo'} offset -5m)"
                 }
-            ]
+            ],
+            "datasource": "${prometheusds}"
         }
     ]
 }
@@ -179,7 +230,7 @@ DASHBOARD_TEMPLATE_WITH_OFFSETS = """
 
 DASHBOARD_DATA_WITH_OFFSETS = {
     "charm": "grafana-k8s",
-    "content": DASHBOARD_TEMPLATE_WITH_RANGES,
+    "content": DASHBOARD_TEMPLATE_WITH_OFFSETS,
     "juju_topology": {
         "model": MODEL_INFO["name"],
         "model_uuid": MODEL_INFO["uuid"],
@@ -198,6 +249,7 @@ DASHBOARD_RENDERED_WITH_OFFSETS = json.dumps(
                         "expr": 'sum(http_requests_total{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"} offset $__interval) - sum(http_requests_total{job="foo",juju_application="provider-tester",juju_model="testing",juju_model_uuid="abcdefgh-1234",juju_unit="provider-tester/0"} offset -5m)',
                     },
                 ],
+                "datasource": "${prometheusds}",
             },
         ],
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
@@ -306,6 +358,25 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    @unittest.mock.patch("platform.processor", lambda: "x86_64")
+    def test_consumer_adds_labels_for_loki(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(LOKI_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": LOKI_DASHBOARD_RENDERED,
                 }
             ],
         )
