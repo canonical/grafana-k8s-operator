@@ -507,7 +507,7 @@ class GrafanaSourceConsumer(Object):
             self._on_grafana_peer_changed,
         )
 
-    def _on_grafana_source_relation_changed(self, event: CharmEvents) -> None:
+    def _on_grafana_source_relation_changed(self, event: Optional[CharmEvents] = None) -> None:
         """Handle relation changes in related providers.
 
         If there are changes in relations between Grafana source consumers
@@ -676,6 +676,20 @@ class GrafanaSourceConsumer(Object):
             peer_sources_to_delete = set(self.get_peer_data("sources_to_delete"))
             sources_to_delete = set.union(old_sources_to_delete, peer_sources_to_delete)
             self.set_peer_data("sources_to_delete", sources_to_delete)
+
+    def update_sources(self, relation: Relation = None) -> None:
+        """Re-establish sources on one or more relations.
+
+        If something changes between this library and a datasource, try to re-establish
+        datasources.
+
+        Args:
+            relation: a specific relation for which the datasources have to be
+                updated. If not specified, all relations managed by this
+                :class:`GrafanaSourceConsumer` will be updated.
+        """
+        if self._charm.unit.is_leader():
+            self._on_grafana_source_relation_changed(None)
 
     @property
     def sources(self) -> List[dict]:

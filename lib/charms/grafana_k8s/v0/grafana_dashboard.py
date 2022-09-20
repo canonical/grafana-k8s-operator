@@ -1097,7 +1097,7 @@ class GrafanaDashboardConsumer(Object):
             return
         self.on.dashboards_changed.emit()
 
-    def update_dashboards(self, relation: Relation = None) -> None:
+    def update_dashboards(self, relation: Optional[Relation] = None) -> None:
         """Re-establish dashboards on one or more relations.
 
         If something changes between this library and a datasource, try to re-establish
@@ -1108,7 +1108,6 @@ class GrafanaDashboardConsumer(Object):
                 updated. If not specified, all relations managed by this
                 :class:`GrafanaDashboardConsumer` will be updated.
         """
-        changes = False
         if self._charm.unit.is_leader():
             relations = (
                 [relation] if relation else self._charm.model.relations[self._relation_name]
@@ -1116,9 +1115,6 @@ class GrafanaDashboardConsumer(Object):
 
             for relation in relations:
                 self._render_dashboards_and_signal_changed(relation)
-
-        if changes:
-            self.on.dashboards_changed.emit()
 
     def _on_grafana_dashboard_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Update job config when providers depart.

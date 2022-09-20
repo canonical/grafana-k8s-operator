@@ -334,6 +334,7 @@ class GrafanaCharm(CharmBase):
             event: a :class:`UpgradeCharmEvent` to signal the upgrade
         """
         self.source_consumer.upgrade_keys()
+        self.dashboard_consumer.update_dashboards()
         self._configure()
         self._on_dashboards_changed(event)
 
@@ -671,6 +672,8 @@ class GrafanaCharm(CharmBase):
     def _on_pebble_ready(self, event) -> None:
         """When Pebble is ready, start everything up."""
         self._configure()
+        self.source_consumer.upgrade_keys()
+        self.dashboard_consumer.update_dashboards()
         version = self.grafana_version
         if version is not None:
             self.unit.set_workload_version(version)
