@@ -30,6 +30,7 @@ containers:
 storage:
   database:
     type: filesystem
+
 requires:
   grafana-source:
     interface: grafana_datasource
@@ -40,15 +41,20 @@ requires:
   database:
     interface: db
     limit: 1
+  landing-page:
+    interface: catalog
+
 provides:
   metrics-endpoint:
     interface: prometheus_scrape
   ingress:
     interface: traefik_route
     limit: 1
+
 peers:
   grafana:
     interface: grafana_peers
+
 resources:
   grafana-image:
     type: oci-image

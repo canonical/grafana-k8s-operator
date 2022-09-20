@@ -33,6 +33,10 @@ from typing import Any, Callable, Dict
 from urllib.parse import ParseResult, urlparse
 
 import yaml
+from charms.landing_page_k8s.v0.landing_page import (
+    LandingPageConsumer,
+    LandingPageApp,
+)
 from charms.grafana_auth.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_source import (
@@ -120,14 +124,11 @@ class GrafanaCharm(CharmBase):
         self._grafana_datasources_hash = None
         self._stored.set_default(k8s_service_patched=False, admin_password="")
 
-        # -- Prometheus self-monitoring
         self.metrics_endpoint = MetricsEndpointProvider(
-            self,
-            jobs=[
-                {
-                    "static_configs": [{"targets": ["*:3000"]}],
-                },
-            ],
+            charm=self,
+            jobs=[{
+                "static_configs": [{"targets": ["*:3000"]}]
+            }],
             refresh_event=self.on.grafana_pebble_ready,
         )
 
@@ -200,6 +201,20 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
+
+        self.catalog = LandingPageConsumer(
+            charm=self,
+            app=LandingPageApp(
+                name="Grafana",
+                icon="bar-chart",
+                url=self.external_url,
+                description=(
+                    "Grafana allows you to query, visualize, alert on, and "
+                    "visualize metrics from mixed datasources in configurable "
+                    "dashboards for observability."
+                )
+            )
+        )
 
     def _on_install(self, _):
         """Handler for the install event during which we will update the K8s service."""
