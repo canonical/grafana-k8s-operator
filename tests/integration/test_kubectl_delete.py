@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 grafana_app_name = "grafana"
 tester_app_name = "grafana-tester"
-config = {"log_level": "error", "admin_user": "jimmy"}
+config = {"log_level": "error", "datasource_query_timeout": "600"}
 grafana_resources = {
     "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
     "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
@@ -32,7 +32,7 @@ tester_resources = {
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_from_local_path(ops_test, grafana_charm):
+async def test_deploy_from_local_path(ops_test, grafana_charm, grafana_tester_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
 
@@ -44,10 +44,9 @@ async def test_deploy_from_local_path(ops_test, grafana_charm):
             trust=True,
         ),
         ops_test.model.deploy(
-            grafana_charm,
-            application_name=grafana_app_name,
-            resources=grafana_resources,
-            trust=True,
+            grafana_tester_charm,
+            application_name=tester_app_name,
+            resources=tester_resources,
         ),
     )
 
@@ -69,7 +68,8 @@ async def test_create_and_check_datasource_and_dashboard_before_delete(ops_test)
             "{}:grafana-dashboard".format(tester_app_name),
         ),
     )
-    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active")
+    await ops_test.model.wait_for_idle(apps=[grafana_app_name], status="active", idle_period=30)
+    await check_grafana_is_ready(ops_test, grafana_app_name, 0)
 
     tester_dashboard = await get_dashboard_by_search(
         ops_test, grafana_app_name, 0, "Grafana Tester"

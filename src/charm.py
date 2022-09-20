@@ -326,6 +326,7 @@ class GrafanaCharm(CharmBase):
             if container.list_files(dashboards_dir_path, pattern="grafana_metrics.json"):
                 container.remove_path(dashboard_path)
                 logger.debug("Removed dashboard %s", dashboard_path)
+                self.restart_grafana()
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
         """Re-provision Grafana and its datasources on upgrade.
