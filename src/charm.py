@@ -33,10 +33,6 @@ from typing import Any, Callable, Dict
 from urllib.parse import ParseResult, urlparse
 
 import yaml
-from charms.landing_page_k8s.v0.landing_page import (
-    LandingPageConsumer,
-    LandingPageApp,
-)
 from charms.grafana_auth.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_source import (
@@ -44,6 +40,7 @@ from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceEvents,
     SourceFieldsMissingError,
 )
+from charms.landing_page_k8s.v0.landing_page import LandingPageApp, LandingPageConsumer
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
@@ -126,9 +123,7 @@ class GrafanaCharm(CharmBase):
 
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
-            jobs=[{
-                "static_configs": [{"targets": ["*:3000"]}]
-            }],
+            jobs=[{"static_configs": [{"targets": ["*:3000"]}]}],
             refresh_event=self.on.grafana_pebble_ready,
         )
 
@@ -212,8 +207,8 @@ class GrafanaCharm(CharmBase):
                     "Grafana allows you to query, visualize, alert on, and "
                     "visualize metrics from mixed datasources in configurable "
                     "dashboards for observability."
-                )
-            )
+                ),
+            ),
         )
 
     def _on_install(self, _):
