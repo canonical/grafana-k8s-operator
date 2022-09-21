@@ -326,6 +326,7 @@ class GrafanaCharm(CharmBase):
             if container.list_files(dashboards_dir_path, pattern="grafana_metrics.json"):
                 container.remove_path(dashboard_path)
                 logger.debug("Removed dashboard %s", dashboard_path)
+                self.restart_grafana()
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
         """Re-provision Grafana and its datasources on upgrade.
@@ -334,6 +335,7 @@ class GrafanaCharm(CharmBase):
             event: a :class:`UpgradeCharmEvent` to signal the upgrade
         """
         self.source_consumer.upgrade_keys()
+        self.dashboard_consumer.update_dashboards()
         self._configure()
         self._on_dashboards_changed(event)
 
@@ -671,6 +673,8 @@ class GrafanaCharm(CharmBase):
     def _on_pebble_ready(self, event) -> None:
         """When Pebble is ready, start everything up."""
         self._configure()
+        self.source_consumer.upgrade_keys()
+        self.dashboard_consumer.update_dashboards()
         version = self.grafana_version
         if version is not None:
             self.unit.set_workload_version(version)
