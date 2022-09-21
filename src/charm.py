@@ -203,7 +203,7 @@ class GrafanaCharm(CharmBase):
                 self.on.grafana_pebble_ready,
                 self.on["ingress"].relation_joined,
             ],
-            app=CatalogueItem(
+            item=CatalogueItem(
                 name="Grafana",
                 icon="bar-chart",
                 url=self.external_url,
