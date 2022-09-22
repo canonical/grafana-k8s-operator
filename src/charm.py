@@ -33,6 +33,7 @@ from typing import Any, Callable, Dict
 from urllib.parse import ParseResult, urlparse
 
 import yaml
+from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_auth.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_source import (
@@ -40,7 +41,6 @@ from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceEvents,
     SourceFieldsMissingError,
 )
-from charms.landing_page_k8s.v0.landing_page import LandingPageApp, LandingPageConsumer
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
@@ -197,9 +197,13 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
 
-        self.catalog = LandingPageConsumer(
+        self.catalog = CatalogueConsumer(
             charm=self,
-            app=LandingPageApp(
+            refresh_event=[
+                self.on.grafana_pebble_ready,
+                self.on["ingress"].relation_joined,
+            ],
+            item=CatalogueItem(
                 name="Grafana",
                 icon="bar-chart",
                 url=self.external_url,
