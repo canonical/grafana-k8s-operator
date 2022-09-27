@@ -242,6 +242,58 @@ EXISTING_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
     }
 )
 
+EXISTING_LOKI_DATASOURCE_DASHBOARD_TEMPLATE = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "${lokids}"
+        },
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": "${leave_me_alone}"
+        }
+    ],
+    "templating": {
+        "list": [
+            {
+                "description": null,
+                "error": null,
+                "hide": 0,
+                "includeAll": false,
+                "label": null,
+                "multi": false,
+                "name": "lokids",
+                "options": [],
+                "query": "loki",
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "type": "datasource"
+            },
+            {
+                "name": "leave_me_alone",
+                "query": "influxdb",
+                "type": "datasource"
+            }
+        ]
+    }
+}
+"""
+
+EXISTING_LOKI_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {"data": "label_values(up, juju_unit)", "datasource": "${lokids}"},
+            {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
+        ],
+        "templating": {
+            "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
+            + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
+        },
+    }
+)
+
 
 class ConsumerCharm(CharmBase):
     _stored = StoredState()
@@ -543,7 +595,7 @@ class TestDashboardConsumer(unittest.TestCase):
             ],
         )
 
-    def test_consumer_templates_dashboard_and_keeps_datasources(self):
+    def test_consumer_templates_dashboard_and_keeps_prometheus_datasources(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         self.setup_different_dashboard(EXISTING_DATASOURCE_DASHBOARD_TEMPLATE)
@@ -553,6 +605,26 @@ class TestDashboardConsumer(unittest.TestCase):
         # and compare appropriately
         db_content = json.loads(self.harness.charm.grafana_consumer.dashboards[0]["content"])
         expected_content = json.loads(EXISTING_DATASOURCE_DASHBOARD_RENDERED)
+
+        db_content["templating"]["list"] = sorted(
+            db_content["templating"]["list"], key=lambda k: k["name"]
+        )
+        expected_content["templating"]["list"] = sorted(
+            expected_content["templating"]["list"], key=lambda k: k["name"]
+        )
+
+        self.assertEqual(db_content, expected_content)
+
+    def test_consumer_templates_dashboard_and_keeps_loki_datasources(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(EXISTING_LOKI_DATASOURCE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        # Comparing lists of dicts is painful. Convert back to a dict so we can sort
+        # and compare appropriately
+        db_content = json.loads(self.harness.charm.grafana_consumer.dashboards[0]["content"])
+        expected_content = json.loads(EXISTING_LOKI_DATASOURCE_DASHBOARD_RENDERED)
 
         db_content["templating"]["list"] = sorted(
             db_content["templating"]["list"], key=lambda k: k["name"]

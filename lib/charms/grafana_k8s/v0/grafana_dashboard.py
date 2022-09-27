@@ -218,7 +218,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 14
+LIBPATCH = 15
 
 logger = logging.getLogger(__name__)
 
@@ -341,6 +341,21 @@ DATASOURCE_TEMPLATE_DROPDOWNS = [  # type: ignore
         "name": "prometheusds",
         "options": [],
         "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": False,
+        "type": "datasource",
+    },
+    {
+        "description": None,
+        "error": None,
+        "hide": 0,
+        "includeAll": False,
+        "label": None,
+        "multi": False,
+        "name": "lokids",
+        "options": [],
+        "query": "loki",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": False,
