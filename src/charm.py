@@ -273,6 +273,9 @@ class GrafanaCharm(CharmBase):
         Args:
             leader: a boolean indicating the leader status
         """
+        if not self.containers["replication"].can_connect():
+            return
+
         restart = False
         leader = self.unit.is_leader()
 
