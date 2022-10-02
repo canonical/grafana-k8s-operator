@@ -405,6 +405,15 @@ class GrafanaCharm(CharmBase):
 
         if restart:
             self.restart_grafana()
+        else:
+            # All clear, move to active.
+            # We can basically only get here if the charm is completely restarted, but all of
+            # the configs are correct, with the correct pebble plan, such as a node reboot.
+            #
+            # A node reboot does not send any identifiable events (`start`, `pebble_ready`), so
+            # this is more or less the 'fallthrough' part of a case statement
+            if not isinstance(self.unit.status, ActiveStatus):
+                self.unit.status = ActiveStatus()
 
     def _update_datasource_config(self, config: str) -> None:
         """Write an updated datasource configuration file to the Pebble container if necessary.
