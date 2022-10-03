@@ -43,13 +43,13 @@ requires:
     limit: 1
   catalogue:
     interface: catalogue
+  ingress:
+    interface: traefik_route
+    limit: 1
 
 provides:
   metrics-endpoint:
     interface: prometheus_scrape
-  ingress:
-    interface: traefik_route
-    limit: 1
 
 peers:
   grafana:

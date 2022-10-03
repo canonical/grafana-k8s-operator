@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
+import asyncio
+import logging
+import subprocess
 from pathlib import Path
 from typing import Tuple
 
@@ -9,6 +12,8 @@ from asyncstdlib import functools
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 from workload import Grafana
+
+logger = logging.getLogger(__name__)
 
 
 @functools.cache
@@ -242,3 +247,35 @@ async def get_grafana_environment_variable(
     # If we do find one, split it into parts around `foo=bar` and return the value
     value = next(iter([env for env in stdout.splitlines() if env_var in env])).split("=")[-1] or ""
     return rc, value, stderr.strip
+
+
+async def reenable_metallb():
+    # Set up microk8s metallb addon, needed by traefik
+    logger.info("(Re)-enabling metallb")
+    cmd = [
+        "sh",
+        "-c",
+        "ip -4 -j route | jq -r '.[] | select(.dst | contains(\"default\")) | .prefsrc'",
+    ]
+    result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    ip = result.stdout.decode("utf-8").strip()
+
+    logger.info("First, disable metallb, just in case")
+    try:
+        cmd = ["sg", "microk8s", "-c", "microk8s disable metallb"]
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except Exception as e:
+        print(e)
+        raise
+
+    await asyncio.sleep(30)  # why? just because, for now
+
+    logger.info("Now enable metallb")
+    try:
+        cmd = ["sg", "microk8s", "-c", f"microk8s enable metallb:{ip}-{ip}"]
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except Exception as e:
+        print(e)
+        raise
+
+    await asyncio.sleep(30)  # why? just because, for now

@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+import asyncio
+import logging
+
+import pytest
+from helpers import oci_image, reenable_metallb
+from pytest_operator.plugin import OpsTest
+
+logger = logging.getLogger(__name__)
+
+grafana_resources = {
+    "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
+    "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
+}
+grafana_app_name = "grafana"
+
+idle_period = 90
+
+
+@pytest.mark.abort_on_fail
+async def test_deploy(ops_test, grafana_charm):
+    await asyncio.gather(
+        ops_test.model.deploy(
+            grafana_charm,
+            resources=grafana_resources,
+            application_name=grafana_app_name,
+            num_units=2,
+            trust=True,
+        ),
+        ops_test.model.deploy(
+            "ch:traefik-k8s",
+            application_name="traefik",
+            channel="edge",
+        ),
+    )
+
+    await asyncio.gather(
+        ops_test.model.wait_for_idle(
+            apps=[grafana_app_name],
+            status="active",
+            wait_for_units=2,
+            timeout=300,
+        ),
+        ops_test.model.wait_for_idle(
+            apps=["traefik"],
+            wait_for_units=1,
+            timeout=300,
+        ),
+    )
+
+
+async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
+    # GIVEN metallb is ready
+    await reenable_metallb()
+
+    # WHEN grafana is related to traefik
+    await ops_test.model.add_relation(f"{grafana_app_name}:ingress", "traefik")
+
+    # Workaround to make sure everything is up-to-date: update-status
+    await ops_test.model.set_config({"update-status-hook-interval": "10s"})
+    await asyncio.sleep(11)
+    await ops_test.model.set_config({"update-status-hook-interval": "60m"})
+
+    logger.info("At this point, after re-enabling metallb, traefik should become active")
+    await ops_test.model.wait_for_idle(
+        apps=[grafana_app_name, "traefik"],
+        status="active",
+        timeout=600,
+        idle_period=idle_period,
+    )
+
+    # THEN the grafana API is served on metallb's IP
+    # TODO
