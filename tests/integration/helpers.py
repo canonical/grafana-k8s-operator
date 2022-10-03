@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Tuple
 
+import netifaces
 import yaml
 from asyncstdlib import functools
 from juju.unit import Unit
@@ -252,13 +253,9 @@ async def get_grafana_environment_variable(
 async def reenable_metallb():
     # Set up microk8s metallb addon, needed by traefik
     logger.info("(Re)-enabling metallb")
-    cmd = [
-        "sh",
-        "-c",
-        "ip -4 -j route | jq -r '.[] | select(.dst | contains(\"default\")) | .prefsrc'",
-    ]
-    result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    ip = result.stdout.decode("utf-8").strip()
+
+    # Get the default gateway ip
+    ip = netifaces.gateways()["default"][netifaces.AF_INET][0]
 
     logger.info("First, disable metallb, just in case")
     try:
