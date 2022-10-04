@@ -1060,7 +1060,7 @@ class GrafanaCharm(CharmBase):
         return baseurl
 
     @property
-    def _ingress_config(self) -> str:
+    def _ingress_config(self) -> dict:
         """Build a raw ingress configuration for Traefik."""
         fqdn = urlparse(socket.getfqdn()).path
         domain = re.split(
@@ -1097,7 +1097,7 @@ class GrafanaCharm(CharmBase):
             }
         }
 
-        return yaml.safe_dump({"http": {"routers": routers, "services": services}})
+        return {"http": {"routers": routers, "services": services}}
 
     @property
     def _auth_env_vars(self):

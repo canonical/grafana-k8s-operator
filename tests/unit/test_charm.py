@@ -340,7 +340,7 @@ class TestCharm(unittest.TestCase):
 
         # The insanity of YAML here. It works for the lib, but a single load just strips off
         # the extra quoting and leaves regular YAML. Double parse it for the tests
-        self.assertEqual(yaml.safe_load(yaml.safe_load(rel_data["config"])), expected_rel_data)
+        self.assertEqual(yaml.safe_load(rel_data["config"]), expected_rel_data)
 
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     @k8s_resource_multipatch
