@@ -1084,7 +1084,7 @@ class GrafanaCharm(CharmBase):
                 "loadBalancer": {
                     "servers": [
                         {
-                            "url": "http://{}.{}-endpoints.{}.{}:{}".format(
+                            "url": "http://{}.{}-endpoints.{}.{}:{}/".format(
                                 self.model.unit.name.replace("/", "-"),
                                 self.model.app.name,
                                 self.model.name,
