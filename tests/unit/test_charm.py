@@ -328,7 +328,7 @@ class TestCharm(unittest.TestCase):
                         "loadBalancer": {
                             "servers": [
                                 {
-                                    "url": "http://grafana-k8s-0.grafana-k8s-endpoints.testmodel.svc.cluster.local:3000"
+                                    "url": "http://grafana-k8s-0.grafana-k8s-endpoints.testmodel.svc.cluster.local:3000/"
                                 }
                             ]
                         }
