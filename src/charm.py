@@ -1072,9 +1072,8 @@ class GrafanaCharm(CharmBase):
     def _ingress_config(self) -> dict:
         """Build a raw ingress configuration for Traefik."""
         fqdn = urlparse(socket.getfqdn()).path
-        domain = re.split(
-            r"^{}\..*?{}\.".format(self.model.unit.name.replace("/", "-"), self.model.name), fqdn
-        )[1]
+        pattern = r"^{}\..*?{}\.".format(self.model.unit.name.replace("/", "-"), self.model.name)
+        domain = re.split(pattern, fqdn)[1]
 
         external_path = urlparse(self.external_url).path or "{}-{}".format(
             self.model.name, self.model.app.name
