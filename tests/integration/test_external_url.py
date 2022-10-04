@@ -41,7 +41,6 @@ async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.wait_for_idle(
             apps=[grafana_app_name],
-            status="active",
             wait_for_units=2,
             timeout=600,
         ),

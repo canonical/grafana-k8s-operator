@@ -12,8 +12,10 @@ class Grafana:
 
     def __init__(
         self,
+        *,
         host: Optional[str] = "localhost",
         port: Optional[int] = 3000,
+        path: Optional[str] = "",
         username: Optional[str] = "admin",
         pw: Optional[str] = "",
     ):
@@ -22,10 +24,12 @@ class Grafana:
         Args:
             host: Optional host address of Grafana application, defaults to `localhost`
             port: Optional port on which Grafana service is exposed, defaults to `3000`
+            path: Optional path (e.g. due to ingress).
             username: Optional username to connect with, defaults to `admin`
             pw: Optional password to connect with, defaults to `""`
         """
-        self.base_uri = "http://{}:{}".format(host, port)
+        path = ("/" + path.lstrip("/")) if path else ""
+        self.base_uri = "http://{}:{}{}".format(host, port, path)
         self.headers = make_headers(basic_auth="{}:{}".format(username, pw))
 
     async def is_ready(self) -> bool:
