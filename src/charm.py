@@ -369,7 +369,7 @@ class GrafanaCharm(CharmBase):
         """
         if not self.containers["workload"].can_connect():
             return
-        logger.debug("Handling grafana-k8a configuration change")
+        logger.debug("Handling grafana-k8s configuration change")
         restart = False
 
         # Generate a new base config and see if it differs from what we have.

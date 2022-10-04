@@ -250,7 +250,7 @@ async def get_grafana_environment_variable(
     return rc, value, stderr.strip
 
 
-async def reenable_metallb():
+async def reenable_metallb() -> str:
     # Set up microk8s metallb addon, needed by traefik
     logger.info("(Re)-enabling metallb")
     cmd = [
@@ -280,3 +280,4 @@ async def reenable_metallb():
         raise
 
     await asyncio.sleep(30)  # why? just because, for now
+    return ip

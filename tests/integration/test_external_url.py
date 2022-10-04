@@ -6,8 +6,9 @@ import asyncio
 import logging
 
 import pytest
-from helpers import oci_image, reenable_metallb
+from helpers import grafana_password, oci_image, reenable_metallb
 from pytest_operator.plugin import OpsTest
+from workload import Grafana
 
 logger = logging.getLogger(__name__)
 
@@ -42,19 +43,19 @@ async def test_deploy(ops_test, grafana_charm):
             apps=[grafana_app_name],
             status="active",
             wait_for_units=2,
-            timeout=300,
+            timeout=600,
         ),
         ops_test.model.wait_for_idle(
             apps=["traefik"],
             wait_for_units=1,
-            timeout=300,
+            timeout=600,
         ),
     )
 
 
 async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
     # GIVEN metallb is ready
-    await reenable_metallb()
+    ip = await reenable_metallb()
 
     # WHEN grafana is related to traefik
     await ops_test.model.add_relation(f"{grafana_app_name}:ingress", "traefik")
@@ -73,4 +74,7 @@ async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
     )
 
     # THEN the grafana API is served on metallb's IP
-    # TODO
+    pw = await grafana_password(ops_test, grafana_app_name)
+    grafana = Grafana(host=f"{ip}/{ops_test.model_name}-{grafana_app_name}", port=80, pw=pw)
+    is_ready = await grafana.is_ready()
+    assert is_ready
