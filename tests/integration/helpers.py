@@ -7,7 +7,6 @@ import subprocess
 from pathlib import Path
 from typing import Tuple
 
-import netifaces
 import yaml
 from asyncstdlib import functools
 from juju.unit import Unit
