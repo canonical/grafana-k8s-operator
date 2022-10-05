@@ -7,6 +7,7 @@ import logging
 
 import pytest
 from helpers import (
+    ModelConfigChange,
     check_grafana_is_ready,
     get_dashboard_by_search,
     get_grafana_dashboards,
@@ -80,6 +81,11 @@ async def test_grafana_self_monitoring_dashboard_is_present(ops_test):
 async def test_remove(ops_test):
     logger.info("Removing %s", prometheus_app_name)
     await ops_test.model.applications[prometheus_app_name].remove()
+
+    # Workaround to make sure everything is up-to-date: update-status
+    async with ModelConfigChange(ops_test, {"update-status-hook-interval": "10s"}):
+        await asyncio.sleep(11)
+
     await ops_test.model.wait_for_idle(
         apps=[grafana_app_name], status="active", timeout=300, idle_period=60
     )

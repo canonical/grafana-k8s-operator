@@ -369,7 +369,7 @@ class GrafanaCharm(CharmBase):
         """
         if not self.containers["workload"].can_connect():
             return
-        logger.debug("Handling grafana-k8a configuration change")
+        logger.debug("Handling grafana-k8s configuration change")
         restart = False
 
         # Generate a new base config and see if it differs from what we have.
@@ -1069,12 +1069,11 @@ class GrafanaCharm(CharmBase):
         return baseurl
 
     @property
-    def _ingress_config(self) -> str:
+    def _ingress_config(self) -> dict:
         """Build a raw ingress configuration for Traefik."""
         fqdn = urlparse(socket.getfqdn()).path
-        domain = fqdn.split(
-            "{}.{}.".format(self.model.unit.name.replace("/", "-"), self.model.name)
-        )[1]
+        pattern = r"^{}\..*?{}\.".format(self.model.unit.name.replace("/", "-"), self.model.name)
+        domain = re.split(pattern, fqdn)[1]
 
         external_path = urlparse(self.external_url).path or "{}-{}".format(
             self.model.name, self.model.app.name
@@ -1093,7 +1092,7 @@ class GrafanaCharm(CharmBase):
                 "loadBalancer": {
                     "servers": [
                         {
-                            "url": "http://{}.{}-endpoints.{}.{}:{}".format(
+                            "url": "http://{}.{}-endpoints.{}.{}:{}/".format(
                                 self.model.unit.name.replace("/", "-"),
                                 self.model.app.name,
                                 self.model.name,
@@ -1106,7 +1105,7 @@ class GrafanaCharm(CharmBase):
             }
         }
 
-        return yaml.safe_dump({"http": {"routers": routers, "services": services}})
+        return {"http": {"routers": routers, "services": services}}
 
     @property
     def _auth_env_vars(self):
