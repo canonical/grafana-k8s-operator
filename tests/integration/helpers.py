@@ -280,3 +280,22 @@ async def reenable_metallb() -> str:
 
     await asyncio.sleep(30)  # why? just because, for now
     return ip
+
+
+class ModelConfigChange:
+    """Context manager for temporarily changing a model config option."""
+
+    def __init__(self, ops_test: OpsTest, config: dict):
+        self.ops_test = ops_test
+        self.change_to = dict.copy()
+
+    async def __aenter__(self):
+        """On entry, the config is set to the user provided custom values."""
+        config = await self.ops_test.model.get_config()
+        self.revert_to = {k: config[k] for k in self.change_to.keys()}
+        await self.ops_test.model.set_config(self.change_to)
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, exc_traceback):
+        """On exit, the modified config options are reverted to their original values."""
+        await self.ops_test.model.set_config(self.revert_to)

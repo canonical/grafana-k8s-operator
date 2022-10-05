@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 import pytest
-from helpers import grafana_password, oci_image, reenable_metallb
+from helpers import ModelConfigChange, grafana_password, oci_image, reenable_metallb
 from pytest_operator.plugin import OpsTest
 from workload import Grafana
 
@@ -60,9 +60,8 @@ async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
     await ops_test.model.add_relation(f"{grafana_app_name}:ingress", "traefik")
 
     # Workaround to make sure everything is up-to-date: update-status
-    await ops_test.model.set_config({"update-status-hook-interval": "10s"})
-    await asyncio.sleep(11)
-    await ops_test.model.set_config({"update-status-hook-interval": "60m"})
+    async with ModelConfigChange(ops_test, {"update-status-hook-interval": "10s"}):
+        await asyncio.sleep(11)
 
     logger.info("At this point, after re-enabling metallb, traefik should become active")
     await ops_test.model.wait_for_idle(
