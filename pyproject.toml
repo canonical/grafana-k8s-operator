@@ -50,12 +50,8 @@ allow_redefinition = true
 
 # Ignore libraries that do not have type hint nor stubs
 [[tool.mypy.overrides]]
-module = ["pytest.*", "pytest_operator.*", "urllib3.*", "jinja2.*"]
+module = ["ops.*", "pytest.*", "pytest_operator.*", "urllib3.*", "jinja2.*"]
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["ops.*"]
-follow_imports = "skip"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
