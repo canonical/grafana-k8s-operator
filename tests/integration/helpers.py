@@ -287,7 +287,7 @@ class ModelConfigChange:
 
     def __init__(self, ops_test: OpsTest, config: dict):
         self.ops_test = ops_test
-        self.change_to = dict.copy()
+        self.change_to = config.copy()
 
     async def __aenter__(self):
         """On entry, the config is set to the user provided custom values."""
