@@ -193,6 +193,7 @@ class GrafanaCharm(CharmBase):
         # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
         # so this may be none. Rely on `self.ingress.is_ready` later to check
         self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
+        self.framework.observe(self.ingress.on.ready, self._update_external_host)
         self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
@@ -1054,10 +1055,22 @@ class GrafanaCharm(CharmBase):
     def _on_resource_patch_failed(self, event: K8sResourcePatchFailedEvent):
         self.unit.status = BlockedStatus(event.message)
 
+    def _update_external_host(self, event) -> None:
+        """Once we get an external host from Traefik, keep track of it in peer data."""
+        if self.unit.is_leader():
+            external_host = event.relation.data[event.app].get("external_host", "")
+            if external_host:
+                self.set_peer_data("external_host", external_host)
+
     @property
     def external_url(self) -> str:
         """Return the external hostname configured, if any."""
-        baseurl = "http://{}:{}".format(socket.getfqdn(), PORT)
+        baseurl = ""
+        if self.get_peer_data("external_host"):
+            baseurl = "http://{}".format(self.get_peer_data("external_host"))
+        else:
+            baseurl = "http://{}:{}".format(socket.getfqdn(), PORT)
+
         web_external_url = self.model.config.get("web_external_url", "")
 
         if web_external_url:

@@ -122,11 +122,11 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.addCleanup(self.patch_exec)
         self.harness.set_model_name("testmodel")
+        self.harness.add_relation("grafana", "grafana-k8s")
         self.harness.begin()
         self.grafana_auth_rel_id = self.harness.add_relation(
             "grafana-auth", AUTH_PROVIDER_APPLICATION
         )
-        self.harness.add_relation("grafana", "grafana-k8s")
 
         self.minimal_datasource_hash = hashlib.sha256(
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
@@ -298,6 +298,7 @@ class TestCharm(unittest.TestCase):
     @k8s_resource_multipatch
     @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
+    @patch.object(GrafanaCharm, "_update_external_host", new=None)
     @patch("socket.gethostbyname", new=lambda *args: "1.2.3.4")
     @patch("socket.getfqdn", new=lambda *args: "grafana-k8s-0.testmodel.svc.cluster.local")
     def test_ingress_relation_sets_options_and_rel_data(self):
@@ -341,6 +342,14 @@ class TestCharm(unittest.TestCase):
         # The insanity of YAML here. It works for the lib, but a single load just strips off
         # the extra quoting and leaves regular YAML. Double parse it for the tests
         self.assertEqual(yaml.safe_load(rel_data["config"]), expected_rel_data)
+
+        # Instead of mocking out an entire event, we patched out `_updat_external_host` above, so
+        # we need to tweak the peer data bucket ourselves
+        self.harness.update_relation_data(rel_id, "traefik", {"external_host": "1.2.3.4"})
+        self.harness.charm.set_peer_data(
+            "external_host", self.harness.get_relation_data(rel_id, "traefik")["external_host"]
+        )
+        self.assertEqual(self.harness.charm.external_url, "http://1.2.3.4/testmodel-grafana-k8s")
 
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     @k8s_resource_multipatch
