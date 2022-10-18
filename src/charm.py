@@ -461,6 +461,8 @@ class GrafanaCharm(CharmBase):
 
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
+        if not self.peers:
+            return {}
         data = self.peers.data[self.app].get(key, "")
         return json.loads(data) if data else {}
 
