@@ -218,7 +218,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 15
+LIBPATCH = 16
 
 logger = logging.getLogger(__name__)
 
@@ -565,7 +565,7 @@ def _convert_dashboard_fields(content: str, inject_dropdowns: bool = True) -> st
     existing_templates = False
 
     template_dropdowns = (
-        TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS  # type: ignore
+        TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS
         if inject_dropdowns
         else DATASOURCE_TEMPLATE_DROPDOWNS
     )
@@ -1870,8 +1870,13 @@ class CosTool:
             logger.debug("`cos-tool` unavailable. Leaving expression unchanged: %s", expression)
             return expression
         args = [str(self.path), "--format", type, "transform"]
+
+        variable_topology = {k: "${}".format(k) for k in topology.keys()}
         args.extend(
-            ["--label-matcher={}={}".format(key, value) for key, value in topology.items()]
+            [
+                "--label-matcher={}={}".format(key, value)
+                for key, value in variable_topology.items()
+            ]
         )
 
         # Pass a leading "--" so expressions with a negation or subtraction aren't interpreted as
