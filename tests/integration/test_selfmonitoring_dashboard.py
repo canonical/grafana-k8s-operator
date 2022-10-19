@@ -90,5 +90,5 @@ async def test_remove(ops_test):
         apps=[grafana_app_name], status="active", timeout=300, idle_period=60
     )
 
-    relation_removed_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)
+    # relation_removed_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)
     # assert relation_removed_dashboards == []
