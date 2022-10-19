@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import yaml
+from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
 from helpers import FakeProcessVersionCheck
 from ops.model import Container
 from ops.testing import Harness
@@ -298,7 +299,7 @@ class TestCharm(unittest.TestCase):
     @k8s_resource_multipatch
     @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    @patch.object(GrafanaCharm, "_update_external_host", new=None)
+    @patch.object(TraefikRouteRequirer, "external_host", new="1.2.3.4")
     @patch("socket.gethostbyname", new=lambda *args: "1.2.3.4")
     @patch("socket.getfqdn", new=lambda *args: "grafana-k8s-0.testmodel.svc.cluster.local")
     def test_ingress_relation_sets_options_and_rel_data(self):
@@ -343,12 +344,6 @@ class TestCharm(unittest.TestCase):
         # the extra quoting and leaves regular YAML. Double parse it for the tests
         self.assertEqual(yaml.safe_load(rel_data["config"]), expected_rel_data)
 
-        # Instead of mocking out an entire event, we patched out `_updat_external_host` above, so
-        # we need to tweak the peer data bucket ourselves
-        self.harness.update_relation_data(rel_id, "traefik", {"external_host": "1.2.3.4"})
-        self.harness.charm.set_peer_data(
-            "external_host", self.harness.get_relation_data(rel_id, "traefik")["external_host"]
-        )
         self.assertEqual(self.harness.charm.external_url, "http://1.2.3.4/testmodel-grafana-k8s")
 
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
