@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
@@ -75,8 +76,8 @@ import logging
 from typing import Optional
 
 import yaml
-from ops.charm import CharmBase, RelationEvent, CharmEvents
-from ops.framework import EventSource, Object
+from ops.charm import CharmBase, CharmEvents, RelationEvent
+from ops.framework import EventSource, Object, StoredState
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
@@ -87,7 +88,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 log = logging.getLogger(__name__)
 
@@ -110,11 +111,13 @@ class TraefikRouteRequirerReadyEvent(RelationEvent):
 
 class TraefikRouteRequirerEvents(CharmEvents):
     """Container for TraefikRouteRequirer events."""
+
     ready = EventSource(TraefikRouteRequirerReadyEvent)
 
 
 class TraefikRouteProviderEvents(CharmEvents):
     """Container for TraefikRouteProvider events."""
+
     ready = EventSource(TraefikRouteProviderReadyEvent)
 
 
@@ -128,9 +131,13 @@ class TraefikRouteProvider(Object):
     is there.
     The TraefikRouteProvider provides api to do this easily.
     """
-    on = TraefikRouteProviderEvents()
 
-    def __init__(self, charm: CharmBase, relation_name: str = 'traefik-route'):
+    on = TraefikRouteProviderEvents()
+    _stored = StoredState()
+
+    def __init__(
+        self, charm: CharmBase, relation_name: str = "traefik-route", external_host: str = ""
+    ):
         """Constructor for TraefikRouteProvider.
 
         Args:
@@ -139,25 +146,42 @@ class TraefikRouteProvider(Object):
                 (defaults to "traefik-route").
         """
         super().__init__(charm, relation_name)
+        self._stored.set_default(external_host=None)
+
         self.charm = charm
-        self.framework.observe(self.charm.on[relation_name].relation_changed,
-                               self._on_relation_changed)
+        self._relation_name = relation_name
+
+        if self._stored.external_host != external_host:
+            self._stored.external_host = external_host
+            self._update_requirers_with_external_host()
+
+        self.framework.observe(
+            self.charm.on[relation_name].relation_changed, self._on_relation_changed
+        )
 
     def _on_relation_changed(self, event: RelationEvent):
         if self.is_ready(event.relation):
             # todo check data is valid here?
             self.on.ready.emit(event.relation)
 
+    def _update_requirers_with_external_host(self):
+        """Ensure that requirers know the external host for Traefik."""
+        if not self.charm.unit.is_leader():
+            return
+
+        for relation in self.charm.model.relations[self._relation_name]:
+            relation.data[self.charm.app]["external_host"] = self._stored.external_host
+
     @staticmethod
     def is_ready(relation: Relation) -> bool:
         """Whether TraefikRoute is ready on this relation: i.e. the remote app shared the config."""
-        return 'config' in relation.data[relation.app]
+        return "config" in relation.data[relation.app]
 
     @staticmethod
     def get_config(relation: Relation) -> Optional[str]:
         """Retrieve the config published by the remote application."""
         # todo validate this config
-        return relation.data[relation.app].get('config')
+        return relation.data[relation.app].get("config")
 
 
 class TraefikRouteRequirer(Object):
@@ -173,13 +197,32 @@ class TraefikRouteRequirer(Object):
     The TraefikRouteRequirer provides api to store this config in the
     application databag.
     """
-    on = TraefikRouteRequirerEvents()
 
-    def __init__(self, charm: CharmBase, relation: Relation,
-                 relation_name: str = 'traefik-route'):
+    on = TraefikRouteRequirerEvents()
+    _stored = StoredState()
+
+    def __init__(self, charm: CharmBase, relation: Relation, relation_name: str = "traefik-route"):
         super(TraefikRouteRequirer, self).__init__(charm, relation_name)
+        self._stored.set_default(external_host=None)
+
         self._charm = charm
         self._relation = relation
+
+        self.framework.observe(
+            self._charm.on[relation_name].relation_changed, self._on_relation_changed
+        )
+
+    @property
+    def external_host(self) -> str:
+        """Return the external host set by Traefik, if any."""
+        return self._stored.external_host or ""
+
+    def _on_relation_changed(self, event: RelationEvent) -> None:
+        """Update StoredState with external_host and other information from Traefik."""
+        if self._charm.unit.is_leader():
+            external_host = event.relation.data[event.app].get("external_host", "")
+            self._stored.external_host = external_host or self._stored.external_host
+            self.on.ready.emit(event.relation)
 
     def is_ready(self) -> bool:
         """Is the TraefikRouteRequirer ready to submit data to Traefik?"""
@@ -197,4 +240,4 @@ class TraefikRouteRequirer(Object):
         app_databag = self._relation.data[self._charm.app]
 
         # Traefik thrives on yaml, feels pointless to talk json to Route
-        app_databag['config'] = yaml.safe_dump(config)
+        app_databag["config"] = yaml.safe_dump(config)
