@@ -202,6 +202,7 @@ class GrafanaCharm(CharmBase):
             refresh_event=[
                 self.on.grafana_pebble_ready,
                 self.on["ingress"].relation_joined,
+                self.on["ingress"].relation_changed,
             ],
             item=CatalogueItem(
                 name="Grafana",
@@ -1059,21 +1060,16 @@ class GrafanaCharm(CharmBase):
     @property
     def external_url(self) -> str:
         """Return the external hostname configured, if any."""
-        baseurl = ""
-        if self.ingress.external_host:
-            baseurl = "http://{}".format(self.ingress.external_host)
-        else:
-            baseurl = "http://{}:{}".format(socket.getfqdn(), PORT)
-
         web_external_url = self.model.config.get("web_external_url", "")
-
         if web_external_url:
             return web_external_url
 
-        if self.ingress.is_ready():
+        baseurl = ""
+        if self.ingress.external_host:
+            baseurl = "http://{}".format(self.ingress.external_host)
             return "{}/{}".format(baseurl, "{}-{}".format(self.model.name, self.model.app.name))
-
-        return baseurl
+        else:
+            return "http://{}:{}".format(socket.getfqdn(), PORT)
 
     @property
     def _ingress_config(self) -> dict:
