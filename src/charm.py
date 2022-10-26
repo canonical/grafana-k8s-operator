@@ -1051,7 +1051,7 @@ class GrafanaCharm(CharmBase):
 
     def _resource_reqs_from_config(self) -> ResourceRequirements:
         limits = {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}
-        requests = {"cpu": "0.25", "memory": "200Mi"}
+        requests = {"cpu": "1", "memory": "260Mi"}
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
     def _on_resource_patch_failed(self, event: K8sResourcePatchFailedEvent):
