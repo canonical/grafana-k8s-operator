@@ -194,6 +194,7 @@ class GrafanaCharm(CharmBase):
         # so this may be none. Rely on `self.ingress.is_ready` later to check
         self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
         self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
+        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
 
@@ -233,6 +234,10 @@ class GrafanaCharm(CharmBase):
         """
         self._configure()
         self._configure_replication()
+
+    def _on_ingress_ready(self, _) -> None:
+        """Once Traefik tells us our external URL, make sure we reconfigure Grafana."""
+        self._configure()
 
     def _configure_ingress(self, event: HookEvent) -> None:
         """Set up ingress if a relation is joined, config changed, or a new leader election.
