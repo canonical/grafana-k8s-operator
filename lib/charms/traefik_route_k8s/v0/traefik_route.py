@@ -213,6 +213,9 @@ class TraefikRouteRequirer(Object):
         self.framework.observe(
             self._charm.on[relation_name].relation_changed, self._on_relation_changed
         )
+        self.framework.observe(
+            self._charm.on[relation_name].relation_broken, self._on_relation_broken
+        )
 
     @property
     def external_host(self) -> str:
@@ -231,12 +234,21 @@ class TraefikRouteRequirer(Object):
         if self._charm.unit.is_leader():
             if self._relation:
                 for relation in self._charm.model.relations[self._relation.name]:
+                    if not relation.app:
+                        self._stored.external_host = ""
+                        return
                     external_host = relation.data[relation.app].get("external_host", "")
                     self._stored.external_host = external_host or self._stored.external_host
 
     def _on_relation_changed(self, event: RelationEvent) -> None:
         """Update StoredState with external_host and other information from Traefik."""
         self._update_stored_external_host()
+        if self._charm.unit.is_leader():
+            self.on.ready.emit(event.relation)
+
+    def _on_relation_broken(self, event: RelationEvent) -> None:
+        """On RelationBroken, clear the stored data if set and emit an event."""
+        self._stored.external_host = ""
         if self._charm.unit.is_leader():
             self.on.ready.emit(event.relation)
 
