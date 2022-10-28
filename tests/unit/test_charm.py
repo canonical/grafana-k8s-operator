@@ -7,14 +7,15 @@ import re
 import unittest
 from unittest.mock import MagicMock, PropertyMock, patch
 
+import ops
 import yaml
 from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
-from helpers import FakeProcessVersionCheck
-from ops.model import Container
 from ops.testing import Harness
 
 import grafana_server
 from charm import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH, GrafanaCharm
+
+ops.testing.SIMULATE_CAN_CONNECT = True
 
 MINIMAL_CONFIG = {"grafana-image-path": "grafana/grafana", "port": 3000}
 
@@ -114,26 +115,36 @@ k8s_resource_multipatch = patch.multiple(
 
 
 class TestCharm(unittest.TestCase):
-    @k8s_resource_multipatch
-    @patch("lightkube.core.client.GenericSyncClient")
     def setUp(self, *unused):
-        patch_exec = patch("ops.testing._TestingPebbleClient.exec", MagicMock())
-        self.patch_exec = patch_exec.start()
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
-        self.addCleanup(self.patch_exec)
+
+        for p in [
+            patch("lightkube.core.client.GenericSyncClient"),
+            patch("socket.getfqdn", new=lambda *args: "grafana-k8s-0.testmodel.svc.cluster.local"),
+            patch("socket.gethostbyname", new=lambda *args: "1.2.3.4"),
+            k8s_resource_multipatch,
+            patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
+            patch("ops.testing._TestingModelBackend.network_get"),
+            patch("ops.testing._TestingPebbleClient.exec", MagicMock()),
+        ]:
+            p.start()
+            self.addCleanup(p.stop)
+
         self.harness.set_model_name("testmodel")
         self.harness.add_relation("grafana", "grafana-k8s")
-        self.harness.begin()
+
         self.grafana_auth_rel_id = self.harness.add_relation(
             "grafana-auth", AUTH_PROVIDER_APPLICATION
         )
+
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("grafana")
 
         self.minimal_datasource_hash = hashlib.sha256(
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
         ).hexdigest()
 
-    @k8s_resource_multipatch
     def test_datasource_config_is_updated_by_raw_grafana_source_relation(self):
         self.harness.set_leader(True)
 
@@ -150,7 +161,6 @@ class TestCharm(unittest.TestCase):
         config = self.harness.charm.containers["workload"].pull(DATASOURCES_PATH)
         self.assertEqual(yaml.safe_load(config).get("datasources"), BASIC_DATASOURCES)
 
-    @k8s_resource_multipatch
     def test_datasource_config_is_updated_by_grafana_source_removal(self):
         self.harness.set_leader(True)
 
@@ -176,7 +186,6 @@ class TestCharm(unittest.TestCase):
             [{"name": "juju_test-model_abcdef_prometheus_0", "orgId": 1}],
         )
 
-    @k8s_resource_multipatch
     def test_config_is_updated_with_database_relation(self):
         self.harness.set_leader(True)
 
@@ -226,7 +235,6 @@ class TestCharm(unittest.TestCase):
             {"admin-password": "Admin password has been changed by an administrator"}
         )
 
-    @k8s_resource_multipatch
     def test_datasource_timeout_value_overrides_config_if_larger(self):
         self.harness.set_leader(True)
 
@@ -247,7 +255,6 @@ class TestCharm(unittest.TestCase):
         expected_source_data[0]["jsonData"]["timeout"] = 600
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
 
-    @k8s_resource_multipatch
     def test_datasource_timeout_value_is_overridden_by_config_if_smaller(self):
         self.harness.set_leader(True)
 
@@ -268,13 +275,10 @@ class TestCharm(unittest.TestCase):
         expected_source_data[0]["jsonData"]["timeout"] = 300
         self.assertEqual(yaml.safe_load(config).get("datasources"), expected_source_data)
 
-    @k8s_resource_multipatch
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def test_workload_version_is_set(self):
         self.harness.container_pebble_ready("grafana")
         self.assertEqual(self.harness.get_workload_version(), "0.1.0")
 
-    @k8s_resource_multipatch
     @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
     def test_bare_charm_has_no_subpath_set_in_layer(self):
         self.harness.set_leader(True)
@@ -283,8 +287,6 @@ class TestCharm(unittest.TestCase):
             "GF_SERVER_ROOT_URL", layer.to_dict()["services"]["grafana"]["environment"]
         )
 
-    @k8s_resource_multipatch
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def test_config_is_updated_with_subpath(self):
         self.harness.set_leader(True)
 
@@ -296,12 +298,8 @@ class TestCharm(unittest.TestCase):
         self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
         self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
 
-    @k8s_resource_multipatch
     @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     @patch.object(TraefikRouteRequirer, "external_host", new="1.2.3.4")
-    @patch("socket.gethostbyname", new=lambda *args: "1.2.3.4")
-    @patch("socket.getfqdn", new=lambda *args: "grafana-k8s-0.testmodel.svc.cluster.local")
     def test_ingress_relation_sets_options_and_rel_data(self):
         self.harness.set_leader(True)
         self.harness.container_pebble_ready("grafana")
@@ -346,8 +344,6 @@ class TestCharm(unittest.TestCase):
 
         self.assertEqual(self.harness.charm.external_url, "http://1.2.3.4/testmodel-grafana-k8s")
 
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    @k8s_resource_multipatch
     def test_config_is_updated_with_authentication_config(self):
         self.harness.set_leader(True)
         self.harness.container_pebble_ready("grafana")
@@ -373,18 +369,23 @@ class TestCharm(unittest.TestCase):
 
 
 class TestCharmReplication(unittest.TestCase):
-    @k8s_resource_multipatch
-    @patch("lightkube.core.client.GenericSyncClient")
     def setUp(self, *unused):
-        patch_exec = patch("ops.testing._TestingPebbleClient.exec", MagicMock())
-        self.patch_exec = patch_exec.start()
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
-        self.addCleanup(self.patch_exec)
+
+        for p in [
+            patch("charm.K8sServicePatch"),
+            patch("lightkube.core.client.GenericSyncClient"),
+            k8s_resource_multipatch,
+            patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
+            patch("ops.testing._TestingPebbleClient.exec", MagicMock()),
+        ]:
+            p.start()
+            self.addCleanup(p.stop)
+
         self.harness.add_relation("grafana-auth", AUTH_PROVIDER_APPLICATION)
         self.harness.add_relation("grafana", "grafana-k8s")
         self.harness.set_leader(True)
-        self.harness.begin()
 
         self.minimal_datasource_hash = hashlib.sha256(
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
@@ -402,7 +403,11 @@ class TestCharmReplication(unittest.TestCase):
             ]
         }
         mock_unit_ip.return_value = fake_network
-        self.harness.set_leader(True)
+
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("grafana")
+        self.harness.container_pebble_ready("litestream")
+
         self.harness.charm.on.config_changed.emit()
         rel = self.harness.model.get_relation("grafana")
         self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
@@ -424,7 +429,11 @@ class TestCharmReplication(unittest.TestCase):
             ]
         }
         mock_unit_ip.return_value = fake_network
-        self.harness.set_leader(False)
+
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("grafana")
+        self.harness.container_pebble_ready("litestream")
+
         rel = self.harness.model.get_relation("grafana")
         self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
         self.harness.update_relation_data(
