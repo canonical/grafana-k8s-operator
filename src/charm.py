@@ -275,9 +275,6 @@ class GrafanaCharm(CharmBase):
         If a leader election event through `config-changed` would result in a new primary, start
         it. If the address provided by the leader in peer data changes, `leader` will be false,
         and replicas will be started.
-
-        Args:
-            leader: a boolean indicating the leader status
         """
         if not self.containers["replication"].can_connect():
             return
