@@ -333,12 +333,11 @@ class GrafanaCharm(CharmBase):
         dashboards_dir_path = os.path.join(PROVISIONING_PATH, "dashboards")
         self.init_dashboard_provisioning(dashboards_dir_path)
 
-        dashboard_path = os.path.join(dashboards_dir_path, "grafana_metrics.json")
+        dashboard_path = os.path.join(dashboards_dir_path, "self_dashboard.json")
         if has_relation and self.unit.is_leader():
             # This is not going through the library due to the massive refactor needed in order
             # to squash all of the `validate_relation_direction` and structure around smashing
-            # the datastructures for a self-monitoring use case. This is built-in in Grafana 9,
-            # so it will FIXME be removed when we upgrade
+            # the datastructures for a self-monitoring use case.
             container.push(
                 dashboard_path, Path("src/self_dashboard.json").read_bytes(), make_dirs=True
             )

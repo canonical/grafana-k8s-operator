@@ -37,9 +37,14 @@ async def test_deploy(ops_test, grafana_charm):
             resources=grafana_resources,
             application_name=grafana_app_name,
             trust=True,
+            series="focal",
         ),
         ops_test.model.deploy(
-            "prometheus-k8s", channel="edge", trust=True, application_name=prometheus_app_name
+            "prometheus-k8s",
+            channel="edge",
+            trust=True,
+            application_name=prometheus_app_name,
+            series="focal",
         ),
     )
     await ops_test.model.wait_for_idle(
