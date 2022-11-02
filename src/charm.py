@@ -1083,9 +1083,15 @@ class GrafanaCharm(CharmBase):
         pattern = r"^{}\..*?{}\.".format(self.model.unit.name.replace("/", "-"), self.model.name)
         domain = re.split(pattern, fqdn)[1]
 
-        external_path = urlparse(self.external_url).path or "{}-{}".format(
-            self.model.name, self.model.app.name
-        )
+        if self.external_url == self.ingress.external_host:
+            external_path = "{}-{}".format(self.model.name, self.model.app.name)
+        else:
+            external_path = urlparse(self.external_url).path or "{}-{}".format(
+                self.model.name, self.model.app.name
+            )
+
+        if not external_path.startswith("/"):
+            external_path = "/{}".format(external_path)
 
         routers = {
             "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
