@@ -5,7 +5,6 @@
 import asyncio
 import logging
 
-import aiohttp
 import pytest
 from helpers import ModelConfigChange, grafana_password, oci_image, reenable_metallb
 from pytest_operator.plugin import OpsTest
@@ -75,15 +74,6 @@ async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
     # THEN the grafana API is served on metallb's IP
     pw = await grafana_password(ops_test, grafana_app_name)
     grafana = Grafana(host=ip, path=f"{ops_test.model_name}-{grafana_app_name}", port=80, pw=pw)
-
-    # Temporary workaround
-    for _ in range(3):
-        try:
-            # is_ready raises when ingress is not yet ready and the response is not json (plain string 404 error)
-            await grafana.is_ready()
-            break
-        except aiohttp.client_exceptions.ContentTypeError:
-            await asyncio.sleep(30)
 
     is_ready = await grafana.is_ready()
     assert is_ready
