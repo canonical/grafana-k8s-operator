@@ -76,7 +76,7 @@ async def test_grafana_self_monitoring_dashboard_is_present(ops_test):
     )
 
     self_dashboard = await get_dashboard_by_search(
-        ops_test, grafana_app_name, 0, "Grafana Self Monitoring"
+        ops_test, grafana_app_name, 0, "Grafana Operator Overview"
     )
     assert self_dashboard != {}
 
@@ -94,5 +94,5 @@ async def test_remove(ops_test):
         apps=[grafana_app_name], status="active", timeout=300, idle_period=60
     )
 
-    # relation_removed_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)
-    # assert relation_removed_dashboards == []
+    relation_removed_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)
+    assert relation_removed_dashboards == []

@@ -342,7 +342,7 @@ class GrafanaCharm(CharmBase):
                 dashboard_path, Path("src/self_dashboard.json").read_bytes(), make_dirs=True
             )
         elif not has_relation or isinstance(event, RelationBrokenEvent):
-            if container.list_files(dashboards_dir_path, pattern="grafana_metrics.json"):
+            if container.list_files(dashboards_dir_path, pattern="self_dashboard.json"):
                 container.remove_path(dashboard_path)
                 logger.debug("Removed dashboard %s", dashboard_path)
                 self.restart_grafana()
