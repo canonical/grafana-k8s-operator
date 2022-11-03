@@ -72,12 +72,10 @@ async def test_grafana_self_monitoring_dashboard_is_present(ops_test):
         ),
     )
     await ops_test.model.wait_for_idle(
-        apps=[grafana_app_name, prometheus_app_name], status="active", idle_period=30
+        apps=[grafana_app_name, prometheus_app_name], status="active", idle_period=60
     )
 
-    self_dashboard = await get_dashboard_by_search(
-        ops_test, grafana_app_name, 0, "Grafana Operator Overview"
-    )
+    self_dashboard = await get_dashboard_by_search(ops_test, grafana_app_name, 0, "Grafana")
     assert self_dashboard != {}
 
 
