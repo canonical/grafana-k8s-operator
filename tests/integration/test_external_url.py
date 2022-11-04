@@ -74,5 +74,6 @@ async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
     # THEN the grafana API is served on metallb's IP
     pw = await grafana_password(ops_test, grafana_app_name)
     grafana = Grafana(host=ip, path=f"{ops_test.model_name}-{grafana_app_name}", port=80, pw=pw)
+
     is_ready = await grafana.is_ready()
     assert is_ready

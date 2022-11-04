@@ -37,15 +37,19 @@ async def test_deploy(ops_test, grafana_charm):
             resources=grafana_resources,
             application_name=grafana_app_name,
             trust=True,
+            series="focal",
         ),
         ops_test.model.deploy(
-            "prometheus-k8s", channel="edge", trust=True, application_name=prometheus_app_name
+            "prometheus-k8s",
+            channel="edge",
+            trust=True,
+            application_name=prometheus_app_name,
+            series="focal",
         ),
     )
     await ops_test.model.wait_for_idle(
         apps=[grafana_app_name, prometheus_app_name],
         status="active",
-        wait_for_units=1,
         timeout=300,
     )
 
@@ -68,12 +72,10 @@ async def test_grafana_self_monitoring_dashboard_is_present(ops_test):
         ),
     )
     await ops_test.model.wait_for_idle(
-        apps=[grafana_app_name, prometheus_app_name], status="active", idle_period=30
+        apps=[grafana_app_name, prometheus_app_name], status="active", idle_period=60
     )
 
-    self_dashboard = await get_dashboard_by_search(
-        ops_test, grafana_app_name, 0, "Grafana Self Monitoring"
-    )
+    self_dashboard = await get_dashboard_by_search(ops_test, grafana_app_name, 0, "Grafana")
     assert self_dashboard != {}
 
 
@@ -90,5 +92,5 @@ async def test_remove(ops_test):
         apps=[grafana_app_name], status="active", timeout=300, idle_period=60
     )
 
-    # relation_removed_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)
-    # assert relation_removed_dashboards == []
+    relation_removed_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)
+    assert relation_removed_dashboards == []

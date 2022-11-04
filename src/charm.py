@@ -194,6 +194,7 @@ class GrafanaCharm(CharmBase):
         # so this may be none. Rely on `self.ingress.is_ready` later to check
         self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
         self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
+        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
 
@@ -234,6 +235,10 @@ class GrafanaCharm(CharmBase):
         self._configure()
         self._configure_replication()
 
+    def _on_ingress_ready(self, _) -> None:
+        """Once Traefik tells us our external URL, make sure we reconfigure Grafana."""
+        self._configure()
+
     def _configure_ingress(self, event: HookEvent) -> None:
         """Set up ingress if a relation is joined, config changed, or a new leader election.
 
@@ -270,9 +275,6 @@ class GrafanaCharm(CharmBase):
         If a leader election event through `config-changed` would result in a new primary, start
         it. If the address provided by the leader in peer data changes, `leader` will be false,
         and replicas will be started.
-
-        Args:
-            leader: a boolean indicating the leader status
         """
         if not self.containers["replication"].can_connect():
             return
@@ -331,17 +333,16 @@ class GrafanaCharm(CharmBase):
         dashboards_dir_path = os.path.join(PROVISIONING_PATH, "dashboards")
         self.init_dashboard_provisioning(dashboards_dir_path)
 
-        dashboard_path = os.path.join(dashboards_dir_path, "grafana_metrics.json")
+        dashboard_path = os.path.join(dashboards_dir_path, "self_dashboard.json")
         if has_relation and self.unit.is_leader():
             # This is not going through the library due to the massive refactor needed in order
             # to squash all of the `validate_relation_direction` and structure around smashing
-            # the datastructures for a self-monitoring use case. This is built-in in Grafana 9,
-            # so it will FIXME be removed when we upgrade
+            # the datastructures for a self-monitoring use case.
             container.push(
                 dashboard_path, Path("src/self_dashboard.json").read_bytes(), make_dirs=True
             )
         elif not has_relation or isinstance(event, RelationBrokenEvent):
-            if container.list_files(dashboards_dir_path, pattern="grafana_metrics.json"):
+            if container.list_files(dashboards_dir_path, pattern="self_dashboard.json"):
                 container.remove_path(dashboard_path)
                 logger.debug("Removed dashboard %s", dashboard_path)
                 self.restart_grafana()
@@ -1078,9 +1079,15 @@ class GrafanaCharm(CharmBase):
         pattern = r"^{}\..*?{}\.".format(self.model.unit.name.replace("/", "-"), self.model.name)
         domain = re.split(pattern, fqdn)[1]
 
-        external_path = urlparse(self.external_url).path or "{}-{}".format(
-            self.model.name, self.model.app.name
-        )
+        if self.external_url == self.ingress.external_host:
+            external_path = "{}-{}".format(self.model.name, self.model.app.name)
+        else:
+            external_path = urlparse(self.external_url).path or "{}-{}".format(
+                self.model.name, self.model.app.name
+            )
+
+        if not external_path.startswith("/"):
+            external_path = "/{}".format(external_path)
 
         routers = {
             "juju-{}-{}-router".format(self.model.name, self.model.app.name): {

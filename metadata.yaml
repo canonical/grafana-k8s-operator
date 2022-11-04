@@ -1,21 +1,22 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 name: grafana-k8s
-display-name: Grafana
+assumes:
+  - k8s-api
 summary: Data visualization and observability with Grafana
+
+website: https://charmhub.io/grafana-k8s
+source: https://github.com/canonical/grafana-k8s-operator
+issues: https://github.com/canonical/alertmanager-k8s-operator/issues
 docs: https://discourse.charmhub.io/t/grafana-operator-k8s-docs-index/5612
+
 maintainers:
   - Ryan Barry <ryan.barry@canonical.com>
 description: |
   Grafana provides dashboards for monitoring data and this
   charm is written to allow for HA on Kubernetes and can take
   multiple data sources (for example, Prometheus).
-tags:
-  - observability
-  - lma
-  - monitoring
-  - grafana
-  - prometheus
+
 containers:
   grafana:
     resource: grafana-image
