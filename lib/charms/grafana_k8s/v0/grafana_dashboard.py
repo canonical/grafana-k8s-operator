@@ -218,7 +218,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 16
+LIBPATCH = 17
 
 logger = logging.getLogger(__name__)
 
@@ -1053,7 +1053,7 @@ class GrafanaDashboardProvider(Object):
             # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
             # custom function for the filter
             def _is_dashboard(p: Path) -> bool:
-                return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+                return p.is_file() and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
 
             for path in filter(_is_dashboard, Path(self._dashboards_path).glob("*")):
                 # path = Path(path)
@@ -1752,7 +1752,7 @@ class GrafanaDashboardAggregator(Object):
         if dashboards_path:
 
             def _is_dashboard(p: Path) -> bool:
-                return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+                return p.is_file() and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
 
             for path in filter(_is_dashboard, Path(dashboards_path).glob("*")):
                 # path = Path(path)
