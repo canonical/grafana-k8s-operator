@@ -59,7 +59,7 @@ def copy_grafana_libraries_into_tester_charm(ops_test: OpsTest) -> None:
         for lib in [
             "grafana_k8s/v0/grafana_dashboard.py",
             "grafana_k8s/v0/grafana_source.py",
-            "grafana_auth/v0/grafana_auth.py",
+            "grafana_k8s/v0/grafana_auth.py",
         ]
     ]
     for lib in libs:
