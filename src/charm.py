@@ -551,7 +551,7 @@ class GrafanaCharm(CharmBase):
 
     def _patch_k8s_service(self):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
-        if self.unit.is_leader() and not self._stored.k8s_service_patched:
+        if self.unit.is_leader() and not self._stored.k8s_service_patched:  # type: ignore[truthy-function]
             service_ports = [
                 (self.app.name, PORT, PORT),
             ]
@@ -1016,7 +1016,7 @@ class GrafanaCharm(CharmBase):
 
     def _get_admin_password(self) -> str:
         """Returns the password for the admin user."""
-        if not self._stored.admin_password:
+        if not self._stored.admin_password:  # type: ignore[truthy-function]
             self._stored.admin_password = self._generate_password()
 
         return self._stored.admin_password  # type: ignore
