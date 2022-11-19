@@ -34,7 +34,7 @@ from urllib.parse import ParseResult, urlparse
 
 import yaml
 from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
-from charms.grafana_auth.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
+from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,

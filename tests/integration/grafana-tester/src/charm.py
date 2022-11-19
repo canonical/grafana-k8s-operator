@@ -6,7 +6,7 @@
 
 import logging
 
-from charms.grafana_auth.v0.grafana_auth import GrafanaAuthProxyProvider
+from charms.grafana_k8s.v0.grafana_auth import GrafanaAuthProxyProvider
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from ops.charm import CharmBase
