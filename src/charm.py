@@ -208,11 +208,6 @@ class GrafanaCharm(CharmBase):
                 # self.ingress.on.revoked,
                 self.on["ingress"].relation_broken,
                 self.on.config_changed,  # web_external_url; also covers upgrade-charm
-                # TODO remove the following after the traefik issue is fixed
-                #  https://github.com/canonical/traefik-k8s-operator/issues/78
-                self.on["ingress"].relation_joined,
-                self.on["ingress"].relation_changed,
-                self.on.update_status,
             ],
             item=CatalogueItem(
                 name="Grafana",
