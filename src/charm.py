@@ -203,7 +203,10 @@ class GrafanaCharm(CharmBase):
             refresh_event=[
                 self.on.grafana_pebble_ready,
                 self.ingress.on.ready,
-                self.ingress.on.revoked,
+                # TODO use revoked instead of relation events when it becomes available
+                # https://github.com/canonical/traefik-route-k8s-operator/issues/21
+                # self.ingress.on.revoked,
+                self.on["ingress"].relation_broken,
                 self.on.config_changed,  # web_external_url; also covers upgrade-charm
                 # TODO remove the following after the traefik issue is fixed
                 #  https://github.com/canonical/traefik-k8s-operator/issues/78
