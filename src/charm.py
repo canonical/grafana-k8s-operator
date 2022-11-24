@@ -202,8 +202,12 @@ class GrafanaCharm(CharmBase):
             charm=self,
             refresh_event=[
                 self.on.grafana_pebble_ready,
-                self.on["ingress"].relation_joined,
-                self.on["ingress"].relation_changed,
+                self.ingress.on.ready,
+                # TODO use revoked instead of relation events when it becomes available
+                # https://github.com/canonical/traefik-route-k8s-operator/issues/21
+                # self.ingress.on.revoked,
+                self.on["ingress"].relation_broken,
+                self.on.config_changed,  # web_external_url; also covers upgrade-charm
             ],
             item=CatalogueItem(
                 name="Grafana",

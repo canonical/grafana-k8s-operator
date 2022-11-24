@@ -365,7 +365,7 @@ class TestCharm(unittest.TestCase):
             self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
         )
         self.assertIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())
-        self.assertEquals(services["environment"]["GF_AUTH_PROXY_ENABLED"], "True")
+        self.assertEqual(services["environment"]["GF_AUTH_PROXY_ENABLED"], "True")
 
 
 class TestCharmReplication(unittest.TestCase):
