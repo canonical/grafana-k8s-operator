@@ -565,7 +565,7 @@ def _convert_dashboard_fields(content: str, inject_dropdowns: bool = True) -> st
     existing_templates = False
 
     template_dropdowns = (
-        TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS  # type: ignore
+        TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS
         if inject_dropdowns
         else DATASOURCE_TEMPLATE_DROPDOWNS
     )
@@ -625,20 +625,47 @@ def _replace_template_fields(  # noqa: C901
             if "datasource" not in panel or not panel.get("datasource", ""):
                 continue
             if not existing_templates:
-                if "loki" in panel.get("datasource"):
-                    panel["datasource"] = "${lokids}"
+                datasource = panel.get("datasource")
+                if type(datasource) == str:
+                    if "loki" in datasource:
+                        panel["datasource"] = "${lokids}"
+                    else:
+                        panel["datasource"] = "${prometheusds}"
+                elif type(datasource) == dict:
+                    dstype = datasource.get("type")
+                    if dstype == "loki":
+                        panel["datasource"]["uid"] = "${lokids}"
+                    elif dstype == "prometheus":
+                        panel["datasource"]["uid"] = "${prometheusds}"
+                    else:
+                        logger.debug("Can not determine type of datasource: {}: skipping")
+                        continue
                 else:
-                    panel["datasource"] = "${prometheusds}"
-            else:
-                if panel["datasource"].lower() in replacements.values():
-                    # Already a known template variable
+                    logger.error("Unknown datasource format: skipping")
                     continue
-                # Strip out variable characters and maybe braces
-                ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
-                replacement = replacements.get(datasources[ds], "")
-                if replacement:
-                    used_replacements.append(ds)
-                panel["datasource"] = replacement or panel["datasource"]
+            else:
+                if type(panel["datasource"]) == str:
+                    if panel["datasource"].lower() in replacements.values():
+                        # Already a known template variable
+                        continue
+                    # Strip out variable characters and maybe braces
+                    ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
+                    replacement = replacements.get(datasources[ds], "")
+                    if replacement:
+                        used_replacements.append(ds)
+                    panel["datasource"] = replacement or panel["datasource"]
+                elif type(panel["datasource"]) == dict:
+                    dstype = panel["datasource"].get("type")
+                    if dstype == "loki":
+                        panel["datasource"]["uid"] = "${lokids}"
+                    elif dstype == "prometheus":
+                        panel["datasource"]["uid"] = "${prometheusds}"
+                    else:
+                        logger.debug("Can not determine type of datasource: {}: skipping")
+                        continue
+                else:
+                    logger.error("Unknown datasource format: skipping")
+                    continue
 
         # Put our substitutions back
         dict_content["panels"] = panels
@@ -758,13 +785,22 @@ def _modify_panel(panel: dict, topology: dict, transformer: "CosTool") -> dict:
         # If there's no expression, we don't need to do anything
         if "expr" not in target.keys():
             continue
+        expr = target["expr"]
 
         if "datasource" not in panel.keys():
             continue
-        elif panel["datasource"] not in known_datasources:
-            continue
-        querytype = known_datasources[panel["datasource"]]
-        expr = target["expr"]
+        else:
+            if type(panel["datasource"]) == str:
+                if panel["datasource"] not in known_datasources:
+                    continue
+                querytype = known_datasources[panel["datasource"]]
+            elif type(panel["datasource"]) == dict:
+                if panel["datasource"]["uid"] not in known_datasources:
+                    continue
+                querytype = known_datasources[panel["datasource"]["uid"]]
+            else:
+                logger.error("Unknown datasource format: skipping")
+                continue
 
         # Capture all values inside `[]` into a list which we'll iterate over later to
         # put them back in-order. Then apply the regex again and replace everything with
