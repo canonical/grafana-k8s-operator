@@ -607,6 +607,7 @@ class TestDashboardConsumer(unittest.TestCase):
         )
 
     def test_consumer_templates_with_dict_datasource(self):
+        """Dict datasources replace str datasources in Grafana 9."""
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         self.setup_different_dashboard(DICT_DATASOURCE_DASHBOARD_TEMPLATE)
