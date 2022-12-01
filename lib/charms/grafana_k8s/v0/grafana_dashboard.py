@@ -622,7 +622,7 @@ def _replace_template_fields(  # noqa: C901
         #
         # COS only knows about Prometheus and Loki.
         for panel in panels:
-            if "datasource" not in panel or not panel.get("datasource", ""):
+            if "datasource" not in panel or not panel.get("datasource"):
                 continue
             if not existing_templates:
                 datasource = panel.get("datasource")
@@ -632,13 +632,14 @@ def _replace_template_fields(  # noqa: C901
                     else:
                         panel["datasource"] = "${prometheusds}"
                 elif type(datasource) == dict:
-                    dstype = datasource.get("type")
+                # In dashboards exported by Grafana 9, datasource type is dict
+                    dstype = datasource.get("type", "")
                     if dstype == "loki":
                         panel["datasource"]["uid"] = "${lokids}"
                     elif dstype == "prometheus":
                         panel["datasource"]["uid"] = "${prometheusds}"
                     else:
-                        logger.debug("Can not determine type of datasource: {}: skipping")
+                        logger.debug("Unrecognized datasource type '%s'; skipping", dstype)
                         continue
                 else:
                     logger.error("Unknown datasource format: skipping")
@@ -655,7 +656,7 @@ def _replace_template_fields(  # noqa: C901
                         used_replacements.append(ds)
                     panel["datasource"] = replacement or panel["datasource"]
                 elif type(panel["datasource"]) == dict:
-                    dstype = panel["datasource"].get("type")
+                    dstype = panel["datasource"].get("type", "")
                     if dstype == "loki":
                         panel["datasource"]["uid"] = "${lokids}"
                     elif dstype == "prometheus":
