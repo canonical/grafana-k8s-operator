@@ -632,7 +632,7 @@ def _replace_template_fields(  # noqa: C901
                     else:
                         panel["datasource"] = "${prometheusds}"
                 elif type(datasource) == dict:
-                # In dashboards exported by Grafana 9, datasource type is dict
+                    # In dashboards exported by Grafana 9, datasource type is dict
                     dstype = datasource.get("type", "")
                     if dstype == "loki":
                         panel["datasource"]["uid"] = "${lokids}"
