@@ -1511,9 +1511,8 @@ class GrafanaDashboardAggregator(Object):
     The :class:`GrafanaDashboardAggregator` object provides a way to
     collate and aggregate Grafana dashboards from reactive/machine charms
     and transport them into Charmed Operators, using Juju topology.
-
     For detailed usage instructions, see the documentation for
-    :module:`lma-proxy-operator`, as this class is intended for use as a
+    :module:`cos-proxy-operator`, as this class is intended for use as a
     single point of intersection rather than use in individual charms.
 
     Since :class:`GrafanaDashboardAggregator` serves as a bridge between
@@ -1525,7 +1524,6 @@ class GrafanaDashboardAggregator(Object):
 
     In its most streamlined usage, :class:`GrafanaDashboardAggregator` is
     integrated in a charmed operator as follows:
-
         self.grafana = GrafanaDashboardAggregator(self)
 
     Args:
@@ -1654,6 +1652,12 @@ class GrafanaDashboardAggregator(Object):
             if "list" in dash["templating"]:
                 for i in range(len(dash["templating"]["list"])):
                     if (
+                        "name" in dash["templating"]["list"][i]
+                        and "app" in dash["templating"]["list"][i]["datasource"]
+                    ):
+                        del dash["templating"]["list"][i]
+                        continue
+                    if (
                         "datasource" in dash["templating"]["list"][i]
                         and "Juju" in dash["templating"]["list"][i]["datasource"]
                     ):
@@ -1663,6 +1667,19 @@ class GrafanaDashboardAggregator(Object):
                         and dash["templating"]["list"][i]["name"] == "host"
                     ):
                         dash["templating"]["list"][i] = REACTIVE_CONVERTER
+
+                # Strip out newly-added 'juju_application' template variables which
+                # don't line up with our drop-downs
+                dash_mutable = dash
+                for i in range(len(dash["templating"]["list"])):
+                    if (
+                        "name" in dash["templating"]["list"][i]
+                        and "app" in dash["templating"]["list"][i]["datasource"]
+                    ):
+                        del dash_mutable["templating"]["list"][i]
+
+                if dash_mutable:
+                    dash = dash_mutable
         except KeyError:
             logger.debug("No existing templating data in dashboard")
 
@@ -1716,11 +1733,17 @@ class GrafanaDashboardAggregator(Object):
             # Replace the old-style datasource templates
             dash = re.sub(r"<< datasource >>", r"${prometheusds}", dash)
             dash = re.sub(r'"datasource": "prom.*?"', r'"datasource": "${prometheusds}"', dash)
+            dash = re.sub(
+                r'"datasource": ".*?Juju generated.*?"', r'"datasource": "${prometheusds}"', dash
+            )
+
+            # Yank out "new"+old LMA topology
+            dash = re.sub(r',?juju_application=~"$app"', "", dash)
 
             from jinja2 import Template
 
             content = _encode_dashboard_content(
-                Template(dash).render(host=event.unit.name, datasource="prometheus")
+                Template(dash).render(host=r"$host", datasource="${prometheusds}")
             )
             id = "prog:{}".format(content[-24:-16])
 
@@ -1751,10 +1774,10 @@ class GrafanaDashboardAggregator(Object):
 
         if dashboards_path:
 
-            def _is_dashboard(p: Path) -> bool:
-                return p.is_file() and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+            def _is_dashbaord(p: Path) -> bool:
+                return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
 
-            for path in filter(_is_dashboard, Path(dashboards_path).glob("*")):
+            for path in filter(_is_dashbaord, Path(dashboards_path).glob("*")):
                 # path = Path(path)
                 if event.app.name in path.name:
                     id = "file:{}".format(path.stem)
@@ -1769,7 +1792,6 @@ class GrafanaDashboardAggregator(Object):
             "charm": event.app.name,
             "content": content,
             "juju_topology": self._juju_topology(event),
-            "inject_dropdowns": True,
         }
 
     # This is not actually used in the dashboards, but is present to provide a secondary
