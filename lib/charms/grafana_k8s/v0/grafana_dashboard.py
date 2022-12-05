@@ -565,7 +565,7 @@ def _convert_dashboard_fields(content: str, inject_dropdowns: bool = True) -> st
     existing_templates = False
 
     template_dropdowns = (
-        TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS
+        TOPOLOGY_TEMPLATE_DROPDOWNS + DATASOURCE_TEMPLATE_DROPDOWNS  # type: ignore
         if inject_dropdowns
         else DATASOURCE_TEMPLATE_DROPDOWNS
     )
