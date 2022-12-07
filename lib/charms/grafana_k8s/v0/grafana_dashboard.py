@@ -657,13 +657,15 @@ def _replace_template_fields(  # noqa: C901
                     panel["datasource"] = replacement or panel["datasource"]
                 elif type(panel["datasource"]) == dict:
                     dstype = panel["datasource"].get("type", "")
-                    if dstype == "loki":
-                        panel["datasource"]["uid"] = "${lokids}"
-                    elif dstype == "prometheus":
-                        panel["datasource"]["uid"] = "${prometheusds}"
-                    else:
-                        logger.debug("Can not determine type of datasource: {}: skipping")
+                    if panel["datasource"].get("uid", "").lower() in replacements.values():
+                        # Already a known template variable
                         continue
+                    # Strip out variable characters and maybe braces
+                    ds = re.sub(r"(\$|\{|\})", "", panel["datasource"].get("uid", ""))
+                    replacement = replacements.get(datasources[ds], "")
+                    if replacement:
+                        used_replacements.append(ds)
+                        panel["datasource"]["uid"] = replacement
                 else:
                     logger.error("Unknown datasource format: skipping")
                     continue
