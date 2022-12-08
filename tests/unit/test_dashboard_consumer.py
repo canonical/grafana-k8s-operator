@@ -294,6 +294,35 @@ EXISTING_LOKI_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
     }
 )
 
+DICT_DATASOURCE_DASHBOARD_TEMPLATE = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "someuid"
+            }
+        }
+    ]
+}
+"""
+
+DICT_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {
+                "data": "label_values(up, juju_unit)",
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prometheusds}",
+                },
+            },
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
 
 class ConsumerCharm(CharmBase):
     _stored = StoredState()
@@ -573,6 +602,25 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": NULL_DATASOURCE_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    def test_consumer_templates_with_dict_datasource(self):
+        """Dict datasources replace str datasources in Grafana 9."""
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(DICT_DATASOURCE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": DICT_DATASOURCE_DASHBOARD_RENDERED,
                 }
             ],
         )
