@@ -35,15 +35,10 @@ This unit and its IP address can be retrieved using the `juju status` command.
 The default password is randomized at first install, and can be retrieved with:
 ### Juju >= 3
 ```bash
-juju run grafana-k8s/0 get-admin-password
+juju run grafana-k8s/0 get-admin-password # juju >=3
+###
+JUJU_FEATURES=actions-v2 juju run grafana-k8s/0 get-admin-password # juju 2
 ```
-
-### Juju 2.9
-Users may use `JUJU_FEATURES=actions-v2` as an environment variable to use the Juju >=3 syntax, else:
-```bash
-juju run-action grafana-k8s/0 get-admin-password --wait
-```
-
 
 View the dashboard in a browser:
 1. `juju status` to check the IP of the running Grafana application
