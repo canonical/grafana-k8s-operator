@@ -620,8 +620,8 @@ def _replace_template_fields(  # noqa: C901
             )
 
         # Find panels nested under rows
-        if "rows" in dict_content.keys():
-            rows = dict_content["rows"]
+        rows = dict_content.get("rows", {})
+        if rows:
 
             for row_idx, row in enumerate(rows):
                 if "panels" in row.keys():
