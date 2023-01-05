@@ -218,7 +218,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 20
+LIBPATCH = 21
 
 logger = logging.getLogger(__name__)
 
@@ -668,6 +668,8 @@ def _template_panels(
             if type(datasource) == str:
                 if "loki" in datasource:
                     panel["datasource"] = "${lokids}"
+                elif "grafana" in datasource:
+                    continue
                 else:
                     panel["datasource"] = "${prometheusds}"
             elif type(datasource) == dict:
@@ -690,6 +692,11 @@ def _template_panels(
                     continue
                 # Strip out variable characters and maybe braces
                 ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
+
+                if ds not in datasources.keys():
+                    # Unknown, non-templated datasource, potentially a Grafana builtin
+                    continue
+
                 replacement = replacements.get(datasources[ds], "")
                 if replacement:
                     used_replacements.append(ds)
@@ -701,6 +708,11 @@ def _template_panels(
                     continue
                 # Strip out variable characters and maybe braces
                 ds = re.sub(r"(\$|\{|\})", "", panel["datasource"].get("uid", ""))
+
+                if ds not in datasources.keys():
+                    # Unknown, non-templated datasource, potentially a Grafana builtin
+                    continue
+
                 replacement = replacements.get(datasources[ds], "")
                 if replacement:
                     used_replacements.append(ds)
