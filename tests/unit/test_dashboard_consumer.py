@@ -179,6 +179,51 @@ NULL_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
     }
 )
 
+BUILTIN_DATASOURCE_DASHBOARD_TEMPLATE = """
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "grafana",
+                "enable": true,
+                "type": "dashboard"
+            }
+        ]
+    },
+    "panels": [
+        {
+            "datasource": "grafana",
+            "panels": [],
+            "targets": [
+                {
+                    "datasource": "grafana",
+                    "refId": "A"
+                }
+            ],
+            "title": "foo"
+        }
+    ]
+}
+"""
+
+BUILTIN_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "annotations": {
+            "list": [{"builtIn": 1, "datasource": "grafana", "enable": True, "type": "dashboard"}]
+        },
+        "panels": [
+            {
+                "datasource": "grafana",
+                "panels": [],
+                "targets": [{"datasource": "grafana", "refId": "A"}],
+                "title": "foo",
+            }
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
 EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
 {
     "panels": [
@@ -660,6 +705,24 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": NULL_DATASOURCE_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    def test_consumer_templates_with_builtin_datasource(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(BUILTIN_DATASOURCE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": BUILTIN_DATASOURCE_DASHBOARD_RENDERED,
                 }
             ],
         )
