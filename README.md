@@ -72,7 +72,7 @@ If HA is not required, there is no need to add a database relation.
 
 ```
 grafana_datasource - An input for grafana-k8s datasources
-grafana_dashboard - an input for zlib compressed base64 encoded dashboard data
+grafana_dashboard - an input for LZMA compressed base64 encoded dashboard data
 ```
 
 ## OCI Images
