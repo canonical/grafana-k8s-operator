@@ -160,7 +160,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 13
+LIBPATCH = 14
 
 logger = logging.getLogger(__name__)
 
@@ -459,6 +459,9 @@ class GrafanaSourceProvider(Object):
         """
         for relation in self._charm.model.relations[self._relation_name]:
             url = self._source_url or "{}:{}".format(socket.getfqdn(), self._source_port)
+            if self._source_type == "mimir":
+                url = f"{url}/prometheus"
+
             relation.data[self._charm.unit]["grafana_source_host"] = url
 
 
