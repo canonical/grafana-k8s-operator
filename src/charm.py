@@ -366,6 +366,18 @@ class GrafanaCharm(CharmBase):
         """Go into maintenance state if the unit is stopped."""
         self.unit.status = MaintenanceStatus("Application is terminating.")
 
+    def _check_datasource_provisioning(self) -> bool:
+        """Check whether or not datasources need to be (re)provisioned."""
+        grafana_datasources = self._generate_datasource_config()
+        datasources_hash = hashlib.sha256(str(grafana_datasources).encode("utf-8")).hexdigest()
+        if not self.grafana_datasources_hash == datasources_hash:
+            self.grafana_datasources_hash = datasources_hash
+            self._update_datasource_config(grafana_datasources)
+            logger.info("Updated Grafana's datasource configuration")
+
+            return True
+        return False
+
     def _configure(self) -> None:
         """Configure Grafana.
 
@@ -389,14 +401,7 @@ class GrafanaCharm(CharmBase):
 
             restart = True
 
-        # Do the same thing for datasources
-        grafana_datasources = self._generate_datasource_config()
-        datasources_hash = hashlib.sha256(str(grafana_datasources).encode("utf-8")).hexdigest()
-        if not self.grafana_datasources_hash == datasources_hash:
-            self.grafana_datasources_hash = datasources_hash
-            self._update_datasource_config(grafana_datasources)
-            logger.info("Updated Grafana's datasource configuration")
-
+        if self._check_datasource_provisioning():
             # Non-leaders will get updates from litestream
             if self.unit.is_leader():
                 restart = True
@@ -502,6 +507,7 @@ class GrafanaCharm(CharmBase):
         if not os.path.exists(dashboard_path):
             try:
                 container.push(default_config, default_config_string, make_dirs=True)
+                self._check_datasource_provisioning()
                 self.restart_grafana()
             except ConnectionError:
                 logger.warning(
