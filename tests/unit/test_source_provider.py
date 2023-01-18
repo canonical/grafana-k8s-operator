@@ -53,6 +53,19 @@ class AlertManagerProviderCharm(CharmBase):
         )
 
 
+class MimirProviderCharm(CharmBase):
+    _stored = StoredState()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+        self.provider = GrafanaSourceProvider(
+            self,
+            source_type="mimir",
+            source_port="9009",
+            refresh_event=self.on.grafana_tester_pebble_ready,
+        )
+
+
 class TestSourceProvider(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(ProviderCharm, meta=CONSUMER_META)
@@ -105,6 +118,27 @@ class TestAlertManagerProvider(unittest.TestCase):
         self.assertIn("model_uuid", scrape_data)
         self.assertIn("application", scrape_data)
         self.assertEqual(scrape_data["extra_fields"], {"implementation": "prometheus"})
+
+
+class TestMimirProvider(unittest.TestCase):
+    def setUp(self):
+        self.harness = Harness(MimirProviderCharm, meta=CONSUMER_META)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
+        self.harness.begin()
+
+    @patch("socket.getfqdn", new=lambda *args: "mimir")
+    def test_provider_sets_scrape_data(self):
+        rel_id = self.harness.add_relation("grafana-source", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+        self.assertIn("grafana_source_data", data)
+        scrape_data = json.loads(data["grafana_source_data"])
+        self.assertIn("model", scrape_data)
+        self.assertIn("model_uuid", scrape_data)
+        self.assertIn("application", scrape_data)
+        host_data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
+        self.assertEqual(host_data["grafana_source_host"], "mimir:9009/prometheus")
 
 
 class ProviderCharmWithIngress(CharmBase):
