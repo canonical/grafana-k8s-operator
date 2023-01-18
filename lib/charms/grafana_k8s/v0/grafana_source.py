@@ -498,7 +498,7 @@ class GrafanaSourceConsumer(Object):
 
         # We're stuck with this forever now so upgrades work, or until such point as we can
         # break compatibility
-        self._stored.set_default(
+        self._stored.set_default(  # type: ignore
             sources=dict(),
             sources_to_delete=set(),
         )
@@ -667,13 +667,13 @@ class GrafanaSourceConsumer(Object):
                 )
 
         # If there's stored data, merge it and purge it
-        if self._stored.sources:
+        if self._stored.sources:  # type: ignore
             self._stored.sources = {}
             peer_sources = self.get_peer_data("sources")
             sources.update(peer_sources)
             self.set_peer_data("sources", sources)
 
-        if self._stored.sources_to_delete:
+        if self._stored.sources_to_delete:  # type: ignore
             old_sources_to_delete = _type_convert_stored(self._stored.sources_to_delete)
             self._stored.sources_to_delete = set()
             peer_sources_to_delete = set(self.get_peer_data("sources_to_delete"))
