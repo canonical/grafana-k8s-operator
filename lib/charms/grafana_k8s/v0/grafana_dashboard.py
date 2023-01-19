@@ -1817,9 +1817,6 @@ class GrafanaDashboardAggregator(Object):
                 Template(dash).render(host=r"$host", datasource="${prometheusds}")  # type: ignore
             )
             id = "prog:{}".format(content[-24:-16])
-            with open("/tmp/dashboard-{}.json".format(id), "w") as f:
-                logger.warning("WRITING TO /tmp/dashboard-{}".format(id))
-                f.write(Template(dash).render(host=r"$host", datasource=r'${prometheusds}'))
 
             dashboards[id] = content
         return {**builtins, **dashboards}
@@ -1848,10 +1845,10 @@ class GrafanaDashboardAggregator(Object):
 
         if dashboards_path:
 
-            def _is_dashbaord(p: Path) -> bool:
+            def is_dashboard(p: Path) -> bool:
                 return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
 
-            for path in filter(_is_dashbaord, Path(dashboards_path).glob("*")):
+            for path in filter(is_dashboard, Path(dashboards_path).glob("*")):
                 # path = Path(path)
                 if event.app.name in path.name:  # type: ignore
                     id = "file:{}".format(path.stem)
