@@ -84,6 +84,47 @@ VARIABLE_DASHBOARD_RENDERED = json.dumps(
     }
 )
 
+ROW_ONLY_DASHBOARD_TEMPLATE = """
+{
+    "rows": [
+        {
+            "panels": [
+                {
+                    "data": "label_values(up, juju_unit)",
+                    "datasource": "$replace_me"
+                }
+            ]
+        },
+        {
+            "panels": [
+                {
+                    "data": "label_values(up, juju_charm)",
+                    "datasource": "$replace_me"
+                }
+            ]
+        }
+    ]
+}
+"""
+
+ROW_ONLY_DASHBOARD_RENDERED = json.dumps(
+    {
+        "rows": [
+            {
+                "panels": [
+                    {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
+                ],
+            },
+            {
+                "panels": [
+                    {"data": "label_values(up, juju_charm)", "datasource": "${prometheusds}"},
+                ],
+            },
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
 INPUT_DASHBOARD_TEMPLATE = """
 {
     "__inputs": [
@@ -133,6 +174,51 @@ NULL_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "Row separator", "datasource": None},
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
+BUILTIN_DATASOURCE_DASHBOARD_TEMPLATE = """
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "grafana",
+                "enable": true,
+                "type": "dashboard"
+            }
+        ]
+    },
+    "panels": [
+        {
+            "datasource": "grafana",
+            "panels": [],
+            "targets": [
+                {
+                    "datasource": "grafana",
+                    "refId": "A"
+                }
+            ],
+            "title": "foo"
+        }
+    ]
+}
+"""
+
+BUILTIN_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "annotations": {
+            "list": [{"builtIn": 1, "datasource": "grafana", "enable": True, "type": "dashboard"}]
+        },
+        "panels": [
+            {
+                "datasource": "grafana",
+                "panels": [],
+                "targets": [{"datasource": "grafana", "refId": "A"}],
+                "title": "foo",
+            }
         ],
         "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
@@ -291,6 +377,35 @@ EXISTING_LOKI_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
         },
+    }
+)
+
+DICT_DATASOURCE_DASHBOARD_TEMPLATE = """
+{
+    "panels": [
+        {
+            "data": "label_values(up, juju_unit)",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "someuid"
+            }
+        }
+    ]
+}
+"""
+
+DICT_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
+    {
+        "panels": [
+            {
+                "data": "label_values(up, juju_unit)",
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prometheusds}",
+                },
+            },
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
     }
 )
 
@@ -540,13 +655,30 @@ class TestDashboardConsumer(unittest.TestCase):
             ],
         )
 
+    def test_consumer_templates_rows(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(ROW_ONLY_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": ROW_ONLY_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
     def test_consumer_templates_dashboard_with_inputs(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         self.setup_different_dashboard(INPUT_DASHBOARD_TEMPLATE)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
-        self.maxDiff = None
         self.assertEqual(
             self.harness.charm.grafana_consumer.dashboards,
             [
@@ -573,6 +705,43 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": NULL_DATASOURCE_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    def test_consumer_templates_with_builtin_datasource(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(BUILTIN_DATASOURCE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": BUILTIN_DATASOURCE_DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    def test_consumer_templates_with_dict_datasource(self):
+        """Dict datasources replace str datasources in Grafana 9."""
+        self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(DICT_DATASOURCE_DASHBOARD_TEMPLATE)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": DICT_DATASOURCE_DASHBOARD_RENDERED,
                 }
             ],
         )

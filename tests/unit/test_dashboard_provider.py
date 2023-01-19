@@ -68,12 +68,7 @@ MANUAL_TEMPLATE_DATA_NO_DROPDOWNS = {
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
         "inject_dropdowns": False,
         "dashboard_alt_uid": "0b73d01f7b214e98",
-        "juju_topology": {
-            "application": "provider-tester",
-            "model": "testing",
-            "model_uuid": "abcdefgh-1234",
-            "unit": "provider-tester/0",
-        },
+        "juju_topology": {},
     }
 }
 

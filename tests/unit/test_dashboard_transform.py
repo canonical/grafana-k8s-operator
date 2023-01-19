@@ -69,6 +69,29 @@ DASHBOARD_RENDERED = json.dumps(
     }
 )
 
+DASHBOARD_DATA_NO_TOPOLOGY = {
+    "charm": "grafana-k8s",
+    "content": DASHBOARD_TEMPLATE,
+    "juju_topology": {},
+}
+
+DASHBOARD_RENDERED_NO_TOPOLOGY = json.dumps(
+    {
+        "panels": [
+            {
+                "data": "label_values(up, juju_unit)",
+                "datasource": "${prometheusds}",
+                "targets": [
+                    {
+                        "expr": "up{job='foo'}",
+                    },
+                ],
+            },
+        ],
+        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+    }
+)
+
 LOKI_DASHBOARD_TEMPLATE = r"""
 {
     "panels": [
@@ -315,7 +338,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
 
         return rel_ids
 
-    def setup_different_dashboard(self, template: str) -> list:
+    def setup_different_dashboard(self, template: str, alternative_data: dict = None) -> list:
         """Create relations used by test cases with alternate templates."""
         rel_ids = []
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
@@ -325,7 +348,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, "provider/0")
         rel_ids.append(rel_id)
 
-        d = DASHBOARD_DATA
+        d = alternative_data or DASHBOARD_DATA
         d["content"] = template
 
         data = {
@@ -358,6 +381,25 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED,
+                }
+            ],
+        )
+
+    @unittest.mock.patch("platform.processor", lambda: "x86_64")
+    def test_consumer_does_not_add_labels_without_topology(self):
+        self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        self.setup_different_dashboard(DASHBOARD_TEMPLATE, DASHBOARD_DATA_NO_TOPOLOGY)
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
+
+        self.assertEqual(
+            self.harness.charm.grafana_consumer.dashboards,
+            [
+                {
+                    "id": "file:tester",
+                    "relation_id": "2",
+                    "charm": "grafana-k8s",
+                    "content": DASHBOARD_RENDERED_NO_TOPOLOGY,
                 }
             ],
         )

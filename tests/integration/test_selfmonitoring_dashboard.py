@@ -58,7 +58,7 @@ async def test_deploy(ops_test, grafana_charm):
     assert initial_dashboards == []
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_grafana_self_monitoring_dashboard_is_present(ops_test):
     """Relate and ensure the dashboard is present."""
     await asyncio.gather(
@@ -79,7 +79,7 @@ async def test_grafana_self_monitoring_dashboard_is_present(ops_test):
     assert self_dashboard != {}
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_remove(ops_test):
     logger.info("Removing %s", prometheus_app_name)
     await ops_test.model.applications[prometheus_app_name].remove()

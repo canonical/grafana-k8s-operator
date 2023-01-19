@@ -218,7 +218,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 18
+LIBPATCH = 23
 
 logger = logging.getLogger(__name__)
 
@@ -608,40 +608,32 @@ def _replace_template_fields(  # noqa: C901
     If existing datasource variables are present, try to substitute them.
     """
     replacements = {"loki": "${lokids}", "prometheus": "${prometheusds}"}
-    used_replacements = []
+    used_replacements = []  # type: List[str]
 
     # If any existing datasources match types we know, or we didn't find
     # any templating variables at all, template them.
     if datasources or not existing_templates:
-        panels = dict_content["panels"]
+        panels = dict_content.get("panels", {})
+        if panels:
+            dict_content["panels"] = _template_panels(
+                panels, replacements, used_replacements, existing_templates, datasources
+            )
 
-        # Go through all the panels. If they have a datasource set, AND it's one
-        # that we can convert to ${lokids} or ${prometheusds}, by stripping off the
-        # ${} templating and comparing the name to the list we built, replace it,
-        # otherwise, leave it alone.
-        #
-        # COS only knows about Prometheus and Loki.
-        for panel in panels:
-            if "datasource" not in panel or not panel.get("datasource", ""):
-                continue
-            if not existing_templates:
-                if "loki" in panel.get("datasource"):
-                    panel["datasource"] = "${lokids}"
-                else:
-                    panel["datasource"] = "${prometheusds}"
-            else:
-                if panel["datasource"].lower() in replacements.values():
-                    # Already a known template variable
-                    continue
-                # Strip out variable characters and maybe braces
-                ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
-                replacement = replacements.get(datasources[ds], "")
-                if replacement:
-                    used_replacements.append(ds)
-                panel["datasource"] = replacement or panel["datasource"]
+        # Find panels nested under rows
+        rows = dict_content.get("rows", {})
+        if rows:
 
-        # Put our substitutions back
-        dict_content["panels"] = panels
+            for row_idx, row in enumerate(rows):
+                if "panels" in row.keys():
+                    rows[row_idx]["panels"] = _template_panels(
+                        row["panels"],
+                        replacements,
+                        used_replacements,
+                        existing_templates,
+                        datasources,
+                    )
+
+            dict_content["rows"] = rows
 
     # Finally, go back and pop off the templates we stubbed out
     deletions = []
@@ -653,6 +645,82 @@ def _replace_template_fields(  # noqa: C901
         dict_content["templating"]["list"].remove(d)
 
     return dict_content
+
+
+def _template_panels(
+    panels: dict,
+    replacements: dict,
+    used_replacements: list,
+    existing_templates: bool,
+    datasources: dict,
+) -> dict:
+    """Iterate through a `panels` object and template it appropriately."""
+    # Go through all the panels. If they have a datasource set, AND it's one
+    # that we can convert to ${lokids} or ${prometheusds}, by stripping off the
+    # ${} templating and comparing the name to the list we built, replace it,
+    # otherwise, leave it alone.
+    #
+    for panel in panels:
+        if "datasource" not in panel or not panel.get("datasource"):
+            continue
+        if not existing_templates:
+            datasource = panel.get("datasource")
+            if type(datasource) == str:
+                if "loki" in datasource:
+                    panel["datasource"] = "${lokids}"
+                elif "grafana" in datasource:
+                    continue
+                else:
+                    panel["datasource"] = "${prometheusds}"
+            elif type(datasource) == dict:
+                # In dashboards exported by Grafana 9, datasource type is dict
+                dstype = datasource.get("type", "")
+                if dstype == "loki":
+                    panel["datasource"]["uid"] = "${lokids}"
+                elif dstype == "prometheus":
+                    panel["datasource"]["uid"] = "${prometheusds}"
+                else:
+                    logger.debug("Unrecognized datasource type '%s'; skipping", dstype)
+                    continue
+            else:
+                logger.error("Unknown datasource format: skipping")
+                continue
+        else:
+            if type(panel["datasource"]) == str:
+                if panel["datasource"].lower() in replacements.values():
+                    # Already a known template variable
+                    continue
+                # Strip out variable characters and maybe braces
+                ds = re.sub(r"(\$|\{|\})", "", panel["datasource"])
+
+                if ds not in datasources.keys():
+                    # Unknown, non-templated datasource, potentially a Grafana builtin
+                    continue
+
+                replacement = replacements.get(datasources[ds], "")
+                if replacement:
+                    used_replacements.append(ds)
+                panel["datasource"] = replacement or panel["datasource"]
+            elif type(panel["datasource"]) == dict:
+                dstype = panel["datasource"].get("type", "")
+                if panel["datasource"].get("uid", "").lower() in replacements.values():
+                    # Already a known template variable
+                    continue
+                # Strip out variable characters and maybe braces
+                ds = re.sub(r"(\$|\{|\})", "", panel["datasource"].get("uid", ""))
+
+                if ds not in datasources.keys():
+                    # Unknown, non-templated datasource, potentially a Grafana builtin
+                    continue
+
+                replacement = replacements.get(datasources[ds], "")
+                if replacement:
+                    used_replacements.append(ds)
+                    panel["datasource"]["uid"] = replacement
+            else:
+                logger.error("Unknown datasource format: skipping")
+                continue
+    return panels
 
 
 def _inject_labels(content: str, topology: dict, transformer: "CosTool") -> str:
@@ -758,13 +826,22 @@ def _modify_panel(panel: dict, topology: dict, transformer: "CosTool") -> dict:
         # If there's no expression, we don't need to do anything
         if "expr" not in target.keys():
             continue
+        expr = target["expr"]
 
         if "datasource" not in panel.keys():
             continue
-        elif panel["datasource"] not in known_datasources:
-            continue
-        querytype = known_datasources[panel["datasource"]]
-        expr = target["expr"]
+        else:
+            if type(panel["datasource"]) == str:
+                if panel["datasource"] not in known_datasources:
+                    continue
+                querytype = known_datasources[panel["datasource"]]
+            elif type(panel["datasource"]) == dict:
+                if panel["datasource"]["uid"] not in known_datasources:
+                    continue
+                querytype = known_datasources[panel["datasource"]["uid"]]
+            else:
+                logger.error("Unknown datasource format: skipping")
+                continue
 
         # Capture all values inside `[]` into a list which we'll iterate over later to
         # put them back in-order. Then apply the regex again and replace everything with
@@ -970,7 +1047,7 @@ class GrafanaDashboardProvider(Object):
         self._dashboards_path = dashboards_path
 
         # No peer relation bucket we can rely on providers, keep StoredState here, too
-        self._stored.set_default(dashboard_templates={})
+        self._stored.set_default(dashboard_templates={})  # type: ignore
 
         self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)
         self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)
@@ -996,7 +1073,7 @@ class GrafanaDashboardProvider(Object):
         """
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
-        stored_dashboard_templates = self._stored.dashboard_templates
+        stored_dashboard_templates = self._stored.dashboard_templates  # type: Any
 
         encoded_dashboard = _encode_dashboard_content(content)
 
@@ -1017,7 +1094,7 @@ class GrafanaDashboardProvider(Object):
         """Remove all dashboards to the relation added via :method:`add_dashboard`."""
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
-        stored_dashboard_templates = self._stored.dashboard_templates
+        stored_dashboard_templates = self._stored.dashboard_templates  # type: Any
 
         for dashboard_id in list(stored_dashboard_templates.keys()):
             if dashboard_id.startswith("prog:"):
@@ -1044,7 +1121,7 @@ class GrafanaDashboardProvider(Object):
         # Ensure we do not leave outdated dashboards by removing from stored all
         # the encoded dashboards that start with "file/".
         if self._dashboards_path:
-            stored_dashboard_templates = self._stored.dashboard_templates
+            stored_dashboard_templates = self._stored.dashboard_templates  # type: Any
 
             for dashboard_id in list(stored_dashboard_templates.keys()):
                 if dashboard_id.startswith("file:"):
@@ -1098,7 +1175,7 @@ class GrafanaDashboardProvider(Object):
                 e.grafana_dashboards_absolute_path,
                 e.message,
             )
-            stored_dashboard_templates = self._stored.dashboard_templates
+            stored_dashboard_templates = self._stored.dashboard_templates  # type: Any
 
             for dashboard_id in list(stored_dashboard_templates.keys()):
                 if dashboard_id.startswith("file:"):
@@ -1128,7 +1205,7 @@ class GrafanaDashboardProvider(Object):
             event: The `RelationChangedEvent` that triggered this handler.
         """
         if self._charm.unit.is_leader():
-            data = json.loads(event.relation.data[event.app].get("event", "{}"))
+            data = json.loads(event.relation.data[event.app].get("event", "{}"))  # type: ignore
 
             if not data:
                 return
@@ -1155,7 +1232,7 @@ class GrafanaDashboardProvider(Object):
         return {
             "charm": self._charm.meta.name,
             "content": content,
-            "juju_topology": self._juju_topology,
+            "juju_topology": self._juju_topology if inject_dropdowns else {},
             "inject_dropdowns": inject_dropdowns,
         }
 
@@ -1174,7 +1251,7 @@ class GrafanaDashboardProvider(Object):
     @property
     def dashboard_templates(self) -> List:
         """Return a list of the known dashboard templates."""
-        return [v for v in self._stored.dashboard_templates.values()]
+        return [v for v in self._stored.dashboard_templates.values()]  # type: ignore
 
 
 class GrafanaDashboardConsumer(Object):
@@ -1228,7 +1305,7 @@ class GrafanaDashboardConsumer(Object):
         self._relation_name = relation_name
         self._tranformer = CosTool(self._charm)
 
-        self._stored.set_default(dashboards=dict())
+        self._stored.set_default(dashboards=dict())  # type: ignore
 
         self.framework.observe(
             self._charm.on[self._relation_name].relation_changed,
@@ -1551,7 +1628,7 @@ class GrafanaDashboardAggregator(Object):
 
         # Reactive charms may be RPC-ish and not leave reliable data around. Keep
         # StoredState here
-        self._stored.set_default(
+        self._stored.set_default(  # type: ignore
             dashboard_templates={},
             id_mappings={},
         )
@@ -1593,11 +1670,11 @@ class GrafanaDashboardAggregator(Object):
             return
 
         for id in dashboards:
-            self._stored.dashboard_templates[id] = self._content_to_dashboard_object(
+            self._stored.dashboard_templates[id] = self._content_to_dashboard_object(  # type: ignore
                 dashboards[id], event
             )
 
-        self._stored.id_mappings[event.app.name] = dashboards
+        self._stored.id_mappings[event.app.name] = dashboards  # type: ignore
         self._update_remote_grafana(event)
 
     def _update_remote_grafana(self, _: Optional[RelationEvent] = None) -> None:
@@ -1613,11 +1690,11 @@ class GrafanaDashboardAggregator(Object):
 
     def remove_dashboards(self, event: RelationBrokenEvent) -> None:
         """Remove a dashboard if the relation is broken."""
-        app_ids = _type_convert_stored(self._stored.id_mappings[event.app.name])
+        app_ids = _type_convert_stored(self._stored.id_mappings[event.app.name])  # type: ignore
 
-        del self._stored.id_mappings[event.app.name]
+        del self._stored.id_mappings[event.app.name]  # type: ignore
         for id in app_ids:
-            del self._stored.dashboard_templates[id]
+            del self._stored.dashboard_templates[id]  # type: ignore
 
         stored_data = {
             "templates": _type_convert_stored(self._stored.dashboard_templates),
@@ -1652,12 +1729,6 @@ class GrafanaDashboardAggregator(Object):
             if "list" in dash["templating"]:
                 for i in range(len(dash["templating"]["list"])):
                     if (
-                        "name" in dash["templating"]["list"][i]
-                        and "app" in dash["templating"]["list"][i]["datasource"]
-                    ):
-                        del dash["templating"]["list"][i]
-                        continue
-                    if (
                         "datasource" in dash["templating"]["list"][i]
                         and "Juju" in dash["templating"]["list"][i]["datasource"]
                     ):
@@ -1674,7 +1745,7 @@ class GrafanaDashboardAggregator(Object):
                 for i in range(len(dash["templating"]["list"])):
                     if (
                         "name" in dash["templating"]["list"][i]
-                        and "app" in dash["templating"]["list"][i]["datasource"]
+                        and dash["templating"]["list"][i]["name"] == "app"
                     ):
                         del dash_mutable["templating"]["list"][i]
 
@@ -1704,13 +1775,13 @@ class GrafanaDashboardAggregator(Object):
         # Reactive data can reliably be pulled out of events. In theory, if we got an event,
         # it's on the bucket, but using event explicitly keeps the mental model in
         # place for reactive
-        for k in event.relation.data[event.unit].keys():
+        for k in event.relation.data[event.unit].keys():  # type: ignore
             if k.startswith("request_"):
-                templates.append(json.loads(event.relation.data[event.unit][k])["dashboard"])
+                templates.append(json.loads(event.relation.data[event.unit][k])["dashboard"])  # type: ignore
 
-        for k in event.relation.data[event.app].keys():
+        for k in event.relation.data[event.app].keys():  # type: ignore
             if k.startswith("request_"):
-                templates.append(json.loads(event.relation.data[event.app][k])["dashboard"])
+                templates.append(json.loads(event.relation.data[event.app][k])["dashboard"])  # type: ignore
 
         builtins = self._maybe_get_builtin_dashboards(event)
 
@@ -1738,14 +1809,17 @@ class GrafanaDashboardAggregator(Object):
             )
 
             # Yank out "new"+old LMA topology
-            dash = re.sub(r',?juju_application=~"$app"', "", dash)
+            dash = re.sub(r',?juju_application=~"\$app"', "", dash)
 
             from jinja2 import Template
 
             content = _encode_dashboard_content(
-                Template(dash).render(host=r"$host", datasource="${prometheusds}")
+                Template(dash).render(host=r"$host", datasource="${prometheusds}")  # type: ignore
             )
             id = "prog:{}".format(content[-24:-16])
+            with open("/tmp/dashboard-{}.json".format(id), "w") as f:
+                logger.warning("WRITING TO /tmp/dashboard-{}".format(id))
+                f.write(Template(dash).render(host=r"$host", datasource=r'${prometheusds}'))
 
             dashboards[id] = content
         return {**builtins, **dashboards}
@@ -1779,7 +1853,7 @@ class GrafanaDashboardAggregator(Object):
 
             for path in filter(_is_dashbaord, Path(dashboards_path).glob("*")):
                 # path = Path(path)
-                if event.app.name in path.name:
+                if event.app.name in path.name:  # type: ignore
                     id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
                         _encode_dashboard_content(path.read_bytes()), event
@@ -1789,7 +1863,7 @@ class GrafanaDashboardAggregator(Object):
 
     def _content_to_dashboard_object(self, content: str, event: RelationEvent) -> Dict:
         return {
-            "charm": event.app.name,
+            "charm": event.app.name,  # type: ignore
             "content": content,
             "juju_topology": self._juju_topology(event),
         }
@@ -1801,8 +1875,8 @@ class GrafanaDashboardAggregator(Object):
         return {
             "model": self._charm.model.name,
             "model_uuid": self._charm.model.uuid,
-            "application": event.app.name,
-            "unit": event.unit.name,
+            "application": event.app.name,  # type: ignore
+            "unit": event.unit.name,  # type: ignore
         }
 
 
