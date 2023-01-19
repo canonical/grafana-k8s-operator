@@ -1846,7 +1846,7 @@ class GrafanaDashboardAggregator(Object):
         if dashboards_path:
 
             def is_dashboard(p: Path) -> bool:
-                return p.is_file and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+                return p.is_file() and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
 
             for path in filter(is_dashboard, Path(dashboards_path).glob("*")):
                 # path = Path(path)
