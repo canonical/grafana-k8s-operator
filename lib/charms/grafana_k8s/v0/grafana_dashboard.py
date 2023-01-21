@@ -1786,6 +1786,7 @@ class GrafanaDashboardAggregator(Object):
         builtins = self._maybe_get_builtin_dashboards(event)
 
         if not templates and not builtins:
+            logger.warning("NOTHING!")
             return {}
 
         dashboards = {}
@@ -1805,16 +1806,18 @@ class GrafanaDashboardAggregator(Object):
             dash = re.sub(r"<< datasource >>", r"${prometheusds}", dash)
             dash = re.sub(r'"datasource": "prom.*?"', r'"datasource": "${prometheusds}"', dash)
             dash = re.sub(
-                r'"datasource": ".*?Juju generated.*?"', r'"datasource": "${prometheusds}"', dash
+                r'"datasource": "(!?\w)[\w|\s|-]+?Juju generated.*?"',
+                r'"datasource": "${prometheusds}"',
+                dash,
             )
 
             # Yank out "new"+old LMA topology
-            dash = re.sub(r',?juju_application=~"\$app"', "", dash)
+            dash = re.sub(r'(,?juju_application=~)"\$app"', r'\1"\$juju_application"', dash)
 
             from jinja2 import Template
 
             content = _encode_dashboard_content(
-                Template(dash).render(host=r"$host", datasource="${prometheusds}")  # type: ignore
+                Template(dash).render(host=r"$host", datasource=r"${prometheusds}")  # type: ignore
             )
             id = "prog:{}".format(content[-24:-16])
 
@@ -1863,6 +1866,7 @@ class GrafanaDashboardAggregator(Object):
             "charm": event.app.name,  # type: ignore
             "content": content,
             "juju_topology": self._juju_topology(event),
+            "inject_dropdowns": True,
         }
 
     # This is not actually used in the dashboards, but is present to provide a secondary
