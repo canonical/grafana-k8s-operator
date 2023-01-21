@@ -507,7 +507,6 @@ class GrafanaCharm(CharmBase):
         if not os.path.exists(dashboard_path):
             try:
                 container.push(default_config, default_config_string, make_dirs=True)
-                self._check_datasource_provisioning()
                 self.restart_grafana()
             except ConnectionError:
                 logger.warning(
