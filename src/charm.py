@@ -392,7 +392,6 @@ class GrafanaCharm(CharmBase):
 
         # Generate a new base config and see if it differs from what we have.
         # If it does, store it and signal that we should restart Grafana
-        self._check_datasource_provisioning()
         grafana_config_ini = self._generate_grafana_config()
         config_ini_hash = hashlib.sha256(str(grafana_config_ini).encode("utf-8")).hexdigest()
         if not self.grafana_config_ini_hash == config_ini_hash:
