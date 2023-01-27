@@ -1,4 +1,5 @@
-# Grafana Charm
+# Grafana Operator (k8s)
+![Grafana](https://charmhub.io/grafana-k8s/badge.svg)
 
 ## Description
 
