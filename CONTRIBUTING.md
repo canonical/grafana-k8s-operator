@@ -17,7 +17,7 @@ juju deploy ./grafana-k8s_ubuntu-20.04-amd64.charm --resource grafana-image=ubun
 ```
 
 View the dashboard in a browser:
-1. `juju status` to check the IP of the of the running Grafana application
+1. `juju status` to check the IP of the running Grafana application
 2. Navigate to `http://IP_ADDRESS:3000`
 3. Log in with the default credentials username=admin, password=admin.
 
