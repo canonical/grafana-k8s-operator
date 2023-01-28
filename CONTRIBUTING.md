@@ -1,3 +1,10 @@
+# Contributing to grafana-k8s
+![GitHub](https://img.shields.io/github/license/canonical/grafana-k8s-operator)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/y/canonical/grafana-k8s-operator)
+![GitHub](https://img.shields.io/tokei/lines/github/canonical/grafana-k8s-operator)
+![GitHub](https://img.shields.io/github/issues/canonical/grafana-k8s-operator)
+![GitHub](https://img.shields.io/github/issues-pr/canonical/grafana-k8s-operator) ![GitHub](https://img.shields.io/github/contributors/canonical/grafana-k8s-operator) ![GitHub](https://img.shields.io/github/watchers/canonical/grafana-k8s-operator?style=social)
+
 ## Development environment
 
 Initial setup (ensure microk8s is a clean slate with `microk8s.reset` or a fresh install with `snap install microk8s --classic`:
@@ -17,7 +24,7 @@ juju deploy ./grafana-k8s_ubuntu-20.04-amd64.charm --resource grafana-image=ubun
 ```
 
 View the dashboard in a browser:
-1. `juju status` to check the IP of the of the running Grafana application
+1. `juju status` to check the IP of the running Grafana application
 2. Navigate to `http://IP_ADDRESS:3000`
 3. Log in with the default credentials username=admin, password=admin.
 
