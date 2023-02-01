@@ -8,6 +8,7 @@ summary: Data visualization and observability with Grafana
 website: https://charmhub.io/grafana-k8s
 source: https://github.com/canonical/grafana-k8s-operator
 issues: https://github.com/canonical/alertmanager-k8s-operator/issues
+docs: https://discourse.charmhub.io/t/grafana-operator-k8s-docs-index/5612
 
 maintainers:
   - Ryan Barry <ryan.barry@canonical.com>

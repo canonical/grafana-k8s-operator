@@ -1,22 +1,24 @@
 # Grafana Operator (k8s)
-![Grafana](https://charmhub.io/grafana-k8s/badge.svg)
+[![Grafana](https://charmhub.io/grafana-k8s/badge.svg)](https://charmhub.io/grafana-k8s)
+[![Test Suite](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release-edge.yaml/badge.svg)](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release-edge.yaml)
+![Discourse status](https://img.shields.io/discourse/status?server=https%3A%2F%2Fdiscourse.charmhub.io&style=flat)
 
-## Description
+[Charmed Grafana (`grafana-k8s`)][Grafana operator] is a charm for
+[Grafana].
 
-This Charmed Operator handles instantiation, scaling, configuration, and Day 2
-operations specific to [Grafana](https://grafana.com/).
+The charm imposes configurable resource limits on the workload, can be readily
+integrated with various data sources such as [prometheus][Prometheus operator]
+or [loki][Loki operator], automatically generates topology dropdowns, and comes
+with built-in alert rules for self-monitoring.
 
-Grafana is an open-source observability toolkit which allows you to query,
-visualize, alert on, and visualize metrics from mixed datasources in
-configurable dashboards for observability. This repository contains a
-[Juju](https://juju.is/) Charm for deploying the visualization component of
-Grafana in a Kubernetes cluster.
+It is an essential part of the [COS Lite bundle].
 
-The grafana-k8s charm provides an interface which can ingest data from a wide
-array of data sources, with Prometheus as a common input, then presents that
-data on configurable dashboards. It is the primary user-facing entrypoint for
-the Canonical Observability Stack Lite. See the
-[COS Lite Bundle](https://charmhub.io/cos-lite) for more information.
+[Grafana operator]: https://charmhub.io/grafana-k8s
+[Grafana]: https://grafana.com/grafana/
+[Loki operator]: https://charmhub.io/loki-k8s
+[Prometheus operator]: https://charmhub.io/prometheus-k8s
+[COS Lite bundle]: https://charmhub.io/cos-lite
+
 
 ## Usage
 
