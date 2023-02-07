@@ -1,9 +1,11 @@
 # Contributing to grafana-k8s
-![GitHub](https://img.shields.io/github/license/canonical/grafana-k8s-operator)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/y/canonical/grafana-k8s-operator)
-![GitHub](https://img.shields.io/tokei/lines/github/canonical/grafana-k8s-operator)
-![GitHub](https://img.shields.io/github/issues/canonical/grafana-k8s-operator)
-![GitHub](https://img.shields.io/github/issues-pr/canonical/grafana-k8s-operator) ![GitHub](https://img.shields.io/github/contributors/canonical/grafana-k8s-operator) ![GitHub](https://img.shields.io/github/watchers/canonical/grafana-k8s-operator?style=social)
+![GitHub License](https://img.shields.io/github/license/canonical/grafana-k8s-operator)
+![GitHub Commit Activity](https://img.shields.io/github/commit-activity/y/canonical/grafana-k8s-operator)
+![GitHub Lines of Code](https://img.shields.io/tokei/lines/github/canonical/grafana-k8s-operator)
+![GitHub Issues](https://img.shields.io/github/issues/canonical/grafana-k8s-operator)
+![GitHub PRs](https://img.shields.io/github/issues-pr/canonical/grafana-k8s-operator)
+![GitHub Contributors](https://img.shields.io/github/contributors/canonical/grafana-k8s-operator)
+![GitHub Watchers](https://img.shields.io/github/watchers/canonical/grafana-k8s-operator?style=social)
 
 ## Development environment
 
