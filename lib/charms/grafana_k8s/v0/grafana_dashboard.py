@@ -1713,7 +1713,7 @@ class GrafanaDashboardAggregator(Object):
         `dashboard["__inputs"]` is a property sometimes set when exporting dashboards from
         the Grafana UI. It is not present in earlier Grafana versions, and can be disabled
         in 5.3.4 and above (optionally). If set, any values present will be substituted on
-        import. Some reactive charms use this for Prometheus. LMA2 uses dropdown selectors
+        import. Some reactive charms use this for Prometheus. COS uses dropdown selectors
         for datasources, and leaving this present results in "default" datasource values
         which are broken.
 
