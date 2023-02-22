@@ -24,8 +24,10 @@ import logging
 import os
 import re
 import secrets
+import signal
 import socket
 import string
+import sys
 import time
 from io import StringIO
 from pathlib import Path
@@ -1168,5 +1170,11 @@ class GrafanaCharm(CharmBase):
         return env_vars
 
 
+def _signal_worker(*args) -> None:
+    os.kill(os.getppid(), signal.SIGTERM)
+    sys.exit(0)
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _signal_worker)
     main(GrafanaCharm, use_juju_for_storage=True)
