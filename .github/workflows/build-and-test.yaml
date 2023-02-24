@@ -40,21 +40,22 @@ jobs:
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+      - name: Checkout local
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
+        with:
+          path: charm
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Checkout test pebble Juju
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
         with:
           repository: juju/juju
           path: juju
           ref: 57aa8e8b0a37eae47002665d378c0c37ff026ce3
-      - name: Checkout local
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       - name: run killsnoop
         uses: JarvusInnovations/background-action@v1
         with:
           run: |
-            sudo apt-get update && sudo apt-get -y install bpfcc-tools python3-psutil && ls && sudo python3 ${GITHUB_WORKSPACE}/src/killsnoop.py &
+            sudo apt-get update && sudo apt-get -y install bpfcc-tools python3-psutil && ls && sudo python3 ${GITHUB_WORKSPACE}/charm/src/killsnoop.py &
           wait-on: |
             file:///tmp/compiled
           tail: true
@@ -63,8 +64,6 @@ jobs:
           log-output: stderr,stdout # same as true
           log-output-if: true
           working-directory: /tmp
-      - name: Checkout
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -83,9 +82,9 @@ jobs:
         run: |
           cd ${GITHUB_WORKSPACE}/juju
           go mod vendor
-          make microk8s-operator-update
+          sg snap_microk8s -c make microk8s-operator-update
       - name: Re-provision Juju
         run: |
-          juju bootstrap microk8s micro --agent-version=3.1.1 && sleep 10
+          sg snap_microk8s -c "juju bootstrap microk8s micro --agent-version=3.1.1" && sleep 10
       - name: Run integration tests
-        run: tox -e integration
+        run: cd ${GITHUB_WORKSPACE}/charm && tox -e integration
