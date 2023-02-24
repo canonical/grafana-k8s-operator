@@ -74,7 +74,7 @@ jobs:
           microk8s-group: snap_microk8s
       - name: Teardown controller to re-provision
         run: |
-          juju destroy-controller --destroy-storage --destroy-all-models -y $(juju controllers | grep microk8s | awk '{print $1}' | sed -e 's/^\(.*)\*/\1/')
+          juju destroy-controller --destroy-storage --destroy-all-models -y $(juju controllers | grep microk8s | awk '{print $1}' | sed -e 's/^\(.*\)\*/\1/')
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
