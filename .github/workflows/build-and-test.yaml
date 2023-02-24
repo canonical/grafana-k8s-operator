@@ -1,0 +1,91 @@
+name: Build/Test
+
+on:
+  workflow_call:
+    secrets:
+      CHARMHUB_TOKEN:
+        required: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
+      - name: Install dependencies
+        run: python3 -m pip install tox
+      - name: Run linters
+        run: tox -e lint
+
+  unit-test:
+    name: Unit tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
+      - name: Install dependencies
+        run: python -m pip install tox
+      - name: Run tests
+        run: tox -e unit
+
+  integration-test:
+    name: Integration tests (microk8s)
+    runs-on: ubuntu-22.04
+    needs:
+      - lint
+      - unit-test
+    steps:
+      - name: Set up docker qemu
+        uses: docker/setup-qemu-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Checkout test pebble Juju
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
+        with:
+          repository: juju/juju
+          path: juju
+          ref: 57aa8e8b0a37eae47002665d378c0c37ff026ce3
+      - name: Checkout local
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: run killsnoop
+        uses: JarvusInnovations/background-action@v1
+        with:
+          run: |
+            sudo apt-get update && sudo apt-get -y install bpfcc-tools python3-psutil && ls && sudo python3 ${GITHUB_WORKSPACE}/src/killsnoop.py &
+          wait-on: |
+            file:///tmp/compiled
+          tail: true
+          log-output-resume: stderr
+          wait-for: 10m
+          log-output: stderr,stdout # same as true
+          log-output-if: true
+          working-directory: /tmp
+      - name: Checkout
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          channel: 1.26-strict/stable
+          juju-channel: 3.1/stable
+          microk8s-group: snap_microk8s
+      - name: Teardown controller to re-provision
+        run: |
+          juju destroy-controller --destroy-storage --destroy-all-models -y $(juju controllers | grep microk8s | awk '{print $1}' | sed -e 's/^\(.*)\*/\1/')
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '>=1.19.0'
+      - name: Build operator-agent
+        run: |
+          cd ${GITHUB_WORKSPACE}/juju
+          go mod vendor
+          make microk8s-operator-update
+      - name: Re-provision Juju
+        run: |
+          juju bootstrap microk8s micro --agent-version=3.1.1 && sleep 10
+      - name: Run integration tests
+        run: tox -e integration
