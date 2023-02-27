@@ -161,6 +161,9 @@ def print_event(cpu, data, size):
     if args.failed and (event.ret >= 0):
         return
 
+    if int(event.sig) == 0:
+        return
+
     printb(
         b"%-9s %-6d %-16s %-4d %-6d %-16s %d"
         % (
