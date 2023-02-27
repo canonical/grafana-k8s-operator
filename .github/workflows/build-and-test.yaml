@@ -65,15 +65,18 @@ jobs:
           log-output-if: true
           working-directory: /tmp
       - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: 1.26-strict/stable
-          juju-channel: 3.1/stable
-          microk8s-group: snap_microk8s
-      - name: Teardown controller to re-provision
         run: |
-          juju destroy-controller --destroy-storage --destroy-all-models -y $(juju controllers | grep microk8s | awk '{print $1}' | sed -e 's/^\(.*\)\*/\1/')
+          sudo snap install juju --channel=3.1/stable
+          sudo snap install microk8s --channel=1.26-strict/stable --devmode
+          sg snap_microk8s -c "microk8s.enable dns storage registry"
+          sg snap_microk8s -c "microk8s status --wait-ready"
+      - name: Enable auditing
+        run: |
+            sg snap_microk8s -c "microk8s stop"
+            sudo cp ${GITHUB_WORKSPACE}/charm/audit.yaml /snap/microk8s/current
+            sudo echo "--audit-policy-file=/snap/microk8s/current/audit-policy.yaml" >> /snap/microk8s/current/default-args/kube-apiserver
+            sudo echo "--audit-log-path=${GITHUB_WORKSPACE}/audit.log" >> /snap/microk8s/current/default-args/kube-apiserver
+            sg snap_microk8s -c "microk8s start"
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
@@ -88,3 +91,7 @@ jobs:
           sg snap_microk8s -c "juju bootstrap microk8s micro --agent-version=3.1.1" && sleep 10
       - name: Run integration tests
         run: cd ${GITHUB_WORKSPACE}/charm && tox -e integration
+      - name: View audit log
+        if: always()
+        run: |
+          cat ${GITHUB_WORKSPACE}/audit.log
