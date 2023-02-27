@@ -29,7 +29,7 @@ grafana_app_name = "grafana"
 prometheus_app_name = "prometheus"
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.deploy(

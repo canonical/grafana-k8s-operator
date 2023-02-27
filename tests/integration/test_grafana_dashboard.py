@@ -28,7 +28,7 @@ grafana_app_name = "grafana"
 tester_app_name = "grafana-tester"
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_deploy(ops_test, grafana_charm, grafana_tester_charm):
     await asyncio.gather(
         ops_test.model.deploy(

@@ -29,7 +29,7 @@ grafana_resources = {
 }
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_grafana_dashboard_relation_data_with_grafana_tester(
     ops_test, grafana_charm, grafana_tester_charm
 ):

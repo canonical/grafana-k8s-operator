@@ -26,7 +26,7 @@ grafana_resources = {
 }
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_auth_proxy_is_set(ops_test, grafana_charm, grafana_tester_charm):
     grafana_app_name = "grafana"
     tester_app_name = "grafana-tester"

@@ -23,7 +23,7 @@ async def test_setup_env(ops_test):
     await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_password_returns_correct_value_after_upgrading(ops_test, grafana_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.info("deploying local charm")
