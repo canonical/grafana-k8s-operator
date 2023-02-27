@@ -68,15 +68,16 @@ jobs:
         run: |
           sudo snap install juju --channel=3.1/stable
           sudo snap install microk8s --channel=1.26-strict/stable --devmode
-          sg snap_microk8s -c "microk8s.enable dns storage registry"
+          sudo usermod -a -G snap_microk8s $(whoami)
+          sudo microk8s.enable dns storage registry
           sg snap_microk8s -c "microk8s status --wait-ready"
       - name: Enable auditing
         run: |
-            sg snap_microk8s -c "microk8s stop"
-            sudo cp ${GITHUB_WORKSPACE}/charm/audit.yaml /snap/microk8s/current
+            sudo microk8s stop
+            sudo cp ${GITHUB_WORKSPACE}/charm/audit-policy.yaml /snap/microk8s/current
             sudo echo "--audit-policy-file=/snap/microk8s/current/audit-policy.yaml" >> /snap/microk8s/current/default-args/kube-apiserver
             sudo echo "--audit-log-path=${GITHUB_WORKSPACE}/audit.log" >> /snap/microk8s/current/default-args/kube-apiserver
-            sg snap_microk8s -c "microk8s start"
+            sudo microk8s start
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
