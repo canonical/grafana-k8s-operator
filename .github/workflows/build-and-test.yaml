@@ -67,17 +67,24 @@ jobs:
       - name: Setup operator environment
         run: |
           sudo snap install juju --channel=3.1/stable
-          sudo snap install microk8s --channel=1.26-strict/stable --devmode
+          sudo snap install microk8s --channel=1.26-strict/stable
           sudo usermod -a -G snap_microk8s $(whoami)
           sudo microk8s.enable dns storage registry
           sg snap_microk8s -c "microk8s status --wait-ready"
       - name: Enable auditing
         run: |
             sudo microk8s stop
-            sudo cp ${GITHUB_WORKSPACE}/charm/audit-policy.yaml /snap/microk8s/current
-            sudo echo "--audit-policy-file=/snap/microk8s/current/audit-policy.yaml" >> /snap/microk8s/current/default-args/kube-apiserver
-            sudo echo "--audit-log-path=${GITHUB_WORKSPACE}/audit.log" >> /snap/microk8s/current/default-args/kube-apiserver
+            mkdir ${GITHUB_WORKSPACE}/{overlay,work}
+            sudo mount -t overlay overlay -o lowerdir=/snap/microk8s/current,upperdir=${GITHUB_WORKSPACE}/overlay,workdir=${GITHUB_WORKSPACE}/work /snap/microk8s/current
+            sudo cp ${GITHUB_WORKSPACE}/charm/audit-policy.yaml /snap/microk8s/current/
+            echo "--audit-policy-file=/snap/microk8s/current/audit-policy.yaml" | sudo tee -a /snap/microk8s/current/default-args/kube-apiserver
+            echo "--audit-log-path=${GITHUB_WORKSPACE}/audit.log" | sudo tee -a /snap/microk8s/current/default-args/kube-apiserver
+            sudo cat /snap/microk8s/current/default-args/kube-apiserver
+            sudo cat /snap/microk8s/current/audit-policy.yaml
+            touch ${GITHUB_WORKSPACE}/audit.log
+            chmod 777 ${GITHUB_WORKSPACE}/audit.log
             sudo microk8s start
+            sudo snap install charmcraft --classic
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
@@ -91,7 +98,12 @@ jobs:
         run: |
           sg snap_microk8s -c "juju bootstrap microk8s micro --agent-version=3.1.1" && sleep 10
       - name: Run integration tests
-        run: cd ${GITHUB_WORKSPACE}/charm && tox -e integration
+        run: |
+          cd ${GITHUB_WORKSPACE}/charm
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install tox
+          tox -e integration
       - name: View audit log
         if: always()
         run: |
