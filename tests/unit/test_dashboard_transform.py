@@ -60,7 +60,7 @@ DASHBOARD_RENDERED = json.dumps(
                 "datasource": "${prometheusds}",
                 "targets": [
                     {
-                        "expr": 'up{job="foo",juju_application="$juju_application",juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_unit="$juju_unit"}',
+                        "expr": 'up{job="foo",juju_application=~"$juju_application",juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_unit=~"$juju_unit"}',
                     },
                 ],
             },
@@ -127,7 +127,7 @@ LOKI_DASHBOARD_RENDERED = json.dumps(
                 "datasource": "${lokids}",
                 "targets": [
                     {
-                        "expr": r'{job=".+", juju_application="$juju_application", juju_model="$juju_model", juju_model_uuid="$juju_model_uuid", juju_unit="$juju_unit"}',
+                        "expr": r'{job=".+", juju_application=~"$juju_application", juju_model=~"$juju_model", juju_model_uuid=~"$juju_model_uuid", juju_unit=~"$juju_unit"}',
                     },
                 ],
             },
@@ -178,10 +178,10 @@ DASHBOARD_RENDERED_WITH_NEGATIVE = json.dumps(
                 "data": "label_values(up, juju_unit)",
                 "targets": [
                     {
-                        "expr": 'sum(up{job="foo",juju_application="$juju_application",juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_unit="$juju_unit"})',
+                        "expr": 'sum(up{job="foo",juju_application=~"$juju_application",juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_unit=~"$juju_unit"})',
                     },
                     {
-                        "expr": '-sum(up{job="foo",juju_application="$juju_application",juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_unit="$juju_unit"})',
+                        "expr": '-sum(up{job="foo",juju_application=~"$juju_application",juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_unit=~"$juju_unit"})',
                     },
                 ],
                 "datasource": "${prometheusds}",
@@ -225,7 +225,7 @@ DASHBOARD_RENDERED_WITH_RANGES = json.dumps(
                 "data": "label_values(up, juju_unit)",
                 "targets": [
                     {
-                        "expr": 'rate(http_requests_total{job="foo",juju_application="$juju_application",juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_unit="$juju_unit"}[$__interval]) / rate(http_requests_total{job="foo",juju_application="$juju_application",juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_unit="$juju_unit"}[5m]) >= 0',
+                        "expr": 'rate(http_requests_total{job="foo",juju_application=~"$juju_application",juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_unit=~"$juju_unit"}[$__interval]) / rate(http_requests_total{job="foo",juju_application=~"$juju_application",juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_unit=~"$juju_unit"}[5m]) >= 0',
                     },
                 ],
                 "datasource": "${prometheusds}",
@@ -269,7 +269,7 @@ DASHBOARD_RENDERED_WITH_OFFSETS = json.dumps(
                 "data": "label_values(up, juju_unit)",
                 "targets": [
                     {
-                        "expr": 'sum(http_requests_total{job="foo",juju_application="$juju_application",juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_unit="$juju_unit"} offset $__interval) - sum(http_requests_total{job="foo",juju_application="$juju_application",juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_unit="$juju_unit"} offset -5m)',
+                        "expr": 'sum(http_requests_total{job="foo",juju_application=~"$juju_application",juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_unit=~"$juju_unit"} offset $__interval) - sum(http_requests_total{job="foo",juju_application=~"$juju_application",juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_unit=~"$juju_unit"} offset -5m)',
                     },
                 ],
                 "datasource": "${prometheusds}",

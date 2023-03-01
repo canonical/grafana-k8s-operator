@@ -218,7 +218,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 24
+LIBPATCH = 25
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +256,7 @@ TOPOLOGY_TEMPLATE_DROPDOWNS = [  # type: ignore
     {
         "allValue": None,
         "datasource": "${prometheusds}",
-        "definition": 'label_values(up{juju_model="$juju_model"},juju_model_uuid)',
+        "definition": 'label_values(up{juju_model=~"$juju_model"},juju_model_uuid)',
         "description": None,
         "error": None,
         "hide": 0,
@@ -265,7 +265,7 @@ TOPOLOGY_TEMPLATE_DROPDOWNS = [  # type: ignore
         "multi": True,
         "name": "juju_model_uuid",
         "query": {
-            "query": 'label_values(up{juju_model="$juju_model"},juju_model_uuid)',
+            "query": 'label_values(up{juju_model=~"$juju_model"},juju_model_uuid)',
             "refId": "StandardVariableQuery",
         },
         "refresh": 1,
@@ -281,7 +281,7 @@ TOPOLOGY_TEMPLATE_DROPDOWNS = [  # type: ignore
     {
         "allValue": None,
         "datasource": "${prometheusds}",
-        "definition": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid"},juju_application)',
+        "definition": 'label_values(up{juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid"},juju_application)',
         "description": None,
         "error": None,
         "hide": 0,
@@ -290,7 +290,7 @@ TOPOLOGY_TEMPLATE_DROPDOWNS = [  # type: ignore
         "multi": True,
         "name": "juju_application",
         "query": {
-            "query": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid"},juju_application)',
+            "query": 'label_values(up{juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid"},juju_application)',
             "refId": "StandardVariableQuery",
         },
         "refresh": 1,
@@ -306,7 +306,7 @@ TOPOLOGY_TEMPLATE_DROPDOWNS = [  # type: ignore
     {
         "allValue": None,
         "datasource": "${prometheusds}",
-        "definition": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_application="$juju_application"},juju_unit)',
+        "definition": 'label_values(up{juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_application=~"$juju_application"},juju_unit)',
         "description": None,
         "error": None,
         "hide": 0,
@@ -315,7 +315,7 @@ TOPOLOGY_TEMPLATE_DROPDOWNS = [  # type: ignore
         "multi": True,
         "name": "juju_unit",
         "query": {
-            "query": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_application="$juju_application"},juju_unit)',
+            "query": 'label_values(up{juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_application=~"$juju_application"},juju_unit)',
             "refId": "StandardVariableQuery",
         },
         "refresh": 1,
@@ -366,7 +366,7 @@ DATASOURCE_TEMPLATE_DROPDOWNS = [  # type: ignore
 REACTIVE_CONVERTER = {  # type: ignore
     "allValue": None,
     "datasource": "${prometheusds}",
-    "definition": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_application="$juju_application"},host)',
+    "definition": 'label_values(up{juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_application=~"$juju_application"},host)',
     "description": None,
     "error": None,
     "hide": 0,
@@ -376,7 +376,7 @@ REACTIVE_CONVERTER = {  # type: ignore
     "name": "host",
     "options": [],
     "query": {
-        "query": 'label_values(up{juju_model="$juju_model",juju_model_uuid="$juju_model_uuid",juju_application="$juju_application"},host)',
+        "query": 'label_values(up{juju_model=~"$juju_model",juju_model_uuid=~"$juju_model_uuid",juju_application=~"$juju_application"},host)',
         "refId": "StandardVariableQuery",
     },
     "refresh": 1,
@@ -1980,7 +1980,7 @@ class CosTool:
         args.extend(["--", "{}".format(expression)])
         # noinspection PyBroadException
         try:
-            return self._exec(args)
+            return re.sub(r'="\$juju', r'=~"$juju', self._exec(args))
         except subprocess.CalledProcessError as e:
             logger.debug('Applying the expression failed: "%s", falling back to the original', e)
             return expression
