@@ -85,7 +85,6 @@ jobs:
             chmod 777 ${GITHUB_WORKSPACE}/audit.log
             sudo microk8s start
             sudo snap install charmcraft --classic
-            sudo snap install lxd --classic
             sudo usermod -a -G lxd $(whoami)
             sg lxd -c lxd init --auto
       - name: Setup Go
@@ -106,6 +105,7 @@ jobs:
           python3 -m venv venv
           source venv/bin/activate
           pip install tox
+          charmcraft pack --verbosity=trace
           tox -e integration
       - name: View audit log
         if: always()
