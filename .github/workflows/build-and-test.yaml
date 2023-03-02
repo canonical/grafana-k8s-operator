@@ -105,8 +105,8 @@ jobs:
           python3 -m venv venv
           source venv/bin/activate
           pip install tox
-          charmcraft pack --verbosity=trace
-          tox -e integration
+          sg lxd -c charmcraft pack --verbosity=trace
+          sg lxd -c tox -e integration
       - name: View audit log
         if: always()
         run: |
