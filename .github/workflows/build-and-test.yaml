@@ -86,7 +86,7 @@ jobs:
             sudo microk8s start
             sudo snap install charmcraft --classic
             sudo usermod -a -G lxd $(whoami)
-            sg lxd -c lxd init --auto
+            sudo lxd init --auto
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
