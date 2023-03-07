@@ -64,28 +64,17 @@ jobs:
           log-output: stderr,stdout # same as true
           log-output-if: true
           working-directory: /tmp
+      - name: Get prefsrc
+        run: |
+          echo "IPADDR=$(ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc')" >> $GITHUB_ENV
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
           channel: 1.26-strict/stable
-          juju-channel: 3.1/stable
+          juju-channel: 3.1/edge
           microk8s-group: snap_microk8s
-      - name: Teardown controller to re-provision
-        run: |
-          juju destroy-controller --destroy-storage --destroy-all-models -y $(juju controllers | grep microk8s | awk '{print $1}' | sed -e 's/^\(.*\)\*/\1/')
-      - name: Setup Go
-        uses: actions/setup-go@v3
-        with:
-          go-version: '>=1.19.0'
-      - name: Build operator-agent
-        run: |
-          cd ${GITHUB_WORKSPACE}/juju
-          go mod vendor
-          sg snap_microk8s -c make microk8s-operator-update
-      - name: Re-provision Juju
-        run: |
-          sg snap_microk8s -c "juju bootstrap microk8s micro --agent-version=3.1.1" && sleep 10
+          microk8s-addons: "hostpath-storage dns metallb:${{ env.IPADDR }}-${{ env.IPADDR }}"
       - name: Run integration tests
         run: |
           cd ${GITHUB_WORKSPACE}/charm && tox -e integration
