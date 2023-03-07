@@ -48,9 +48,9 @@ jobs:
       - name: Checkout test pebble Juju
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
         with:
-          repository: juju/juju
+          repository: wallyworld/juju
           path: juju
-          ref: 57aa8e8b0a37eae47002665d378c0c37ff026ce3
+          ref: 7be0f4f71440a42d5b0189a0fcf3a80f7d73c2e6
       - name: run killsnoop
         uses: JarvusInnovations/background-action@v1
         with:
@@ -65,28 +65,15 @@ jobs:
           log-output-if: true
           working-directory: /tmp
       - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          channel: 1.26-strict/stable
+          juju-channel: 3.1/stable
+          microk8s-group: snap_microk8s
+      - name: Teardown controller to re-provision
         run: |
-          sudo snap install juju --channel=3.1/stable
-          sudo snap install microk8s --channel=1.26-strict/stable
-          sudo usermod -a -G snap_microk8s $(whoami)
-          sudo microk8s.enable dns storage registry
-          sg snap_microk8s -c "microk8s status --wait-ready"
-      - name: Enable auditing
-        run: |
-            sudo microk8s stop
-            mkdir ${GITHUB_WORKSPACE}/{overlay,work}
-            sudo mount -t overlay overlay -o lowerdir=/snap/microk8s/current,upperdir=${GITHUB_WORKSPACE}/overlay,workdir=${GITHUB_WORKSPACE}/work /snap/microk8s/current
-            sudo cp ${GITHUB_WORKSPACE}/charm/audit-policy.yaml /snap/microk8s/current/
-            echo "--audit-policy-file=/snap/microk8s/current/audit-policy.yaml" | sudo tee -a /snap/microk8s/current/default-args/kube-apiserver
-            echo "--audit-log-path=${GITHUB_WORKSPACE}/audit.log" | sudo tee -a /snap/microk8s/current/default-args/kube-apiserver
-            sudo cat /snap/microk8s/current/default-args/kube-apiserver
-            sudo cat /snap/microk8s/current/audit-policy.yaml
-            touch ${GITHUB_WORKSPACE}/audit.log
-            chmod 777 ${GITHUB_WORKSPACE}/audit.log
-            sudo microk8s start
-            sudo snap install charmcraft --classic
-            sudo usermod -a -G lxd $(whoami)
-            sudo lxd init --auto
+          juju destroy-controller --destroy-storage --destroy-all-models -y $(juju controllers | grep microk8s | awk '{print $1}' | sed -e 's/^\(.*\)\*/\1/')
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
@@ -101,12 +88,7 @@ jobs:
           sg snap_microk8s -c "juju bootstrap microk8s micro --agent-version=3.1.1" && sleep 10
       - name: Run integration tests
         run: |
-          cd ${GITHUB_WORKSPACE}/charm
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install tox
-          sg lxd -c charmcraft pack --verbosity=trace .
-          sg lxd -c tox -e integration
+          cd ${GITHUB_WORKSPACE}/charm && tox -e integration
       - name: View audit log
         if: always()
         run: |
