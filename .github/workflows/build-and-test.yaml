@@ -48,9 +48,9 @@ jobs:
       - name: Checkout test pebble Juju
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
         with:
-          repository: wallyworld/juju
+          repository: juju/juju
           path: juju
-          ref: 7be0f4f71440a42d5b0189a0fcf3a80f7d73c2e6
+          ref: 7f388dc0ba5eaebae797fe2494ad49aea6ceecc8
       - name: run killsnoop
         uses: JarvusInnovations/background-action@v1
         with:
