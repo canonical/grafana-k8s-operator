@@ -13,6 +13,7 @@ from helpers import (
     get_datasource_for,
     get_grafana_datasources,
     oci_image,
+    uk8s_group,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
 
     cmd = [
         "sg",
-        "microk8s",
+        uk8s_group(),
         "-c",
         " ".join(["microk8s.kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]),
     ]
