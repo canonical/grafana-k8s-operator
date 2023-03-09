@@ -218,7 +218,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 25
+LIBPATCH = 26
 
 logger = logging.getLogger(__name__)
 
@@ -1684,8 +1684,9 @@ class GrafanaDashboardAggregator(Object):
             "uuid": str(uuid.uuid4()),
         }
 
-        for grafana_relation in self.model.relations[self._grafana_relation]:
-            grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
+        if self._charm.unit.is_leader():
+            for grafana_relation in self.model.relations[self._grafana_relation]:
+                grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
     def remove_dashboards(self, event: RelationBrokenEvent) -> None:
         """Remove a dashboard if the relation is broken."""
@@ -1700,11 +1701,12 @@ class GrafanaDashboardAggregator(Object):
             "uuid": str(uuid.uuid4()),
         }
 
-        for grafana_relation in self.model.relations[self._grafana_relation]:
-            grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
+        if self._charm.unit.is_leader():
+            for grafana_relation in self.model.relations[self._grafana_relation]:
+                grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
     # Yes, this has a fair amount of branching. It's not that complex, though
-    def _strip_existing_datasources(self, template: dict) -> dict:  # noqa: C901
+    def _strip_existing_datasources(self, dash: dict) -> dict:  # noqa: C901
         """Remove existing reactive charm datasource templating out.
 
         This method iterates through *known* places where reactive charms may set
@@ -1723,7 +1725,6 @@ class GrafanaDashboardAggregator(Object):
 
         Further properties may be discovered.
         """
-        dash = template["dashboard"]
         try:
             if "list" in dash["templating"]:
                 for i in range(len(dash["templating"]["list"])):
@@ -1763,11 +1764,13 @@ class GrafanaDashboardAggregator(Object):
             else:
                 del dash["__inputs"]
 
-        template["dashboard"] = dash
-        return template
+        return dash
 
     def _handle_reactive_dashboards(self, event: RelationEvent) -> Optional[Dict]:
         """Look for a dashboard in relation data (during a reactive hook) or builtin by name."""
+        if not self._charm.unit.is_leader():
+            return {}
+
         templates = []
         id = ""
 
@@ -1790,9 +1793,6 @@ class GrafanaDashboardAggregator(Object):
 
         dashboards = {}
         for t in templates:
-            # Replace values with LMA-style templating
-            t = self._strip_existing_datasources(t)
-
             # This seems ridiculous, too, but to get it from a "dashboards" key in serialized JSON
             # in the bucket back out to the actual "dashboard" we _need_, this is the way
             # This is not a mistake -- there's a double nesting in reactive charms, and
@@ -1803,6 +1803,10 @@ class GrafanaDashboardAggregator(Object):
             # Apparently SOME newer dashboards (such as Ceph) do not have this double nesting, so
             # now we get to account for both :toot:
             dash = t.get("dashboard", {}) or t
+
+            # Replace values with LMA-style templating
+            dash = self._strip_existing_datasources(dash)
+
             dash = json.dumps(dash)
 
             # Replace the old-style datasource templates
