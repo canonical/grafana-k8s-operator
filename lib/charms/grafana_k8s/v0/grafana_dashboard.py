@@ -218,7 +218,8 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 26
+
+LIBPATCH = 25
 
 logger = logging.getLogger(__name__)
 
@@ -1806,7 +1807,6 @@ class GrafanaDashboardAggregator(Object):
 
             # Replace values with LMA-style templating
             dash = self._strip_existing_datasources(dash)
-
             dash = json.dumps(dash)
 
             # Replace the old-style datasource templates
