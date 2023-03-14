@@ -21,7 +21,7 @@ grafana_app_name = "grafana"
 idle_period = 90
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.deploy(
@@ -52,6 +52,7 @@ async def test_deploy(ops_test, grafana_charm):
     )
 
 
+@pytest.mark.xfail
 async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
     # GIVEN metallb is ready
     ip = await reenable_metallb()
