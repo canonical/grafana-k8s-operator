@@ -2,6 +2,7 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 import asyncio
+import grp
 import logging
 import subprocess
 from pathlib import Path
@@ -249,6 +250,16 @@ async def get_grafana_environment_variable(
     return rc, value, stderr.strip
 
 
+def uk8s_group() -> str:
+    try:
+        # Classically confined microk8s
+        uk8s_group = grp.getgrnam("microk8s").gr_name
+    except KeyError:
+        # Strictly confined microk8s
+        uk8s_group = "snap_microk8s"
+    return uk8s_group
+
+
 async def reenable_metallb() -> str:
     # Set up microk8s metallb addon, needed by traefik
     logger.info("(Re)-enabling metallb")
@@ -262,7 +273,7 @@ async def reenable_metallb() -> str:
 
     logger.info("First, disable metallb, just in case")
     try:
-        cmd = ["sg", "microk8s", "-c", "microk8s disable metallb"]
+        cmd = ["sg", uk8s_group(), "-c", "microk8s disable metallb"]
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except Exception as e:
         print(e)
@@ -272,7 +283,7 @@ async def reenable_metallb() -> str:
 
     logger.info("Now enable metallb")
     try:
-        cmd = ["sg", "microk8s", "-c", f"microk8s enable metallb:{ip}-{ip}"]
+        cmd = ["sg", uk8s_group(), "-c", f"microk8s enable metallb:{ip}-{ip}"]
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except Exception as e:
         print(e)
