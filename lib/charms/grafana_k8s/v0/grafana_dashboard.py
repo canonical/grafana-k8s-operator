@@ -1739,12 +1739,12 @@ class GrafanaDashboardAggregator(Object):
                     ):
                         if "Juju" in dash["templating"]["list"][i].get("datasource", ""):
                             dash["templating"]["list"][i]["datasource"] = r"${prometheusds}"
-                    if (
-                        "name" in dash["templating"]["list"][i]
-                        and dash["templating"]["list"][i]["name"] is not None
-                    ):
-                        if dash["templating"]["list"][i].get("name", "") == "host":
-                            dash["templating"]["list"][i] = REACTIVE_CONVERTER
+                    # if (
+                    #     "name" in dash["templating"]["list"][i]
+                    #     and dash["templating"]["list"][i]["name"] is not None
+                    # ):
+                    #     if dash["templating"]["list"][i].get("name", "") == "host":
+                    #         dash["templating"]["list"][i] = REACTIVE_CONVERTER
 
                 # Strip out newly-added 'juju_application' template variables which
                 # don't line up with our drop-downs
@@ -1819,13 +1819,22 @@ class GrafanaDashboardAggregator(Object):
             dash = re.sub(r"<< datasource >>", r"${prometheusds}", dash)
             dash = re.sub(r'"datasource": "prom.*?"', r'"datasource": "${prometheusds}"', dash)
             dash = re.sub(
+                r'"datasource": "\$datasource"', r'"datasource": "${prometheusds}"', dash
+            )
+            dash = re.sub(r'"uid": "\$datasource"', r'"uid": "${prometheusds}"', dash)
+            dash = re.sub(
                 r'"datasource": "(!?\w)[\w|\s|-]+?Juju generated.*?"',
                 r'"datasource": "${prometheusds}"',
                 dash,
             )
 
             # Yank out "new"+old LMA topology
-            dash = re.sub(r'(,?juju_application=~)"\$app"', r'\1"\$juju_application"', dash)
+            dash = re.sub(
+                r'(,?\s?juju_application=~)\\"\$app\\"', r'\1\\"$juju_application\\"', dash
+            )
+
+            # Replace old piechart panels
+            dash = re.sub(r'"type": "grafana-piechart-panel"', '"type": "piechart"', dash)
 
             from jinja2 import Template
 
