@@ -1739,12 +1739,6 @@ class GrafanaDashboardAggregator(Object):
                     ):
                         if "Juju" in dash["templating"]["list"][i].get("datasource", ""):
                             dash["templating"]["list"][i]["datasource"] = r"${prometheusds}"
-                    # if (
-                    #     "name" in dash["templating"]["list"][i]
-                    #     and dash["templating"]["list"][i]["name"] is not None
-                    # ):
-                    #     if dash["templating"]["list"][i].get("name", "") == "host":
-                    #         dash["templating"]["list"][i] = REACTIVE_CONVERTER
 
                 # Strip out newly-added 'juju_application' template variables which
                 # don't line up with our drop-downs
