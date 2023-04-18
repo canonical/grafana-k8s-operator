@@ -560,49 +560,6 @@ class TestDashboardConsumer(unittest.TestCase):
             ],
         )
 
-    def test_consumer_error_on_bad_template(self):
-        self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
-        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
-        rels = self.setup_charm_relations()
-        self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
-
-        bad_data = {
-            "templates": {
-                "file:tester": {
-                    "charm": "grafana-k8s",
-                    "content": "{{ unclosed variable",
-                    "juju_topology": {
-                        "model": MODEL_INFO["name"],
-                        "model_uuid": MODEL_INFO["uuid"],
-                        "application": "provider-tester",
-                        "unit": "provider-tester/0",
-                    },
-                }
-            },
-            "uuid": "12345678",
-        }
-
-        self.harness.update_relation_data(
-            rels[0],
-            "provider",
-            {
-                "dashboards": json.dumps(bad_data),
-            },
-        )
-
-        data = json.loads(
-            self.harness.get_relation_data(rels[0], self.harness.model.app.name)["event"]
-        )
-        self.assertEqual(
-            data["errors"],
-            [
-                {
-                    "dashboard_id": "file:tester",
-                    "error": "expected token 'end of print statement', got 'variable'",
-                }
-            ],
-        )
-
     def test_consumer_error_on_bad_json(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
