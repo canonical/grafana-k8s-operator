@@ -30,7 +30,7 @@ import time
 from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 import subprocess
 
 import yaml
@@ -42,6 +42,7 @@ from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceEvents,
     SourceFieldsMissingError,
 )
+from charms.hydra.v0.oauth import ClientConfig, OAuthInfoChangedEvent, OAuthRequirer
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
@@ -96,6 +97,10 @@ DATASOURCES_PATH = "/etc/grafana/provisioning/datasources/datasources.yaml"
 DATABASE = "database"
 PEER = "grafana"
 PORT = 3000
+
+OAUTH = "oauth"
+OAUTH_SCOPES = "openid email"
+OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 
 
 class GrafanaCharm(CharmBase):
@@ -230,6 +235,13 @@ class GrafanaCharm(CharmBase):
             self.cert_handler.on.cert_changed, self._on_server_cert_changed  # pyright: ignore
         )
 
+        # oauth relation
+        self.oauth = OAuthRequirer(self, self._client_config)
+
+        # oauth relation observations
+        self.framework.observe(self.on[OAUTH].relation_joined, self._on_oauth_info_changed)
+        self.framework.observe(self.oauth.on.oauth_info_changed, self._on_oauth_info_changed)
+
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
 
         self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
@@ -268,6 +280,9 @@ class GrafanaCharm(CharmBase):
     def _on_ingress_ready(self, _) -> None:
         """Once Traefik tells us our external URL, make sure we reconfigure Grafana."""
         self._configure()
+
+        if self.model.relations[OAUTH]:
+            self._set_client_config()
 
     def _configure_ingress(self, event: HookEvent) -> None:
         """Set up ingress if a relation is joined, config changed, or a new leader election.
@@ -1302,6 +1317,25 @@ class GrafanaCharm(CharmBase):
 
         container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
+
+    def _client_config(self) -> ClientConfig:
+        return ClientConfig(
+            urljoin(self.external_url, "/login/generic_oauth"),
+            OAUTH_SCOPES,
+            OAUTH_GRANT_TYPES,
+        )
+
+    def _set_client_config(self) -> None:
+        self.oauth.update_client_config(self._client_config)
+
+    def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
+        """Event handler for the oauth_info_changed event."""
+        if not self.unit.is_leader():
+            return
+
+        self._set_client_config()
+        # TODO: Pass provider info as env variables
+        logger.info(f"Oauth provider info: {self.oauth.get_provider_info()}")
 
 
 if __name__ == "__main__":

@@ -52,6 +52,8 @@ requires:
     interface: tls-certificates
     limit: 1
     description: Certificate and key files for Grafana to use with TLS.
+  oauth:
+    interface: oauth
 
 provides:
   metrics-endpoint:
