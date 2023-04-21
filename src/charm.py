@@ -29,7 +29,7 @@ import string
 import time
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, cast
 from urllib.parse import urljoin, urlparse
 import subprocess
 
@@ -898,8 +898,8 @@ class GrafanaCharm(CharmBase):
             relation_id = self.model.relations[OAUTH][0].id
 
             if self.oauth.is_client_created(relation_id):
-                oauth_provider_info = self.oauth.get_provider_info(relation_id)
-                oauth_client = self.oauth.get_client_credentials(relation_id)
+                oauth_provider_info: dict = cast(dict, self.oauth.get_provider_info(relation_id))
+                oauth_client: dict = cast(dict, self.oauth.get_client_credentials(relation_id))
 
                 extra_info.update(
                     {
