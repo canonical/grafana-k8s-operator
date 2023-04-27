@@ -89,7 +89,7 @@ class ExampleRequirerCharm(CharmBase):
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 from jsonschema import validate  # type: ignore[import]
 from ops.charm import (
@@ -244,10 +244,9 @@ def _type_convert_stored(obj):
     """Convert Stored* to their appropriate types, recursively."""
     if isinstance(obj, StoredList):
         return list(map(_type_convert_stored, obj))
-    elif isinstance(obj, StoredDict):
+    if isinstance(obj, StoredDict):
         return {k: _type_convert_stored(obj[k]) for k in obj.keys()}
-    else:
-        return obj
+    return obj
 
 
 class UrlsAvailableEvent(EventBase):

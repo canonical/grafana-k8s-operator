@@ -46,7 +46,7 @@ DASHBOARD_DATA = {
 DASHBOARD_RENDERED = json.dumps(
     {
         "panels": {"data": "label_values(up, juju_unit)"},
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -54,7 +54,7 @@ DASHBOARD_RENDERED = json.dumps(
 DASHBOARD_RENDERED_NO_DROPDOWNS = json.dumps(
     {
         "panels": {"data": "label_values(up, juju_unit)"},
-        "templating": {"list": [d for d in DATASOURCE_TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(DATASOURCE_TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -80,7 +80,7 @@ VARIABLE_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -121,7 +121,7 @@ ROW_ONLY_DASHBOARD_RENDERED = json.dumps(
                 ],
             },
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -150,7 +150,7 @@ INPUT_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -175,7 +175,7 @@ NULL_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "Row separator", "datasource": None},
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -220,7 +220,7 @@ BUILTIN_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
                 "title": "foo",
             }
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -270,7 +270,7 @@ EXISTING_VARIABLE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
         "templating": {
-            "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
+            "list": list(reversed(TEMPLATE_DROPDOWNS))
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
         },
     }
@@ -322,7 +322,7 @@ EXISTING_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
         "templating": {
-            "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
+            "list": list(reversed(TEMPLATE_DROPDOWNS))
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
         },
     }
@@ -374,7 +374,7 @@ EXISTING_LOKI_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
         "templating": {
-            "list": [d for d in reversed(TEMPLATE_DROPDOWNS)]
+            "list": list(reversed(TEMPLATE_DROPDOWNS))
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
         },
     }
@@ -405,7 +405,7 @@ DICT_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
                 },
             },
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -591,7 +591,7 @@ class TestDashboardConsumer(unittest.TestCase):
                 },
             )
             self.assertTrue(
-                any(["Invalid JSON in Grafana dashboard: file:tester" in msg for msg in cm.output])
+                any("Invalid JSON in Grafana dashboard: file:tester" in msg for msg in cm.output)
             )
 
     def test_consumer_templates_datasource(self):

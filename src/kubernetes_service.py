@@ -50,8 +50,7 @@ class K8sServicePatch:
                 raise PatchFailed(
                     "No permission to read cluster role. " "Run `juju trust` on this application."
                 ) from e
-            else:
-                raise e
+            raise e
 
     @staticmethod
     def _k8s_service(

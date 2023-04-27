@@ -76,5 +76,4 @@ class Grafana:
         info = json.loads(response.data.decode("utf-8"))
         if info["database"] == "ok":
             return info
-        else:
-            return {}
+        return {}
