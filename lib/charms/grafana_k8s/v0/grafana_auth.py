@@ -89,7 +89,7 @@ class ExampleRequirerCharm(CharmBase):
 
 import json
 import logging
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from jsonschema import validate  # type: ignore[import]
 from ops.charm import (
@@ -117,7 +117,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 AUTH_PROXY_PROVIDER_JSON_SCHEMA = {
     "$schema": "http://json-schema.org/draft-07/schema",
@@ -292,7 +292,7 @@ class AuthProvider(Object):
         refresh_event: Optional[BoundEvent] = None,
     ):
         super().__init__(charm, relation_name)
-        self._auth_config = {}  # type: Dict[str, Dict[str, Any]]
+        self._auth_config: Dict[str, Dict[str, Any]] = {}
         self._charm = charm
         self._relation_name = relation_name
         if not refresh_event:
