@@ -27,9 +27,6 @@ per-file-ignores = {"tests/*" = ["D100","D101","D102","D103"]}
 [tool.ruff.pydocstyle]
 convention = "google"
 
-[tool.ruff.mccabe]
-max-complexity = 1
-
 [tool.mypy]
 pretty = true
 mypy_path = "./src:./lib:./tests"
