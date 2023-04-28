@@ -65,7 +65,7 @@ DASHBOARD_RENDERED = json.dumps(
                 ],
             },
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -88,7 +88,7 @@ DASHBOARD_RENDERED_NO_TOPOLOGY = json.dumps(
                 ],
             },
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -132,7 +132,7 @@ LOKI_DASHBOARD_RENDERED = json.dumps(
                 ],
             },
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -187,7 +187,7 @@ DASHBOARD_RENDERED_WITH_NEGATIVE = json.dumps(
                 "datasource": "${prometheusds}",
             },
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -231,7 +231,7 @@ DASHBOARD_RENDERED_WITH_RANGES = json.dumps(
                 "datasource": "${prometheusds}",
             },
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 
@@ -275,7 +275,7 @@ DASHBOARD_RENDERED_WITH_OFFSETS = json.dumps(
                 "datasource": "${prometheusds}",
             },
         ],
-        "templating": {"list": [d for d in TEMPLATE_DROPDOWNS]},
+        "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
 

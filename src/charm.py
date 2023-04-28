@@ -331,7 +331,7 @@ class GrafanaCharm(CharmBase):
         scrape_related_apps = [rel.app for rel in self.model.relations["metrics-endpoint"]]
 
         has_relation = any(
-            [source for source in source_related_apps if source in scrape_related_apps]
+            source for source in source_related_apps if source in scrape_related_apps
         )
 
         dashboards_dir_path = os.path.join(PROVISIONING_PATH, "dashboards")
@@ -1078,8 +1078,7 @@ class GrafanaCharm(CharmBase):
         if self.ingress.external_host:
             baseurl = "http://{}".format(self.ingress.external_host)
             return "{}/{}".format(baseurl, "{}-{}".format(self.model.name, self.model.app.name))
-        else:
-            return "http://{}:{}".format(socket.getfqdn(), PORT)
+        return "http://{}:{}".format(socket.getfqdn(), PORT)
 
     @property
     def _ingress_config(self) -> dict:

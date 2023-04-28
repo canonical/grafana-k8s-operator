@@ -117,7 +117,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 AUTH_PROXY_PROVIDER_JSON_SCHEMA = {
     "$schema": "http://json-schema.org/draft-07/schema",
@@ -244,10 +244,9 @@ def _type_convert_stored(obj):
     """Convert Stored* to their appropriate types, recursively."""
     if isinstance(obj, StoredList):
         return list(map(_type_convert_stored, obj))
-    elif isinstance(obj, StoredDict):
+    if isinstance(obj, StoredDict):
         return {k: _type_convert_stored(obj[k]) for k in obj.keys()}
-    else:
-        return obj
+    return obj
 
 
 class UrlsAvailableEvent(EventBase):
@@ -293,7 +292,7 @@ class AuthProvider(Object):
         refresh_event: Optional[BoundEvent] = None,
     ):
         super().__init__(charm, relation_name)
-        self._auth_config = {}  # type: Dict[str, Dict[str, Any]]
+        self._auth_config: Dict[str, Dict[str, Any]] = {}
         self._charm = charm
         self._relation_name = relation_name
         if not refresh_event:
