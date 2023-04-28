@@ -48,6 +48,7 @@ class SomeCharm(CharmBase):
 ```
 """
 
+import inspect
 import json
 import logging
 import re
@@ -248,6 +249,34 @@ class ClientConfig:
         return {k: v for k, v in asdict(self).items() if v is not None}
 
 
+@dataclass
+class OauthProviderConfig:
+    """Helper class containing provider's configuration."""
+
+    issuer_url: str
+    authorization_endpoint: str
+    token_endpoint: str
+    introspection_endpoint: str
+    userinfo_endpoint: str
+    jwks_endpoint: str
+    scope: str
+    groups: Optional[str] = None
+    ca_chain: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, dic: Dict) -> "OauthProviderConfig":
+        """Generate OauthProviderConfig instance from dict."""
+        return cls(**{k: v for k, v in dic.items() if k in inspect.signature(cls).parameters})
+
+
+@dataclass
+class OauthClientCredentials:
+    """Helper class containing client's credentials."""
+
+    client_id: str
+    client_secret: str
+
+
 class OAuthInfoChangedEvent(EventBase):
     """Event to notify the charm that the information in the databag changed."""
 
@@ -382,7 +411,7 @@ class OAuthRequirer(Object):
             and "client_secret_id" in relation.data[relation.app]
         )
 
-    def get_provider_info(self, relation_id: Optional[int] = None) -> Optional[Dict]:
+    def get_provider_info(self, relation_id: Optional[int] = None) -> OauthProviderConfig:
         """Get the provider information from the databag."""
         if len(self.model.relations) == 0:
             return None
@@ -401,14 +430,16 @@ class OAuthRequirer(Object):
         data = _load_data(data, OAUTH_PROVIDER_JSON_SCHEMA)
         data.pop("client_id", None)
         data.pop("client_secret_id", None)
-        return data
+
+        oauth_provider = OauthProviderConfig.from_dict(data)
+        return oauth_provider
 
     def get_client_secret(self, client_secret_id: str) -> Secret:
         """Get the client_secret."""
         client_secret = self.model.get_secret(id=client_secret_id)
         return client_secret
 
-    def get_client_credentials(self, relation_id: Optional[int] = None) -> Optional[Dict]:
+    def get_client_credentials(self, relation_id: Optional[int] = None) -> OauthClientCredentials:
         """Get the client credentials."""
         try:
             relation = self.model.get_relation(
@@ -426,7 +457,7 @@ class OAuthRequirer(Object):
 
         _client_secret = self.get_client_secret(client_secret_id)
         client_secret = _client_secret.get_content()[CLIENT_SECRET_FIELD]
-        return dict(client_id=client_id, client_secret=client_secret)
+        return OauthClientCredentials(client_id, client_secret)
 
     def update_client_config(
         self, client_config: ClientConfig, relation_id: Optional[int] = None
@@ -665,7 +696,7 @@ class OAuthProvider(Object):
         groups: Optional[str] = None,
         ca_chain: Optional[str] = None,
     ) -> None:
-        """Put the provider information in the the databag."""
+        """Put the provider information in the databag."""
         if not self.model.unit.is_leader():
             return
 

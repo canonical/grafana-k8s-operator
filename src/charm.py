@@ -239,8 +239,8 @@ class GrafanaCharm(CharmBase):
         self.oauth = OAuthRequirer(self, self._client_config)
 
         # oauth relation observations
-        self.framework.observe(self.on[OAUTH].relation_joined, self._on_oauth_info_changed)
         self.framework.observe(self.oauth.on.oauth_info_changed, self._on_oauth_info_changed)
+        self.framework.observe(self.on[OAUTH].relation_broken, self._on_oauth_relation_broken)
 
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
 
@@ -280,8 +280,7 @@ class GrafanaCharm(CharmBase):
     def _on_ingress_ready(self, _) -> None:
         """Once Traefik tells us our external URL, make sure we reconfigure Grafana."""
         if self.model.relations[OAUTH]:
-            relation_id = self.model.relations[OAUTH][0].id
-            self._set_client_config(relation_id)
+            self.oauth.update_client_config(client_config=self._client_config)
 
         self._configure()
 
@@ -895,24 +894,20 @@ class GrafanaCharm(CharmBase):
             )
 
         if self.model.relations[OAUTH]:
-            relation_id = self.model.relations[OAUTH][0].id
-
-            if self.oauth.is_client_created(relation_id):
-                oauth_provider_info: dict = cast(dict, self.oauth.get_provider_info(relation_id))
-                oauth_client: dict = cast(dict, self.oauth.get_client_credentials(relation_id))
+            if self.oauth.is_client_created():
+                oauth_provider_info = self.oauth.get_provider_info()
+                oauth_client = self.oauth.get_client_credentials()
 
                 extra_info.update(
                     {
                         "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
                         "GF_AUTH_GENERIC_OAUTH_NAME": "Canonical",
-                        "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": oauth_client["client_id"],
-                        "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": oauth_client["client_secret"],
-                        "GF_AUTH_GENERIC_OAUTH_SCOPES": oauth_provider_info["scope"],
-                        "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info[
-                            "authorization_endpoint"
-                        ],
-                        "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info["token_endpoint"],
-                        "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info["userinfo_endpoint"],
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": oauth_client.client_id,
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": oauth_client.client_secret,
+                        "GF_AUTH_GENERIC_OAUTH_SCOPES": oauth_provider_info.scope,
+                        "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
                     }
                 )
 
@@ -1348,24 +1343,26 @@ class GrafanaCharm(CharmBase):
             OAUTH_GRANT_TYPES,
         )
 
-    def _set_client_config(self, relation_id: int) -> None:
-        self.oauth.update_client_config(client_config=self._client_config, relation_id=relation_id)
-
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
         """Event handler for the oauth_info_changed event."""
         if not self.unit.is_leader():
             return
 
-        relation_id = self.model.relations[OAUTH][0].id
-        self._set_client_config(relation_id)
-        logger.info(f"Received oauth provider info: {self.oauth.get_provider_info(relation_id)}")
+        self.oauth.update_client_config(client_config=self._client_config)
+        logger.info(f"Received oauth provider info: {self.oauth.get_provider_info()}")
 
-        if self.oauth.is_client_created(relation_id):
-            self.restart_grafana()
-        else:
+        if not self.oauth.is_client_created():
             logger.info("No oauth client info available, deferring the event")
             event.defer()
             return
+        self.restart_grafana()
+
+    def _on_oauth_relation_broken(self, event: RelationBrokenEvent) -> None:
+        """Event handler for the oauth_relation_broken event."""
+        logger.info("Oauth relation is broken, removing related settings")
+
+        # Reset generic_oauth settings
+        self.restart_grafana()
 
 
 if __name__ == "__main__":
