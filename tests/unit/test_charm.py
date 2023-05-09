@@ -372,6 +372,66 @@ class TestCharm(unittest.TestCase):
         self.assertIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())
         self.assertEqual(services["environment"]["GF_AUTH_PROXY_ENABLED"], "True")
 
+    def test_config_is_updated_with_oauth_relation_data(self):
+        self.harness.set_leader(True)
+        self.harness.container_pebble_ready("grafana")
+
+        oauth_provider_info = {
+            "authorization_endpoint": "https://example.oidc.com/oauth2/auth",
+            "introspection_endpoint": "https://example.oidc.com/admin/oauth2/introspect",
+            "issuer_url": "https://example.oidc.com",
+            "jwks_endpoint": "https://example.oidc.com/.well-known/jwks.json",
+            "scope": "openid profile email phone",
+            "token_endpoint": "https://example.oidc.com/oauth2/token",
+            "userinfo_endpoint": "https://example.oidc.com/userinfo",
+        }
+
+        # add oauth relation with provider endpoints details
+        rel_id = self.harness.add_relation("oauth", "hydra")
+        self.harness.add_relation_unit(rel_id, "hydra/0")
+        self.harness.update_relation_data(
+            rel_id,
+            "hydra",
+            oauth_provider_info,
+        )
+
+        # update databag with client details - received once a grafana client is created in hydra
+        secret_id = self.harness.add_model_secret("hydra", {"secret": "s3cR#T"})
+        self.harness.grant_secret(secret_id, "grafana-k8s")
+        self.harness.update_relation_data(
+            rel_id,
+            "hydra",
+            {
+                "client_id": "grafana_client_id",
+                "client_secret_id": secret_id,
+            },
+        )
+
+        # assert that generic_oauth config is updated
+        services = (
+            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
+        )
+
+        self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_ENABLED"], "True")
+        self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_NAME"], "Canonical")
+        self.assertEqual(
+            services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_ID"], "grafana_client_id"
+        )
+        self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET"], "s3cR#T")
+        self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_SCOPES"], "openid email")
+        self.assertEqual(
+            services["environment"]["GF_AUTH_GENERIC_OAUTH_AUTH_URL"],
+            "https://example.oidc.com/oauth2/auth",
+        )
+        self.assertEqual(
+            services["environment"]["GF_AUTH_GENERIC_OAUTH_TOKEN_URL"],
+            "https://example.oidc.com/oauth2/token",
+        )
+        self.assertEqual(
+            services["environment"]["GF_AUTH_GENERIC_OAUTH_API_URL"],
+            "https://example.oidc.com/userinfo",
+        )
+
 
 class TestCharmReplication(unittest.TestCase):
     def setUp(self, *unused):

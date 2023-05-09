@@ -904,7 +904,7 @@ class GrafanaCharm(CharmBase):
                         "GF_AUTH_GENERIC_OAUTH_NAME": "Canonical",
                         "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": oauth_client.client_id,
                         "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": oauth_client.client_secret,
-                        "GF_AUTH_GENERIC_OAUTH_SCOPES": oauth_provider_info.scope,
+                        "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
                         "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
                         "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
                         "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
@@ -1338,7 +1338,7 @@ class GrafanaCharm(CharmBase):
 
     def _client_config(self) -> ClientConfig:
         return ClientConfig(
-            urljoin(self.external_url, "/login/generic_oauth"),
+            os.path.join(self.external_url, "login/generic_oauth"),
             OAUTH_SCOPES,
             OAUTH_GRANT_TYPES,
         )
