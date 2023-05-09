@@ -274,6 +274,9 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
+        if self.model.relations[OAUTH]:
+            self.oauth.update_client_config(client_config=self._client_config)
+
         self._configure()
         self._configure_replication()
 
