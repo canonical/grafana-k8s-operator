@@ -1354,7 +1354,7 @@ class GrafanaCharm(CharmBase):
         logger.info(f"Received oauth provider info: {self.oauth.get_provider_info()}")
 
         if not event.client_id or not event.client_secret_id:
-            return None
+            return
         self.restart_grafana()
 
     def _on_oauth_relation_broken(self, event: RelationBrokenEvent) -> None:
