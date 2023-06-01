@@ -1005,7 +1005,7 @@ class GrafanaCharm(CharmBase):
             configured_timeout = int(self.model.config.get("datasource_query_timeout", 0))
             if timeout < configured_timeout:
                 json_data = source.get("jsonData", {})
-                json_data.update({"timeout": str(configured_timeout)})
+                json_data.update({"timeout": configured_timeout})
                 source["jsonData"] = json_data
 
             datasources_dict["datasources"].append(source)  # type: ignore[attr-defined]
