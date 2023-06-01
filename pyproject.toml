@@ -31,3 +31,6 @@ convention = "google"
 extraPaths = ["lib"]
 pythonVersion = "3.8"
 pythonPlatform = "All"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
