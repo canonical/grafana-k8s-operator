@@ -124,31 +124,35 @@ class GrafanaCharm(CharmBase):
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
             jobs=[{"static_configs": [{"targets": ["*:3000"]}]}],
-            refresh_event=self.on.grafana_pebble_ready,
+            refresh_event=self.on.grafana_pebble_ready,  # pyright: ignore
         )
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.grafana_pebble_ready, self._on_pebble_ready)
+        self.framework.observe(
+            self.on.grafana_pebble_ready, self._on_pebble_ready  # pyright: ignore
+        )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
-        self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
+        self.framework.observe(
+            self.on.get_admin_password_action, self._on_get_admin_password  # pyright: ignore
+        )
 
         # -- grafana_source relation observations
         self.source_consumer = GrafanaSourceConsumer(self, "grafana-source")
         self.framework.observe(
-            self.source_consumer.on.sources_changed,
+            self.source_consumer.on.sources_changed,  # pyright: ignore
             self._on_grafana_source_changed,
         )
         self.framework.observe(
-            self.source_consumer.on.sources_to_delete_changed,
+            self.source_consumer.on.sources_to_delete_changed,  # pyright: ignore
             self._on_grafana_source_changed,
         )
 
         # -- self-monitoring
         self.framework.observe(
-            self.source_consumer.on.sources_changed,
+            self.source_consumer.on.sources_changed,  # pyright: ignore
             self._maybe_provision_own_dashboard,
         )
         self.framework.observe(
@@ -163,7 +167,8 @@ class GrafanaCharm(CharmBase):
         # -- grafana_dashboard relation observations
         self.dashboard_consumer = GrafanaDashboardConsumer(self, "grafana-dashboard")
         self.framework.observe(
-            self.dashboard_consumer.on.dashboards_changed, self._on_dashboards_changed
+            self.dashboard_consumer.on.dashboards_changed,  # pyright: ignore
+            self._on_dashboards_changed,
         )
 
         # -- Peer relation observations
@@ -177,16 +182,19 @@ class GrafanaCharm(CharmBase):
         self.resource_patch = KubernetesComputeResourcesPatch(
             self, self.name, resource_reqs_func=self._resource_reqs_from_config
         )
-        self.framework.observe(self.resource_patch.on.patch_failed, self._on_resource_patch_failed)
+        self.framework.observe(
+            self.resource_patch.on.patch_failed, self._on_resource_patch_failed  # pyright: ignore
+        )
         # -- grafana_auth relation observations
         self.grafana_auth_requirer = AuthRequirer(
             self,
             relation_name="grafana-auth",
             urls=[f"{self.app.name}:{PORT}"],
-            refresh_event=self.on.grafana_pebble_ready,
+            refresh_event=self.on.grafana_pebble_ready,  # pyright: ignore
         )
         self.framework.observe(
-            self.grafana_auth_requirer.on.auth_conf_available, self._on_grafana_auth_conf_available
+            self.grafana_auth_requirer.on.auth_conf_available,  # pyright: ignore
+            self._on_grafana_auth_conf_available,
         )
 
         # -- ingress via raw traefik_route
@@ -194,15 +202,15 @@ class GrafanaCharm(CharmBase):
         # so this may be none. Rely on `self.ingress.is_ready` later to check
         self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
         self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
-        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
+        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
 
         self.catalog = CatalogueConsumer(
             charm=self,
             refresh_event=[
-                self.on.grafana_pebble_ready,
-                self.ingress.on.ready,
+                self.on.grafana_pebble_ready,  # pyright: ignore
+                self.ingress.on.ready,  # pyright: ignore
                 # TODO use revoked instead of relation events when it becomes available
                 # https://github.com/canonical/traefik-route-k8s-operator/issues/21
                 # self.ingress.on.revoked,
@@ -467,7 +475,8 @@ class GrafanaCharm(CharmBase):
 
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        self.peers.data[self.app][key] = json.dumps(data)
+        if self.peers:
+            self.peers.data[self.app][key] = json.dumps(data)
 
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
@@ -992,11 +1001,11 @@ class GrafanaCharm(CharmBase):
                 source["jsonData"] = source_info.get("extra_fields")
 
             # set timeout for querying this data source
-            timeout = source.get("jsonData", {}).get("timeout", 0)
-            configured_timeout = self.model.config.get("datasource_query_timeout")
+            timeout = int(source.get("jsonData", {}).get("timeout", 0))
+            configured_timeout = int(self.model.config.get("datasource_query_timeout", 0))
             if timeout < configured_timeout:
                 json_data = source.get("jsonData", {})
-                json_data.update({"timeout": configured_timeout})
+                json_data.update({"timeout": str(configured_timeout)})
                 source["jsonData"] = json_data
 
             datasources_dict["datasources"].append(source)  # type: ignore[attr-defined]
@@ -1065,7 +1074,7 @@ class GrafanaCharm(CharmBase):
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
     def _on_resource_patch_failed(self, event: K8sResourcePatchFailedEvent):
-        self.unit.status = BlockedStatus(event.message)
+        self.unit.status = BlockedStatus(str(event.message))
 
     @property
     def external_url(self) -> str:

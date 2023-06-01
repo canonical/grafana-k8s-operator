@@ -117,7 +117,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 AUTH_PROXY_PROVIDER_JSON_SCHEMA = {
     "$schema": "http://json-schema.org/draft-07/schema",
@@ -283,7 +283,7 @@ class AuthProvider(Object):
     Its children classes define the authentication mode and configuration to be used.
     """
 
-    on = AuthProviderCharmEvents()
+    on = AuthProviderCharmEvents()  # pyright: ignore
 
     def __init__(
         self,
@@ -370,7 +370,7 @@ class AuthProvider(Object):
 
         urls = json.loads(urls_json)
 
-        self.on.urls_available.emit(urls=urls, relation_id=relation.id)
+        self.on.urls_available.emit(urls=urls, relation_id=relation.id)  # pyright: ignore
 
     def _validate_auth_config_json_schema(self) -> bool:
         """Implemented in children classes."""
@@ -407,7 +407,7 @@ class AuthRequirerCharmEvents(CharmEvents):
 class AuthRequirer(Object):
     """Authentication configuration requirer class."""
 
-    on = AuthRequirerCharmEvents()
+    on = AuthRequirerCharmEvents()  # pyright: ignore
 
     def __init__(
         self,
@@ -516,7 +516,7 @@ class AuthRequirer(Object):
 
         auth_conf = json.loads(auth_conf_json)
 
-        self.on.auth_conf_available.emit(
+        self.on.auth_conf_available.emit(  # pyright: ignore
             auth=auth_conf,
             relation_id=relation.id,
         )

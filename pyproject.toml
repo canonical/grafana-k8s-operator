@@ -27,24 +27,7 @@ per-file-ignores = {"tests/*" = ["D100","D101","D102","D103"]}
 [tool.ruff.pydocstyle]
 convention = "google"
 
-[tool.mypy]
-pretty = true
-mypy_path = "./src:./lib:./tests"
-follow_imports = "silent"
-warn_redundant_casts = true
-warn_unused_ignores = false
-warn_unused_configs = true
-show_traceback = true
-show_error_codes = true
-namespace_packages = true
-explicit_package_bases = true
-check_untyped_defs = true
-allow_redefinition = true
-
-# Ignore libraries that do not have type hint nor stubs
-[[tool.mypy.overrides]]
-module = ["ops.*", "pytest.*", "pytest_operator.*", "urllib3.*", "jinja2.*"]
-ignore_missing_imports = true
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
+[tool.pyright]
+extraPaths = ["lib"]
+pythonVersion = "3.8"
+pythonPlatform = "All"
