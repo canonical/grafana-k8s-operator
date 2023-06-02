@@ -7,7 +7,7 @@ from typing import List, Tuple
 
 from kubernetes import client, config
 from kubernetes.client import exceptions
-
+import kubernetes
 
 class PatchFailed(RuntimeError):
     """Patching the kubernetes service failed."""
