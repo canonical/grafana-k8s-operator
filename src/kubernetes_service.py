@@ -7,7 +7,8 @@ from typing import List, Tuple
 
 from kubernetes import client, config
 from kubernetes.client import exceptions
-import kubernetes  # pyright: ignore
+import kubernetes  # noqa: F401
+
 
 class PatchFailed(RuntimeError):
     """Patching the kubernetes service failed."""
