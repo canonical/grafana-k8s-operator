@@ -16,6 +16,7 @@
 
 import json
 
+from urllib3 import exceptions
 import urllib3
 
 
@@ -55,7 +56,7 @@ class Grafana:
         try:
             res = self.http.request("GET", url, headers=headers)
             return True if "invalid username" in res.data.decode("utf8") else False
-        except urllib3.exceptions.HTTPError:
+        except exceptions.HTTPError:
             return True
 
     @property
@@ -70,7 +71,7 @@ class Grafana:
 
         try:
             response = self.http.request("GET", url)
-        except urllib3.exceptions.MaxRetryError:
+        except exceptions.MaxRetryError:
             return {}
 
         info = json.loads(response.data.decode("utf-8"))
