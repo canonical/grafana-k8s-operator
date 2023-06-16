@@ -125,7 +125,7 @@ class GrafanaCharm(CharmBase):
             charm=self,
             jobs=self._scrape_jobs,
             refresh_event=[
-                self.on.grafana_pebble_ready,
+                self.on.grafana_pebble_ready,  # pyright: ignore
                 self.on.update_status,
             ],
         )
