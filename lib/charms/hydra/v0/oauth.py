@@ -710,4 +710,3 @@ class OAuthProvider(Object):
         secret = self._create_juju_secret(client_secret, relation)
         data = dict(client_id=client_id, client_secret_id=secret.id)
         relation.data[self.model.app].update(_dump_data(data))
-

@@ -239,7 +239,9 @@ class GrafanaCharm(CharmBase):
         self.oauth = OAuthRequirer(self, self._oauth_client_config)
 
         # oauth relation observations
-        self.framework.observe(self.oauth.on.oauth_info_changed, self._on_oauth_info_changed)
+        self.framework.observe(
+            self.oauth.on.oauth_info_changed, self._on_oauth_info_changed  # pyright: ignore
+        )
         self.framework.observe(self.on[OAUTH].relation_broken, self._on_oauth_relation_broken)
 
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
