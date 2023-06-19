@@ -11,6 +11,7 @@ from helpers import (
     get_dashboard_by_search,
     get_grafana_dashboards,
     oci_image,
+    block_until_leader_elected,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,9 +42,8 @@ async def test_deploy(ops_test, grafana_charm, grafana_tester_charm):
             grafana_tester_charm, resources=tester_resources, application_name=tester_app_name
         ),
     )
-    await ops_test.model.wait_for_idle(
-        apps=[grafana_app_name, tester_app_name], status="active", wait_for_units=1, timeout=300
-    )
+    await block_until_leader_elected(ops_test, grafana_app_name)
+    await ops_test.model.wait_for_idle(status="active", timeout=300, idle_period=60)
 
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
     initial_dashboards = await get_grafana_dashboards(ops_test, grafana_app_name, 0)

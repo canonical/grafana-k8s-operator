@@ -413,7 +413,9 @@ class TestCharm(unittest.TestCase):
         )
 
         self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_ENABLED"], "True")
-        self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_NAME"], "Canonical")
+        self.assertEqual(
+            services["environment"]["GF_AUTH_GENERIC_OAUTH_NAME"], "external identity provider"
+        )
         self.assertEqual(
             services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_ID"], "grafana_client_id"
         )

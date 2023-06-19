@@ -264,7 +264,9 @@ class GrafanaCharm(CharmBase):
         self.oauth = OAuthRequirer(self, self._oauth_client_config)
 
         # oauth relation observations
-        self.framework.observe(self.oauth.on.oauth_info_changed, self._on_oauth_info_changed)
+        self.framework.observe(
+            self.oauth.on.oauth_info_changed, self._on_oauth_info_changed  # pyright: ignore
+        )
         self.framework.observe(self.on[OAUTH].relation_broken, self._on_oauth_relation_broken)
 
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
@@ -944,20 +946,27 @@ class GrafanaCharm(CharmBase):
         if self.oauth.is_client_created():
             oauth_provider_info = self.oauth.get_provider_info()
 
-            extra_info.update(
-                {
-                    "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
-                    "GF_AUTH_GENERIC_OAUTH_NAME": "Canonical",
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(str, oauth_provider_info.client_id),
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
-                        str, oauth_provider_info.client_secret
-                    ),
-                    "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
-                    "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
-                }
-            )
+            # Check the relation broken event due to https://github.com/canonical/operator/issues/888
+            if event:
+                if isinstance(event, RelationBrokenEvent) and event.relation.name == OAUTH:
+                    logger.info("Oauth relation is broken, removing related settings")
+            else:
+                extra_info.update(
+                    {
+                        "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
+                        "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(
+                            str, oauth_provider_info.client_id
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
+                            str, oauth_provider_info.client_secret
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
+                        "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
+                    }
+                )
 
         layer = Layer(
             {
@@ -1431,11 +1440,12 @@ class GrafanaCharm(CharmBase):
         container.remove_path(cert_path, recursive=True)
         self.restart_grafana()
 
+    @property
     def _oauth_client_config(self) -> ClientConfig:
         return ClientConfig(
-            os.path.join(self.external_url, "login/generic_oauth"),
-            OAUTH_SCOPES,
-            OAUTH_GRANT_TYPES,
+            redirect_uri=os.path.join(self.external_url, "login/generic_oauth"),
+            scope=OAUTH_SCOPES,
+            grant_types=OAUTH_GRANT_TYPES,
         )
 
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
@@ -1452,10 +1462,8 @@ class GrafanaCharm(CharmBase):
 
     def _on_oauth_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Event handler for the oauth_relation_broken event."""
-        logger.info("Oauth relation is broken, removing related settings")
-
         # Reset generic_oauth settings
-        self.restart_grafana()
+        self.restart_grafana(event)
 
 
 if __name__ == "__main__":
