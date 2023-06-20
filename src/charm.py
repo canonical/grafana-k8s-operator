@@ -123,8 +123,11 @@ class GrafanaCharm(CharmBase):
 
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
-            jobs=[{"static_configs": [{"targets": ["*:3000"]}]}],
-            refresh_event=self.on.grafana_pebble_ready,  # pyright: ignore
+            jobs=self._scrape_jobs,
+            refresh_event=[
+                self.on.grafana_pebble_ready,  # pyright: ignore
+                self.on.update_status,
+            ],
         )
 
         # -- standard events
@@ -1174,6 +1177,18 @@ class GrafanaCharm(CharmBase):
         for var in conf[auth_mode].keys():
             env_vars[auth_var_prefix + str(var).upper()] = str(conf[auth_mode][var])
         return env_vars
+
+    @property
+    def _hostname(self) -> str:
+        return socket.getfqdn()
+
+    @property
+    def _scrape_jobs(self) -> list:
+        return [
+            {
+                "static_configs": [{"targets": [f"{self._hostname}:{PORT}"]}],
+            }
+        ]
 
 
 if __name__ == "__main__":
