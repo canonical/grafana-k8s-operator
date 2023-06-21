@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Tuple
 
+import juju.utils
 import yaml
 from asyncstdlib import functools
 from pytest_operator.plugin import OpsTest
@@ -15,6 +16,14 @@ from urllib.parse import urlparse
 from workload import Grafana
 
 logger = logging.getLogger(__name__)
+
+
+async def block_until_leader_elected(ops_test: OpsTest, app_name: str):
+    async def is_leader_elected():
+        units = ops_test.model.applications[app_name].units
+        return any([await units[i].is_leader_from_status() for i in range(len(units))])
+
+    await juju.utils.block_until_with_coroutine(is_leader_elected)
 
 
 @functools.cache
