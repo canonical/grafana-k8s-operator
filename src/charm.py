@@ -771,7 +771,7 @@ class GrafanaCharm(CharmBase):
                 "Cannot set workload version at this time: could not get Alertmanager version."
             )
 
-    def restart_grafana(self) -> None:
+    def restart_grafana(self, event: Optional[RelationBrokenEvent] = None) -> None:
         """Restart the pebble container.
 
         `container.replan()` is intentionally avoided, since if no environment
@@ -780,7 +780,7 @@ class GrafanaCharm(CharmBase):
 
         Note that Grafana does not support SIGHUP, so a full restart is needed.
         """
-        layer = self._build_layer()
+        layer = self._build_layer(event)
         try:
             self.containers["workload"].add_layer(self.name, layer, combine=True)
             if self.containers["workload"].get_service(self.name).is_running():
@@ -900,20 +900,27 @@ class GrafanaCharm(CharmBase):
         if self.oauth.is_client_created():
             oauth_provider_info = self.oauth.get_provider_info()
 
-            extra_info.update(
-                {
-                    "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
-                    "GF_AUTH_GENERIC_OAUTH_NAME": "Canonical",
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(str, oauth_provider_info.client_id),
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
-                        str, oauth_provider_info.client_secret
-                    ),
-                    "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
-                    "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
-                }
-            )
+            # Check the relation broken event due to https://github.com/canonical/operator/issues/888
+            if event:
+                if isinstance(event, RelationBrokenEvent) and event.relation.name == OAUTH:
+                    logger.info("Oauth relation is broken, removing related settings")
+            else:
+                extra_info.update(
+                    {
+                        "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
+                        "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(
+                            str, oauth_provider_info.client_id
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
+                            str, oauth_provider_info.client_secret
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
+                        "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
+                    }
+                )
 
         layer = Layer(
             {
@@ -1361,10 +1368,8 @@ class GrafanaCharm(CharmBase):
 
     def _on_oauth_relation_broken(self, event: RelationBrokenEvent) -> None:
         """Event handler for the oauth_relation_broken event."""
-        logger.info("Oauth relation is broken, removing related settings")
-
         # Reset generic_oauth settings
-        self.restart_grafana()
+        self.restart_grafana(event)
 
 
 if __name__ == "__main__":
