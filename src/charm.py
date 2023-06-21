@@ -1347,11 +1347,12 @@ class GrafanaCharm(CharmBase):
         container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
 
+    @property
     def _oauth_client_config(self) -> ClientConfig:
         return ClientConfig(
-            os.path.join(self.external_url, "login/generic_oauth"),
-            OAUTH_SCOPES,
-            OAUTH_GRANT_TYPES,
+            redirect_uri=os.path.join(self.external_url, "login/generic_oauth"),
+            scope=OAUTH_SCOPES,
+            grant_types=OAUTH_GRANT_TYPES,
         )
 
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
