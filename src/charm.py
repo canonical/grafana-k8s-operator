@@ -29,7 +29,7 @@ import string
 import time
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List, Tuple
 from urllib.parse import ParseResult, urlparse
 
 import yaml
@@ -573,7 +573,7 @@ class GrafanaCharm(CharmBase):
     def _patch_k8s_service(self):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
         if self.unit.is_leader() and not self._stored.k8s_service_patched:  # type: ignore[truthy-function]
-            service_ports = [
+            service_ports: List[Tuple[str, int, int]] = [
                 (self.app.name, PORT, PORT),
             ]
             try:
