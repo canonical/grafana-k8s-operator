@@ -56,7 +56,13 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Mapping, Optional
 
 import jsonschema
-from ops.charm import CharmBase, RelationChangedEvent, RelationCreatedEvent, RelationDepartedEvent
+from ops.charm import (
+    CharmBase,
+    RelationBrokenEvent,
+    RelationChangedEvent,
+    RelationCreatedEvent,
+    RelationDepartedEvent,
+)
 from ops.framework import EventBase, EventSource, Handle, Object, ObjectEvents
 from ops.model import Relation, Secret, TooManyRelatedAppsError
 
@@ -68,7 +74,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +205,27 @@ def _dump_data(data: Dict, schema: Optional[Dict] = None) -> Dict:
     return ret
 
 
+class OAuthRelation(Object):
+    """A class containing helper methods for oauth relation."""
+
+    def _pop_relation_data(self, relation_id: Relation) -> None:
+        if not self.model.unit.is_leader():
+            return
+
+        if len(self.model.relations) == 0:
+            return
+
+        relation = self.model.get_relation(self._relation_name, relation_id=relation_id)
+        if not relation or not relation.app:
+            return
+
+        try:
+            for data in list(relation.data[self.model.app]):
+                relation.data[self.model.app].pop(data, "")
+        except Exception as e:
+            logger.info(f"Failed to pop the relation data: {e}")
+
+
 def _validate_data(data: Dict, schema: Dict) -> None:
     """Checks whether `data` matches `schema`.
 
@@ -310,14 +337,27 @@ class InvalidClientConfigEvent(EventBase):
         self.error = snapshot["error"]
 
 
+class OAuthInfoRemovedEvent(EventBase):
+    """Event to notify the charm that the provider data was removed."""
+
+    def snapshot(self) -> Dict:
+        """Save event."""
+        return {}
+
+    def restore(self, snapshot: Dict) -> None:
+        """Restore event."""
+        pass
+
+
 class OAuthRequirerEvents(ObjectEvents):
     """Event descriptor for events raised by `OAuthRequirerEvents`."""
 
     oauth_info_changed = EventSource(OAuthInfoChangedEvent)
+    oauth_info_removed = EventSource(OAuthInfoRemovedEvent)
     invalid_client_config = EventSource(InvalidClientConfigEvent)
 
 
-class OAuthRequirer(Object):
+class OAuthRequirer(OAuthRelation):
     """Register an oauth client."""
 
     on = OAuthRequirerEvents()
@@ -335,12 +375,24 @@ class OAuthRequirer(Object):
         events = self._charm.on[relation_name]
         self.framework.observe(events.relation_created, self._on_relation_created_event)
         self.framework.observe(events.relation_changed, self._on_relation_changed_event)
+        self.framework.observe(events.relation_broken, self._on_relation_broken_event)
 
     def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
         try:
             self._update_relation_data(self._client_config, event.relation.id)
         except ClientConfigError as e:
             self.on.invalid_client_config.emit(e.args[0])
+
+    def _on_relation_broken_event(self, event: RelationBrokenEvent) -> None:
+        # Workaround for https://github.com/canonical/operator/issues/888
+        self._pop_relation_data(event.relation.id)
+        if self.is_client_created():
+            event.defer()
+            logger.info("Relation data still available. Deferring the event")
+            return
+
+        # Notify the requirer that the relation data was removed
+        self.on.oauth_info_removed.emit()
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         if not self.model.unit.is_leader():
@@ -582,7 +634,7 @@ class OAuthProviderEvents(ObjectEvents):
     client_deleted = EventSource(ClientDeletedEvent)
 
 
-class OAuthProvider(Object):
+class OAuthProvider(OAuthRelation):
     """A provider object for OIDC Providers."""
 
     on = OAuthProviderEvents()
@@ -648,6 +700,9 @@ class OAuthProvider(Object):
         return f"client_secret_{relation.id}"
 
     def _on_relation_departed(self, event: RelationDepartedEvent) -> None:
+        # Workaround for https://github.com/canonical/operator/issues/888
+        self._pop_relation_data(event.relation.id)
+
         self._delete_juju_secret(event.relation)
         self.on.client_deleted.emit(event.relation.id)
 
