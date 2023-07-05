@@ -10,6 +10,7 @@ bases:
         channel: "20.04"
 parts:
   charm:
+    charm-binary-python-packages: [crypytography, jsonschema]
     build-packages:
       - git
   static-sqlite3:

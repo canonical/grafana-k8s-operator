@@ -47,6 +47,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     ResourceRequirements,
     adjust_resource_requirements,
 )
+from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.charm import (
@@ -121,12 +122,19 @@ class GrafanaCharm(CharmBase):
         self._grafana_datasources_hash = None
         self._stored.set_default(k8s_service_patched=False, admin_password="")
 
+        self.cert_handler = CertHandler(
+            charm=self,
+            key="grafana-server-cert",
+            peer_relation_name="replicas",
+        )
+
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
             jobs=self._scrape_jobs,
             refresh_event=[
                 self.on.grafana_pebble_ready,  # pyright: ignore
                 self.on.update_status,
+                self.cert_handler.on.cert_changed,  # pyright: ignore
             ],
         )
 
@@ -198,6 +206,11 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(
             self.grafana_auth_requirer.on.auth_conf_available,  # pyright: ignore
             self._on_grafana_auth_conf_available,
+        )
+
+        # -- cert_handler observations
+        self.framework.observe(
+            self.cert_handler.on.cert_changed, self._on_server_cert_changed  # pyright: ignore
         )
 
         # -- ingress via raw traefik_route
@@ -674,7 +687,11 @@ class GrafanaCharm(CharmBase):
         can be set in ENV variables, but leave for expansion later so we can
         hide auth secrets
         """
-        return self._generate_database_config() if self.has_db else ""
+        db_config = self._generate_database_config() if self.has_db else ""
+        network_config = self._generate_network_config()
+
+        config = "{}\n{}".format(network_config, db_config)
+        return config
 
     def _generate_database_config(self) -> str:
         """Generate a database configuration.
@@ -708,6 +725,32 @@ class GrafanaCharm(CharmBase):
 
         # This is silly, but a ConfigParser() handles this nicer than
         # raw string manipulation
+        data = StringIO()
+        config_ini.write(data)
+        data.seek(0)
+        ret = data.read()
+        data.close()
+        return ret
+
+    def _generate_network_config(self) -> str:
+        """Generate a network configuration.
+
+        Returns:
+            A string containing the required networking information to be stubbed into the
+            config file.
+        """
+        config_ini = configparser.ConfigParser()
+
+        config_ini["server"] = {  # pyright: ignore
+            "http_addr": "",
+            "http_port": PORT,
+            "root_url": self.external_url,
+            "cert_key": "/etc/grafana/grafana.key",
+            "cert_file": "/etc/grafana/grafana.crt",
+            "enforce_domain": "False",
+            "protocol": "https" if self.cert_handler.cert else "http",
+        }
+
         data = StringIO()
         config_ini.write(data)
         data.seek(0)
@@ -1087,10 +1130,11 @@ class GrafanaCharm(CharmBase):
             return web_external_url
 
         baseurl = ""
+        scheme = "https" if self.cert_handler.cert else "http"
         if self.ingress.external_host:
-            baseurl = "http://{}".format(self.ingress.external_host)
+            baseurl = "{}://{}".format(scheme, self.ingress.external_host)
             return "{}/{}".format(baseurl, "{}-{}".format(self.model.name, self.model.app.name))
-        return "http://{}:{}".format(socket.getfqdn(), PORT)
+        return "{}://{}:{}".format(scheme, socket.getfqdn(), PORT)
 
     @property
     def _ingress_config(self) -> dict:
@@ -1184,11 +1228,31 @@ class GrafanaCharm(CharmBase):
 
     @property
     def _scrape_jobs(self) -> list:
-        return [
-            {
-                "static_configs": [{"targets": [f"{self._hostname}:{PORT}"]}],
-            }
-        ]
+        job: Dict = {
+            "static_configs": [{"targets": [f"{self._hostname}:{PORT}"]}],
+        }
+
+        if self.cert_handler.cert:
+            job["scheme"] = "https"
+
+        return [job]
+
+    def _on_server_cert_changed(self, _):
+        container = self.containers["workload"]
+        if self.cert_handler.cert and self.cert_handler.key:
+            container.push(
+                "/etc/grafana/grafana.crt",
+                self.cert_handler.cert,
+                make_dirs=True,
+            )
+            container.push(
+                "/etc/grafana/grafana.key",
+                self.cert_handler.key,
+                make_dirs=True,
+            )
+        else:
+            container.remove_path("/etc/grafana/grafana.crt", recursive=True)
+            container.remove_path("/etc/grafana/grafana.key", recursive=True)
 
 
 if __name__ == "__main__":
