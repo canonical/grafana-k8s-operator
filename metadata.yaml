@@ -61,6 +61,8 @@ provides:
 peers:
   grafana:
     interface: grafana_peers
+  replicas:
+    interface: grafana_replicas
 
 resources:
   grafana-image:

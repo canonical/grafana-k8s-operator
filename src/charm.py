@@ -688,7 +688,7 @@ class GrafanaCharm(CharmBase):
         hide auth secrets
         """
         db_config = self._generate_database_config() if self.has_db else ""
-        network_config = self._generate_network_config()
+        network_config = self._generate_network_config() if self.cert_handler.cert else ""
 
         config = "{}\n{}".format(network_config, db_config)
         return config
