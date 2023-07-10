@@ -122,10 +122,13 @@ class GrafanaCharm(CharmBase):
         self._grafana_datasources_hash = None
         self._stored.set_default(k8s_service_patched=False, admin_password="")
 
+        url = self.model.config.get("web_external_url")
+        extra_sans_dns = [str(urlparse(url).hostname)] if url else None
         self.cert_handler = CertHandler(
             charm=self,
             key="grafana-server-cert",
             peer_relation_name="replicas",
+            extra_sans_dns=extra_sans_dns,
         )
 
         self.metrics_endpoint = MetricsEndpointProvider(
