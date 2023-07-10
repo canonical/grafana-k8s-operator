@@ -71,7 +71,9 @@ async def test_server_cert(ops_test: OpsTest):
     # echo \
     #   | openssl s_client -showcerts -servername $IPADDR:9093 -connect $IPADDR:9093 2>/dev/null \
     #   | openssl x509 -inform pem -noout -text
-    grafana_ip_addrs = [await get_unit_address(ops_test, grafana.name, i) for i in range(grafana.scale)]
+    grafana_ip_addrs = [
+        await unit_address(ops_test, grafana.name, i) for i in range(grafana.scale)
+    ]
     for grafana_ip in grafana_ip_addrs:
         cmd = [
             "sh",
@@ -106,7 +108,7 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
             ops_test,
             cert_dir=temp_dir,
             cert_path=cert_path,
-            ip_addr=await get_unit_address(ops_test, grafana.name, i),
+            ip_addr=await unit_address(ops_test, grafana.name, i),
             mock_url=f"https://{grafana.hostname}:3000/-/ready",
         )
         assert "OK" in response
@@ -115,7 +117,7 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
 @pytest.mark.abort_on_fail
 async def test_https_still_reachable_after_refresh(ops_test: OpsTest, charm_under_test, temp_dir):
     """Make sure grafana's https endpoint is still reachable after an upgrade."""
-    await ops_test.model.applications[am.name].refresh(path=charm_under_test)
+    await ops_test.model.applications[grafana.name].refresh(path=charm_under_test)
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=600, idle_period=30
     )

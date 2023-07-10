@@ -296,6 +296,7 @@ async def reenable_metallb() -> str:
     await asyncio.sleep(30)  # why? just because, for now
     return ip
 
+
 async def deploy_literal_bundle(ops_test: OpsTest, bundle: str):
     run_args = [
         "juju",

@@ -691,7 +691,12 @@ class GrafanaCharm(CharmBase):
         hide auth secrets
         """
         db_config = self._generate_database_config() if self.has_db else ""
-        network_config = self._generate_network_config() if self.cert_handler.cert else ""
+        network_config = (
+            self._generate_network_config()
+            if self.cert_handler.cert
+            and self.containers["workload"].exists("/etc/grafana/grafana.crt")
+            else ""
+        )
 
         config = "{}\n{}".format(network_config, db_config)
         return config
@@ -1256,7 +1261,7 @@ class GrafanaCharm(CharmBase):
         else:
             container.remove_path("/etc/grafana/grafana.crt", recursive=True)
             container.remove_path("/etc/grafana/grafana.key", recursive=True)
-
+        self._configure()
 
 if __name__ == "__main__":
     main(GrafanaCharm, use_juju_for_storage=True)
