@@ -1263,5 +1263,6 @@ class GrafanaCharm(CharmBase):
             container.remove_path("/etc/grafana/grafana.key", recursive=True)
         self._configure()
 
+
 if __name__ == "__main__":
     main(GrafanaCharm, use_juju_for_storage=True)
