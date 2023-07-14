@@ -19,7 +19,7 @@ grafana = SimpleNamespace(name="grafana", scale=2, hostname="grafana.local")
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest, charm_under_test):
+async def test_build_and_deploy(ops_test: OpsTest, grafana_charm):
     """Deploy 2 grafana units, related to a local CA."""
     test_bundle = dedent(
         f"""
@@ -27,7 +27,7 @@ async def test_build_and_deploy(ops_test: OpsTest, charm_under_test):
         bundle: kubernetes
         applications:
           {grafana.name}:
-            charm: {charm_under_test}
+            charm: {grafana_charm}
             series: focal
             scale: {grafana.scale}
             trust: true
@@ -115,9 +115,9 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
 
 
 @pytest.mark.abort_on_fail
-async def test_https_still_reachable_after_refresh(ops_test: OpsTest, charm_under_test, temp_dir):
+async def test_https_still_reachable_after_refresh(ops_test: OpsTest, grafana_charm, temp_dir):
     """Make sure grafana's https endpoint is still reachable after an upgrade."""
-    await ops_test.model.applications[grafana.name].refresh(path=charm_under_test)
+    await ops_test.model.applications[grafana.name].refresh(path=grafana_charm)
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=600, idle_period=30
     )
