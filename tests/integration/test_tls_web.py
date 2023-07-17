@@ -5,12 +5,11 @@
 import asyncio
 import logging
 from pathlib import Path
-from textwrap import dedent
 from types import SimpleNamespace
 
 import pytest
 import yaml
-from helpers import curl, deploy_literal_bundle, oci_image, unit_address
+from helpers import curl, oci_image, unit_address
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -22,6 +21,7 @@ grafana_resources = {
     "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
 }
 
+
 @pytest.mark.xfail
 async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
@@ -31,7 +31,7 @@ async def test_deploy(ops_test, grafana_charm):
             application_name=grafana.name,
             num_units=2,
             trust=True,
-            config={"web_external_url": f"http://{grafana.hostname}"}
+            config={"web_external_url": f"http://{grafana.hostname}"},
         ),
         ops_test.model.deploy(
             "ch:self-signed-certificates",
@@ -55,6 +55,7 @@ async def test_deploy(ops_test, grafana_charm):
             timeout=600,
         ),
     )
+
 
 @pytest.mark.abort_on_fail
 async def test_tls_files_created(ops_test: OpsTest):
