@@ -1248,7 +1248,7 @@ class GrafanaCharm(CharmBase):
 
     def _on_server_cert_changed(self, _):
         container = self.containers["workload"]
-        if self.cert_handler.cert and self.cert_handler.key:
+        if self.cert_handler.cert and self.cert_handler.key and self.cert_handler.ca:
             # Save the workload certificates
             container.push(
                 "/etc/grafana/grafana.crt",
