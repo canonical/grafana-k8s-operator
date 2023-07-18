@@ -130,7 +130,7 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
-        
+
         # -- cert_handler
         url = self.external_url
         extra_sans_dns = [str(urlparse(url).hostname)] if url else None
