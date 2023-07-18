@@ -1248,6 +1248,7 @@ class GrafanaCharm(CharmBase):
     def _on_server_cert_changed(self, _):
         container = self.containers["workload"]
         if self.cert_handler.cert and self.cert_handler.key:
+            # Save the workload certificates
             container.push(
                 "/etc/grafana/grafana.crt",
                 self.cert_handler.cert,
@@ -1258,9 +1259,18 @@ class GrafanaCharm(CharmBase):
                 self.cert_handler.key,
                 make_dirs=True,
             )
+            # Save the CA among the trusted CAs and trust it
+            container.push(
+                "/usr/local/share/ca-certificates/cos-ca.crt",
+                self.cert_handler.ca,
+                make_dirs=True,
+            )
+            container.exec(["update-ca-certificates"]).wait()
         else:
             container.remove_path("/etc/grafana/grafana.crt", recursive=True)
             container.remove_path("/etc/grafana/grafana.key", recursive=True)
+            container.remove_path("/usr/local/share/ca-certificates/cos-ca.crt", recursive=True)
+            container.exec(["update-ca-certificates"]).wait()
         self._configure()
 
 
