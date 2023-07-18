@@ -122,6 +122,16 @@ class GrafanaCharm(CharmBase):
         self._grafana_datasources_hash = None
         self._stored.set_default(k8s_service_patched=False, admin_password="")
 
+        # -- ingress via raw traefik_route
+        # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
+        # so this may be none. Rely on `self.ingress.is_ready` later to check
+        self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
+        self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
+        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
+        self.framework.observe(self.on.leader_elected, self._configure_ingress)
+        self.framework.observe(self.on.config_changed, self._configure_ingress)
+        
+        # -- cert_handler
         url = self.external_url
         extra_sans_dns = [str(urlparse(url).hostname)] if url else None
         self.cert_handler = CertHandler(
@@ -215,15 +225,6 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(
             self.cert_handler.on.cert_changed, self._on_server_cert_changed  # pyright: ignore
         )
-
-        # -- ingress via raw traefik_route
-        # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
-        # so this may be none. Rely on `self.ingress.is_ready` later to check
-        self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
-        self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
-        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
-        self.framework.observe(self.on.leader_elected, self._configure_ingress)
-        self.framework.observe(self.on.config_changed, self._configure_ingress)
 
         self.catalog = CatalogueConsumer(
             charm=self,
@@ -1138,7 +1139,7 @@ class GrafanaCharm(CharmBase):
             return web_external_url
 
         baseurl = ""
-        scheme = "https" if self.cert_handler.cert else "http"
+        scheme = "https" if hasattr(self, "cert_handler") and self.cert_handler.cert else "http"
         if self.ingress.external_host:
             baseurl = "{}://{}".format(scheme, self.ingress.external_host)
             return "{}/{}".format(baseurl, "{}-{}".format(self.model.name, self.model.app.name))
