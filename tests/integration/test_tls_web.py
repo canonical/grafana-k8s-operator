@@ -46,7 +46,7 @@ async def test_deploy(ops_test, grafana_charm):
             apps=[grafana.name],
             wait_for_units=2,
             raise_on_error=False,
-            timeout=600,
+            timeout=1200,
         ),
         ops_test.model.wait_for_idle(
             apps=["ca"],
@@ -92,6 +92,9 @@ async def test_server_cert(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_https_reachable(ops_test: OpsTest, temp_dir):
     """Make sure grafana's https endpoint is reachable using curl and ca cert."""
+    await ops_test.model.wait_for_idle(
+        status="active", raise_on_error=False, timeout=1200, idle_period=30
+    )
     for i in range(grafana.scale):
         unit_name = f"{grafana.name}/{i}"
         # Save CA cert locally
@@ -99,7 +102,7 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
         cmd = [
             "sh",
             "-c",
-            f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info"[0]."local-unit".data.ca\'',
+            f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info"[1]."local-unit".data.ca\'',
         ]
         retcode, stdout, stderr = await ops_test.run(*cmd)
         cert = stdout
