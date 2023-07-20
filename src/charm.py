@@ -1266,12 +1266,12 @@ class GrafanaCharm(CharmBase):
                 self.cert_handler.ca,
                 make_dirs=True,
             )
-            container.exec(["update-ca-certificates"]).wait()
+            container.exec(["update-ca-certificates", "--fresh"]).wait()
         else:
             container.remove_path("/etc/grafana/grafana.crt", recursive=True)
             container.remove_path("/etc/grafana/grafana.key", recursive=True)
             container.remove_path("/usr/local/share/ca-certificates/cos-ca.crt", recursive=True)
-            container.exec(["update-ca-certificates"]).wait()
+            container.exec(["update-ca-certificates", "--fresh"]).wait()
         self._configure()
 
 
