@@ -66,8 +66,7 @@ DB_CONFIG = {
 }
 
 
-DATABASE_CONFIG_INI = """
-[database]
+DATABASE_CONFIG_INI = """[database]
 type = mysql
 host = 1.1.1.1:3306
 name = mysqldb

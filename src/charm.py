@@ -694,7 +694,9 @@ class GrafanaCharm(CharmBase):
         configs = []
         if self.has_db:
             configs.append(self._generate_database_config())
-        if self.cert_handler.cert and self.containers["workload"].exists("/etc/grafana/grafana.crt"):
+        if self.cert_handler.cert and self.containers["workload"].exists(
+            "/etc/grafana/grafana.crt"
+        ):
             configs.append(self._generate_network_config())
 
         return "\n".join(configs)
