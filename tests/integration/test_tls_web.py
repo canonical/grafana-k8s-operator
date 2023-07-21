@@ -102,7 +102,7 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
         cmd = [
             "sh",
             "-c",
-            f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info"[1]."local-unit".data.ca\'',
+            f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="replicas") | ."local-unit".data.ca\'',
         ]
         retcode, stdout, stderr = await ops_test.run(*cmd)
         cert = stdout
