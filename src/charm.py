@@ -691,16 +691,13 @@ class GrafanaCharm(CharmBase):
         can be set in ENV variables, but leave for expansion later so we can
         hide auth secrets
         """
-        db_config = self._generate_database_config() if self.has_db else ""
-        network_config = (
-            self._generate_network_config()
-            if self.cert_handler.cert
-            and self.containers["workload"].exists("/etc/grafana/grafana.crt")
-            else ""
-        )
+        configs = []
+        if self.has_db:
+            configs.append(self._generate_database_config())
+        if self.cert_handler.cert and self.containers["workload"].exists("/etc/grafana/grafana.crt"):
+            configs.append(self._generate_network_config())
 
-        config = "{}\n{}".format(network_config, db_config)
-        return config
+        return "\n".join(configs)
 
     def _generate_database_config(self) -> str:
         """Generate a database configuration.

@@ -61,6 +61,7 @@ provides:
 peers:
   grafana:
     interface: grafana_peers
+  # Peer relation used as storage for TLS data
   replicas:
     interface: grafana_replicas
 
