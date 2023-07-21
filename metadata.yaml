@@ -48,6 +48,10 @@ requires:
     interface: traefik_route
     limit: 1
     description: Grafana needs "ingress per leader" (not per app and not per unit).
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    description: Certificate and key files for Grafana to use with TLS.
 
 provides:
   metrics-endpoint:
@@ -57,6 +61,9 @@ provides:
 peers:
   grafana:
     interface: grafana_peers
+  # Peer relation used as storage for TLS data
+  replicas:
+    interface: grafana_replicas
 
 resources:
   grafana-image:
