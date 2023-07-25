@@ -395,7 +395,7 @@ class GrafanaCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Application is terminating.")
 
     def _check_datasource_provisioning(self) -> bool:
-        """Check whether or not datasources need to be (re)provisioned."""
+        """Check whether datasources need to be (re)provisioned."""
         grafana_datasources = self._generate_datasource_config()
         datasources_hash = hashlib.sha256(str(grafana_datasources).encode("utf-8")).hexdigest()
         if not self.grafana_datasources_hash == datasources_hash:
@@ -1037,7 +1037,7 @@ class GrafanaCharm(CharmBase):
         YAML.
 
         Returns:
-            A a string-dumped YAML config for the datasources
+            A string-dumped YAML config for the datasources
         """
         # Boilerplate for the config file
         datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
@@ -1053,6 +1053,21 @@ class GrafanaCharm(CharmBase):
             }
             if source_info.get("extra_fields", None):
                 source["jsonData"] = source_info.get("extra_fields")
+
+            if source_info["url"].startswith("https://"):
+                # Note: assuming the same CA cert for grafana and the datasource, so we use
+                # tlsSkipVerify for the _datasource_ if there is no CA for _grafana_. When we start
+                # using cert_swap, it will be hard to tell if we have a CA cert for a given
+                # datasource, so at that point we might _always_ use tlsSkipVerify.
+                if not self.cert_handler.enabled or not self.cert_handler.ca:
+                    json_data = source.get("jsonData", {})
+                    json_data.update({"tlsSkipVerify": True})
+                    source["jsonData"] = json_data
+
+                # Note: assuming that the datasource's CA cert is coming in somehow via
+                # `update-ca-certificates`, otherwise we would also need to:
+                #   source["jsonData"]["tlsAuthWithCACert"] = True
+                #   source["secureJsonData"]["tlsCACert"] = self.cert_handler.ca
 
             # set timeout for querying this data source
             timeout = int(source.get("jsonData", {}).get("timeout", 0))
