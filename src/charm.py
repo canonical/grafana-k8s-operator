@@ -1290,4 +1290,4 @@ class GrafanaCharm(CharmBase):
 
 
 if __name__ == "__main__":
-    main(GrafanaCharm)
+    main(GrafanaCharm, use_juju_for_storage=True)
