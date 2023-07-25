@@ -90,7 +90,7 @@ class TestSourceProvider(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, "provider/0")
         data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         self.assertIn("grafana_source_host", data)
-        self.assertEqual(data["grafana_source_host"], "fqdn1:9090")
+        self.assertEqual(data["grafana_source_host"], "http://fqdn1:9090")
 
     @patch("socket.getfqdn", new=lambda *args: "fqdn2")
     def test_provider_unit_sets_address_on_relation_joined(self):
@@ -98,7 +98,7 @@ class TestSourceProvider(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, "provider/0")
         data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
         self.assertIn("grafana_source_host", data)
-        self.assertEqual(data["grafana_source_host"], "fqdn2:9090")
+        self.assertEqual(data["grafana_source_host"], "http://fqdn2:9090")
 
 
 class TestAlertManagerProvider(unittest.TestCase):
@@ -138,7 +138,7 @@ class TestMimirProvider(unittest.TestCase):
         self.assertIn("model_uuid", scrape_data)
         self.assertIn("application", scrape_data)
         host_data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
-        self.assertEqual(host_data["grafana_source_host"], "mimir:9009/prometheus")
+        self.assertEqual(host_data["grafana_source_host"], "http://mimir:9009/prometheus")
 
 
 class ProviderCharmWithIngress(CharmBase):
