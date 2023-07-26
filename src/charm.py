@@ -72,7 +72,7 @@ from ops.pebble import (
     ProtocolError,
 )
 
-from grafana_server import Grafana, GrafanaCommError
+from grafana_client import Grafana, GrafanaCommError
 from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger()
