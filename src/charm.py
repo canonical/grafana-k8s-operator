@@ -1109,11 +1109,32 @@ class GrafanaCharm(CharmBase):
         else:
             event.set_results({"admin-password": self._get_admin_password()})
 
-    def _get_admin_password(self) -> str:
-        """Returns the password for the admin user."""
+    def _generate_admin_password(self) -> None:
+        """Generate the admin password if it's not already in stored state, and store it there."""
         if not self._stored.admin_password:  # type: ignore[truthy-function]
             logger.debug("Grafana admin password is not in stored state, so generating a new one.")
             self._stored.admin_password = self._generate_password()
+
+    def _get_admin_password(self) -> str:
+        """Returns the password for the admin user.
+
+        Assuming we can_connect, otherwise cannot produce output. Caller should guard.
+        """
+        ctr = self.containers["workload"]
+        svc = ctr.get_plan().services.get(self.name)
+        if svc:
+            # The grafana service has already started, which means the GF_SECURITY_ADMIN_PASSWORD
+            # envvar is the authoritative source for the admin password (just in case something
+            # went wrong with stored state; we need a single source of truth at all times).
+            if pw := svc.environment.get("GF_SECURITY_ADMIN_PASSWORD"):
+                self._stored.admin_password = pw
+            else:
+                # For some reason the password is blank. Generate one if it's not in stored state.
+                self._generate_admin_password()
+        else:
+            # We don't have a service for grafana in the pebble plan, which means this function was
+            # called by the layer builder. Generate password if it's not in stored state.
+            self._generate_admin_password()
 
         return self._stored.admin_password  # type: ignore
 
