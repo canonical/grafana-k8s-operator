@@ -20,6 +20,10 @@ from urllib3 import exceptions
 import urllib3
 
 
+class GrafanaCommError(Exception):
+    """Raised when comm fails unexpectedly."""
+
+
 class Grafana:
     """A class that represents a running Grafana instance."""
 
@@ -39,25 +43,30 @@ class Grafana:
         """Checks whether the Grafana server is up and running yet.
 
         Returns:
-            :bool: indicating whether or not the server is ready
+            :bool: indicating whether the server is ready
         """
         return True if self.build_info.get("database", None) == "ok" else False
 
     def password_has_been_changed(self, username: str, passwd: str) -> bool:
         """Checks whether the admin password has been changed from default generated.
 
+        Raises:
+            GrafanaCommError, if http request fails for any reason.
+
         Returns:
             :bool: indicating whether the password was changed.
         """
-        api_path = "/api/org"
-        url = "http://{}:{}/{}".format(self.host, self.port, api_path)
+        url = f"http://{self.host}:{self.port}/api/org"
         headers = urllib3.make_headers(basic_auth="{}:{}".format(username, passwd))
 
         try:
             res = self.http.request("GET", url, headers=headers)
             return True if "invalid username" in res.data.decode("utf8") else False
-        except exceptions.HTTPError:
-            return True
+        except exceptions.HTTPError as e:
+            # We do not want to blindly return "True" for unexpected exceptions such as:
+            # - urllib3.exceptions.NewConnectionError: [Errno 111] Connection refused
+            # - urllib3.exceptions.MaxRetryError
+            raise GrafanaCommError("Unable to determine if password has been changed") from e
 
     @property
     def build_info(self) -> dict:
@@ -66,6 +75,7 @@ class Grafana:
         Returns:
             Empty :dict: if it is not up, otherwise a dict containing basic API health
         """
+        # The /api/health endpoint does not require authentication
         api_path = "api/health"
         url = "http://{}:{}/{}".format(self.host, self.port, api_path)
 

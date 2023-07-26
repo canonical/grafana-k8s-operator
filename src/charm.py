@@ -72,7 +72,7 @@ from ops.pebble import (
     ProtocolError,
 )
 
-from grafana_server import Grafana
+from grafana_server import Grafana, GrafanaCommError
 from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger()
@@ -160,7 +160,8 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.stop, self._on_stop)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(
-            self.on.get_admin_password_action, self._on_get_admin_password  # pyright: ignore
+            self.on.get_admin_password_action,  # pyright: ignore
+            self._on_get_admin_password,
         )
 
         # -- grafana_source relation observations
@@ -1092,9 +1093,16 @@ class GrafanaCharm(CharmBase):
         if not self.grafana_service.is_ready:
             event.fail("Grafana is not reachable yet. Please try again in a few minutes")
             return
-        if self.grafana_service.password_has_been_changed(
-            self.model.config["admin_user"], self._get_admin_password()
-        ):
+
+        try:
+            pw_changed = self.grafana_service.password_has_been_changed(
+                self.model.config["admin_user"], self._get_admin_password()
+            )
+        except GrafanaCommError as e:
+            event.fail(f"Grafana is not reachable yet: {e}. Please try again in a few minutes.")
+            return
+
+        if pw_changed:
             event.set_results(
                 {"admin-password": "Admin password has been changed by an administrator"}
             )
