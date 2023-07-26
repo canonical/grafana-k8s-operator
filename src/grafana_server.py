@@ -84,7 +84,15 @@ class Grafana:
         except exceptions.MaxRetryError:
             return {}
 
-        info = json.loads(response.data.decode("utf-8"))
+        decoded = response.data.decode("utf-8")
+        try:
+            # Occasionally we get an empty response, that, without the try-except block, would have
+            # resulted in:
+            # json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+            info = json.loads(decoded)
+        except json.decoder.JSONDecodeError:
+            return {}
+
         if info["database"] == "ok":
             return info
         return {}
