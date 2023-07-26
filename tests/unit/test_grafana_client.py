@@ -12,7 +12,7 @@ from grafana_client import Grafana
 
 class TestServer(unittest.TestCase):
     def setUp(self):
-        self.grafana = Grafana("localhost", 9090)
+        self.grafana = Grafana("localhost:9090")
 
     @patch("src.grafana_client.urllib3.PoolManager.request")
     def test_grafana_client_returns_valid_data(self, request):

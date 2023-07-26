@@ -27,15 +27,16 @@ class GrafanaCommError(Exception):
 class Grafana:
     """A class that represents a running Grafana instance."""
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, endpoint_url: str) -> None:
         """A class to bring up and check a Grafana server.
 
         Args:
-            host: a :str: which indicates the hostname
-            port: an :int: to listen on
+            endpoint_url: The url on which grafana serves its api (not including `/api`).
         """
-        self.host = host
-        self.port = port
+        # Make sure the URL str does not end with a '/'
+        self.base_url = endpoint_url.rstrip("/")
+        if not self.base_url.startswith("http://") or not self.base_url.startswith("https://"):
+            self.base_url = f"http://{self.base_url}"
         self.http = urllib3.PoolManager()
 
     @property
@@ -56,7 +57,7 @@ class Grafana:
         Returns:
             :bool: indicating whether the password was changed.
         """
-        url = f"http://{self.host}:{self.port}/api/org"
+        url = f"{self.base_url}/api/org"
         headers = urllib3.make_headers(basic_auth="{}:{}".format(username, passwd))
 
         try:
@@ -76,8 +77,7 @@ class Grafana:
             Empty :dict: if it is not up, otherwise a dict containing basic API health
         """
         # The /api/health endpoint does not require authentication
-        api_path = "api/health"
-        url = "http://{}:{}/{}".format(self.host, self.port, api_path)
+        url = f"{self.base_url}/api/health"
 
         try:
             response = self.http.request("GET", url)

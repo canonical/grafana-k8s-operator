@@ -117,7 +117,6 @@ class GrafanaCharm(CharmBase):
             "workload": self.unit.get_container(self.name),
             "replication": self.unit.get_container("litestream"),
         }
-        self.grafana_service = Grafana("localhost", PORT)
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
         self._stored.set_default(k8s_service_patched=False, admin_password="")
@@ -139,6 +138,10 @@ class GrafanaCharm(CharmBase):
             key="grafana-server-cert",
             peer_relation_name="replicas",
             extra_sans_dns=extra_sans_dns,
+        )
+
+        self.grafana_service = Grafana(
+            f"{urlparse(url).scheme}://localhost:{PORT}/{urlparse(url).path.strip('/')}"
         )
 
         self.metrics_endpoint = MetricsEndpointProvider(
