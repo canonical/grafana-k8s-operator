@@ -1112,6 +1112,7 @@ class GrafanaCharm(CharmBase):
     def _get_admin_password(self) -> str:
         """Returns the password for the admin user."""
         if not self._stored.admin_password:  # type: ignore[truthy-function]
+            logger.debug("Grafana admin password is not in stored state, so generating a new one.")
             self._stored.admin_password = self._generate_password()
 
         return self._stored.admin_password  # type: ignore
