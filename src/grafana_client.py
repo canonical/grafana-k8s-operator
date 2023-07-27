@@ -32,18 +32,15 @@ class Grafana:
         """A class to bring up and check a Grafana server.
 
         Args:
-            endpoint_url: The url on which grafana serves its api (not including `/api`).
+            endpoint_url: The url on which grafana serves its api (not including `/api`). If this
+                is an HTTPS endpoint, the hostname must match the SAN DNS in a system cert.
         """
         # Make sure we have a scheme:
         if not re.match(r"^\w+://", endpoint_url):
             endpoint_url = f"http://{endpoint_url}"
         # Make sure the URL str does not end with a '/'
         self.base_url = endpoint_url.rstrip("/")
-        # Disable certificate validation because:
-        # - the charm container does not have the ca cert installed
-        # - we want to be able to use "localhost" instead of fqdn for queries.
-        self.http = urllib3.PoolManager(cert_reqs="CERT_NONE")
-        urllib3.disable_warnings()  # To supress the InsecureRequestWarning.
+        self.http = urllib3.PoolManager()
         self.timeout = 2.0
 
     @property

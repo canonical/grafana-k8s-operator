@@ -31,6 +31,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 from urllib.parse import ParseResult, urlparse
+import subprocess
 
 import yaml
 from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
@@ -141,9 +142,9 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._configure_ingress)
 
         url = self.external_url
-        logger.info(f"Grafana client url: '{url}'; parsed scheme: '{urlparse(url).scheme}'")
+        # Assuming FQDN is always part of the SANs DNS.
         self.grafana_service = Grafana(
-            f"{urlparse(url).scheme}://localhost:{PORT}/{urlparse(url).path.strip('/')}"
+            f"{urlparse(url).scheme}://{socket.getfqdn()}:{PORT}/{urlparse(url).path.strip('/')}"
         )
 
         self.metrics_endpoint = MetricsEndpointProvider(
@@ -256,7 +257,7 @@ class GrafanaCharm(CharmBase):
         )
 
     def _on_install(self, _):
-        """Handler for the install event during which we will update the K8s service."""
+        """Handler for the "install" event during which we will update the K8s service."""
         self._patch_k8s_service()
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
@@ -374,7 +375,7 @@ class GrafanaCharm(CharmBase):
         dashboard_path = os.path.join(dashboards_dir_path, "self_dashboard.json")
         if has_relation and self.unit.is_leader():
             # This is not going through the library due to the massive refactor needed in order
-            # to squash all of the `validate_relation_direction` and structure around smashing
+            # to squash all the `validate_relation_direction` and structure around smashing
             # the datastructures for a self-monitoring use case.
             container.push(
                 dashboard_path, Path("src/self_dashboard.json").read_bytes(), make_dirs=True
@@ -452,7 +453,7 @@ class GrafanaCharm(CharmBase):
             self.restart_grafana()
         else:
             # All clear, move to active.
-            # We can basically only get here if the charm is completely restarted, but all of
+            # We can basically only get here if the charm is completely restarted, but all
             # the configs are correct, with the correct pebble plan, such as a node reboot.
             #
             # A node reboot does not send any identifiable events (`start`, `pebble_ready`), so
@@ -490,7 +491,7 @@ class GrafanaCharm(CharmBase):
 
     @property
     def has_peers(self) -> bool:
-        """Check whether or not there are any other Grafanas as peers."""
+        """Check whether there are any other Grafanas as peers."""
         rel = self.model.get_relation(PEER)
         return len(rel.units) > 0 if rel is not None else False
 
@@ -594,7 +595,7 @@ class GrafanaCharm(CharmBase):
     #####################################
 
     def _patch_k8s_service(self):
-        """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
+        """Fix the Kubernetes service that was set up by Juju with correct port numbers."""
         if self.unit.is_leader() and not self._stored.k8s_service_patched:  # type: ignore[truthy-function]
             service_ports: List[Tuple[str, int, int]] = [
                 (self.app.name, PORT, PORT),
@@ -674,7 +675,7 @@ class GrafanaCharm(CharmBase):
         """Removes database connection info from datastore.
 
         We are guaranteed to only have one DB connection, so clearing
-        datastore.database is all we need for the change to be propagated
+        `datastore.database` is all we need for the change to be propagated
         to the Pebble container.
 
         Args:
@@ -1296,6 +1297,7 @@ class GrafanaCharm(CharmBase):
 
     def _on_server_cert_changed(self, _):
         container = self.containers["workload"]
+        ca_cert_path = Path("/usr/local/share/ca-certificates/cos-ca.crt")
         if self.cert_handler.cert and self.cert_handler.key and self.cert_handler.ca:
             # Save the workload certificates
             container.push(
@@ -1310,16 +1312,23 @@ class GrafanaCharm(CharmBase):
             )
             # Save the CA among the trusted CAs and trust it
             container.push(
-                "/usr/local/share/ca-certificates/cos-ca.crt",
+                ca_cert_path,
                 self.cert_handler.ca,
                 make_dirs=True,
             )
-            container.exec(["update-ca-certificates", "--fresh"]).wait()
+
+            # Repeat for the charm container. We need it there for grafana client requests.
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(self.cert_handler.ca)
         else:
             container.remove_path("/etc/grafana/grafana.crt", recursive=True)
             container.remove_path("/etc/grafana/grafana.key", recursive=True)
-            container.remove_path("/usr/local/share/ca-certificates/cos-ca.crt", recursive=True)
-            container.exec(["update-ca-certificates", "--fresh"]).wait()
+            container.remove_path(ca_cert_path, recursive=True)
+            # Repeat for the charm container.
+            ca_cert_path.unlink(missing_ok=True)
+
+        container.exec(["update-ca-certificates", "--fresh"]).wait()
+        subprocess.run(["update-ca-certificates", "--fresh"])
         self._configure()
 
 
