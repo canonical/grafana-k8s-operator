@@ -121,6 +121,16 @@ class GrafanaCharm(CharmBase):
         self._grafana_datasources_hash = None
         self._stored.set_default(k8s_service_patched=False, admin_password="")
 
+        # -- cert_handler
+        url = self.model.config.get("web_external_url")
+        extra_sans_dns = [str(urlparse(url).hostname)] if url else None
+        self.cert_handler = CertHandler(
+            charm=self,
+            key="grafana-server-cert",
+            peer_relation_name="replicas",
+            extra_sans_dns=extra_sans_dns,
+        )
+
         # -- ingress via raw traefik_route
         # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
         # so this may be none. Rely on `self.ingress.is_ready` later to check
@@ -130,16 +140,8 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
 
-        # -- cert_handler
         url = self.external_url
-        extra_sans_dns = [str(urlparse(url).hostname)] if url else None
-        self.cert_handler = CertHandler(
-            charm=self,
-            key="grafana-server-cert",
-            peer_relation_name="replicas",
-            extra_sans_dns=extra_sans_dns,
-        )
-
+        logger.info(f"Grafana client url: '{url}'; parsed scheme: '{urlparse(url).scheme}'")
         self.grafana_service = Grafana(
             f"{urlparse(url).scheme}://localhost:{PORT}/{urlparse(url).path.strip('/')}"
         )
@@ -1185,12 +1187,11 @@ class GrafanaCharm(CharmBase):
         if web_external_url:
             return web_external_url
 
-        baseurl = ""
-        scheme = "https" if hasattr(self, "cert_handler") and self.cert_handler.cert else "http"
+        scheme = "https" if self.cert_handler.cert else "http"
         if self.ingress.external_host:
-            baseurl = "{}://{}".format(scheme, self.ingress.external_host)
-            return "{}/{}".format(baseurl, "{}-{}".format(self.model.name, self.model.app.name))
-        return "{}://{}:{}".format(scheme, socket.getfqdn(), PORT)
+            baseurl = f"{scheme}://{self.ingress.external_host}"
+            return f"{baseurl}/{self.model.name}-{self.model.app.name}"
+        return f"{scheme}://{socket.getfqdn()}:{PORT}"
 
     @property
     def _ingress_config(self) -> dict:

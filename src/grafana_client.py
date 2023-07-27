@@ -18,6 +18,7 @@ import json
 
 from urllib3 import exceptions
 import urllib3
+import re
 
 
 class GrafanaCommError(Exception):
@@ -33,10 +34,11 @@ class Grafana:
         Args:
             endpoint_url: The url on which grafana serves its api (not including `/api`).
         """
+        # Make sure we have a scheme:
+        if not re.match(r"^\w+://", endpoint_url):
+            endpoint_url = f"http://{endpoint_url}"
         # Make sure the URL str does not end with a '/'
         self.base_url = endpoint_url.rstrip("/")
-        if not self.base_url.startswith("http://") or not self.base_url.startswith("https://"):
-            self.base_url = f"http://{self.base_url}"
         self.http = urllib3.PoolManager()
 
     @property
