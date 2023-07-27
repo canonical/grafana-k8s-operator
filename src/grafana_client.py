@@ -39,7 +39,12 @@ class Grafana:
             endpoint_url = f"http://{endpoint_url}"
         # Make sure the URL str does not end with a '/'
         self.base_url = endpoint_url.rstrip("/")
-        self.http = urllib3.PoolManager()
+        # Disable certificate validation because:
+        # - the charm container does not have the ca cert installed
+        # - we want to be able to use "localhost" instead of fqdn for queries.
+        self.http = urllib3.PoolManager(cert_reqs="CERT_NONE")
+        urllib3.disable_warnings()  # To supress the InsecureRequestWarning.
+        self.timeout = 2.0
 
     @property
     def is_ready(self) -> bool:
@@ -63,7 +68,7 @@ class Grafana:
         headers = urllib3.make_headers(basic_auth="{}:{}".format(username, passwd))
 
         try:
-            res = self.http.request("GET", url, headers=headers)
+            res = self.http.request("GET", url, headers=headers, timeout=self.timeout)
             return True if "invalid username" in res.data.decode("utf8") else False
         except exceptions.HTTPError as e:
             # We do not want to blindly return "True" for unexpected exceptions such as:
@@ -82,7 +87,7 @@ class Grafana:
         url = f"{self.base_url}/api/health"
 
         try:
-            response = self.http.request("GET", url)
+            response = self.http.request("GET", url, timeout=self.timeout)
         except exceptions.MaxRetryError:
             return {}
 
