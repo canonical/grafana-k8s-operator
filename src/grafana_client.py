@@ -18,46 +18,60 @@ import json
 
 from urllib3 import exceptions
 import urllib3
+import re
+
+
+class GrafanaCommError(Exception):
+    """Raised when comm fails unexpectedly."""
 
 
 class Grafana:
     """A class that represents a running Grafana instance."""
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, endpoint_url: str) -> None:
         """A class to bring up and check a Grafana server.
 
         Args:
-            host: a :str: which indicates the hostname
-            port: an :int: to listen on
+            endpoint_url: The url on which grafana serves its api (not including `/api`). If this
+                is an HTTPS endpoint, the hostname must match the SAN DNS in a system cert.
         """
-        self.host = host
-        self.port = port
+        # Make sure we have a scheme:
+        if not re.match(r"^\w+://", endpoint_url):
+            endpoint_url = f"http://{endpoint_url}"
+        # Make sure the URL str does not end with a '/'
+        self.base_url = endpoint_url.rstrip("/")
         self.http = urllib3.PoolManager()
+        self.timeout = 2.0
 
     @property
     def is_ready(self) -> bool:
         """Checks whether the Grafana server is up and running yet.
 
         Returns:
-            :bool: indicating whether or not the server is ready
+            :bool: indicating whether the server is ready
         """
         return True if self.build_info.get("database", None) == "ok" else False
 
     def password_has_been_changed(self, username: str, passwd: str) -> bool:
         """Checks whether the admin password has been changed from default generated.
 
+        Raises:
+            GrafanaCommError, if http request fails for any reason.
+
         Returns:
             :bool: indicating whether the password was changed.
         """
-        api_path = "/api/org"
-        url = "http://{}:{}/{}".format(self.host, self.port, api_path)
+        url = f"{self.base_url}/api/org"
         headers = urllib3.make_headers(basic_auth="{}:{}".format(username, passwd))
 
         try:
-            res = self.http.request("GET", url, headers=headers)
+            res = self.http.request("GET", url, headers=headers, timeout=self.timeout)
             return True if "invalid username" in res.data.decode("utf8") else False
-        except exceptions.HTTPError:
-            return True
+        except exceptions.HTTPError as e:
+            # We do not want to blindly return "True" for unexpected exceptions such as:
+            # - urllib3.exceptions.NewConnectionError: [Errno 111] Connection refused
+            # - urllib3.exceptions.MaxRetryError
+            raise GrafanaCommError("Unable to determine if password has been changed") from e
 
     @property
     def build_info(self) -> dict:
@@ -66,15 +80,23 @@ class Grafana:
         Returns:
             Empty :dict: if it is not up, otherwise a dict containing basic API health
         """
-        api_path = "api/health"
-        url = "http://{}:{}/{}".format(self.host, self.port, api_path)
+        # The /api/health endpoint does not require authentication
+        url = f"{self.base_url}/api/health"
 
         try:
-            response = self.http.request("GET", url)
+            response = self.http.request("GET", url, timeout=self.timeout)
         except exceptions.MaxRetryError:
             return {}
 
-        info = json.loads(response.data.decode("utf-8"))
+        decoded = response.data.decode("utf-8")
+        try:
+            # Occasionally we get an empty response, that, without the try-except block, would have
+            # resulted in:
+            # json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+            info = json.loads(decoded)
+        except json.decoder.JSONDecodeError:
+            return {}
+
         if info["database"] == "ok":
             return info
         return {}

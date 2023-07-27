@@ -12,7 +12,7 @@ import yaml
 from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.testing import Harness
 
-import grafana_server
+import grafana_client
 from charm import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH, GrafanaCharm
 
 ops.testing.SIMULATE_CAN_CONNECT = True
@@ -215,7 +215,7 @@ class TestCharm(unittest.TestCase):
         # Harness doesn't quite support actions yet...
         self.assertTrue(re.match(r"[A-Za-z0-9]{12}", self.harness.charm._get_admin_password()))
 
-    @patch("grafana_server.Grafana.is_ready", new_callable=PropertyMock)
+    @patch("grafana_client.Grafana.is_ready", new_callable=PropertyMock)
     def test_sane_message_for_password_when_grafana_down(self, mock_ready):
         mock_ready.return_value = False
         event = MagicMock()
@@ -224,8 +224,8 @@ class TestCharm(unittest.TestCase):
             "Grafana is not reachable yet. Please try again in a few minutes"
         )
 
-    @patch("grafana_server.Grafana.password_has_been_changed")
-    @patch("grafana_server.Grafana.is_ready", new_callable=PropertyMock)
+    @patch("grafana_client.Grafana.password_has_been_changed")
+    @patch("grafana_client.Grafana.is_ready", new_callable=PropertyMock)
     def test_returns_password_changed_message(self, mock_ready, mock_pw_changed):
         mock_ready.return_value = True
         mock_pw_changed.return_value = True
@@ -279,7 +279,7 @@ class TestCharm(unittest.TestCase):
         self.harness.container_pebble_ready("grafana")
         self.assertEqual(self.harness.get_workload_version(), "0.1.0")
 
-    @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
+    @patch.object(grafana_client.Grafana, "build_info", new={"version": "1.0.0"})
     def test_bare_charm_has_no_subpath_set_in_layer(self):
         self.harness.set_leader(True)
         layer = self.harness.charm._build_layer()
@@ -298,7 +298,7 @@ class TestCharm(unittest.TestCase):
         self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
         self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
 
-    @patch.object(grafana_server.Grafana, "build_info", new={"version": "1.0.0"})
+    @patch.object(grafana_client.Grafana, "build_info", new={"version": "1.0.0"})
     @patch.object(TraefikRouteRequirer, "external_host", new="1.2.3.4")
     def test_ingress_relation_sets_options_and_rel_data(self):
         self.harness.set_leader(True)

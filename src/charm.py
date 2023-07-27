@@ -31,6 +31,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 from urllib.parse import ParseResult, urlparse
+import subprocess
 
 import yaml
 from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
@@ -72,7 +73,7 @@ from ops.pebble import (
     ProtocolError,
 )
 
-from grafana_server import Grafana
+from grafana_client import Grafana, GrafanaCommError
 from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger()
@@ -117,10 +118,19 @@ class GrafanaCharm(CharmBase):
             "workload": self.unit.get_container(self.name),
             "replication": self.unit.get_container("litestream"),
         }
-        self.grafana_service = Grafana("localhost", PORT)
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
         self._stored.set_default(k8s_service_patched=False, admin_password="")
+
+        # -- cert_handler
+        url = self.model.config.get("web_external_url")
+        extra_sans_dns = [str(urlparse(url).hostname)] if url else None
+        self.cert_handler = CertHandler(
+            charm=self,
+            key="grafana-server-cert",
+            peer_relation_name="replicas",
+            extra_sans_dns=extra_sans_dns,
+        )
 
         # -- ingress via raw traefik_route
         # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
@@ -131,14 +141,10 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
 
-        # -- cert_handler
         url = self.external_url
-        extra_sans_dns = [str(urlparse(url).hostname)] if url else None
-        self.cert_handler = CertHandler(
-            charm=self,
-            key="grafana-server-cert",
-            peer_relation_name="replicas",
-            extra_sans_dns=extra_sans_dns,
+        # Assuming FQDN is always part of the SANs DNS.
+        self.grafana_service = Grafana(
+            f"{urlparse(url).scheme}://{socket.getfqdn()}:{PORT}/{urlparse(url).path.strip('/')}"
         )
 
         self.metrics_endpoint = MetricsEndpointProvider(
@@ -160,7 +166,8 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.stop, self._on_stop)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(
-            self.on.get_admin_password_action, self._on_get_admin_password  # pyright: ignore
+            self.on.get_admin_password_action,  # pyright: ignore
+            self._on_get_admin_password,
         )
 
         # -- grafana_source relation observations
@@ -250,7 +257,7 @@ class GrafanaCharm(CharmBase):
         )
 
     def _on_install(self, _):
-        """Handler for the install event during which we will update the K8s service."""
+        """Handler for the "install" event during which we will update the K8s service."""
         self._patch_k8s_service()
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
@@ -368,7 +375,7 @@ class GrafanaCharm(CharmBase):
         dashboard_path = os.path.join(dashboards_dir_path, "self_dashboard.json")
         if has_relation and self.unit.is_leader():
             # This is not going through the library due to the massive refactor needed in order
-            # to squash all of the `validate_relation_direction` and structure around smashing
+            # to squash all the `validate_relation_direction` and structure around smashing
             # the datastructures for a self-monitoring use case.
             container.push(
                 dashboard_path, Path("src/self_dashboard.json").read_bytes(), make_dirs=True
@@ -446,7 +453,7 @@ class GrafanaCharm(CharmBase):
             self.restart_grafana()
         else:
             # All clear, move to active.
-            # We can basically only get here if the charm is completely restarted, but all of
+            # We can basically only get here if the charm is completely restarted, but all
             # the configs are correct, with the correct pebble plan, such as a node reboot.
             #
             # A node reboot does not send any identifiable events (`start`, `pebble_ready`), so
@@ -484,7 +491,7 @@ class GrafanaCharm(CharmBase):
 
     @property
     def has_peers(self) -> bool:
-        """Check whether or not there are any other Grafanas as peers."""
+        """Check whether there are any other Grafanas as peers."""
         rel = self.model.get_relation(PEER)
         return len(rel.units) > 0 if rel is not None else False
 
@@ -588,7 +595,7 @@ class GrafanaCharm(CharmBase):
     #####################################
 
     def _patch_k8s_service(self):
-        """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
+        """Fix the Kubernetes service that was set up by Juju with correct port numbers."""
         if self.unit.is_leader() and not self._stored.k8s_service_patched:  # type: ignore[truthy-function]
             service_ports: List[Tuple[str, int, int]] = [
                 (self.app.name, PORT, PORT),
@@ -668,7 +675,7 @@ class GrafanaCharm(CharmBase):
         """Removes database connection info from datastore.
 
         We are guaranteed to only have one DB connection, so clearing
-        datastore.database is all we need for the change to be propagated
+        `datastore.database` is all we need for the change to be propagated
         to the Pebble container.
 
         Args:
@@ -1092,19 +1099,48 @@ class GrafanaCharm(CharmBase):
         if not self.grafana_service.is_ready:
             event.fail("Grafana is not reachable yet. Please try again in a few minutes")
             return
-        if self.grafana_service.password_has_been_changed(
-            self.model.config["admin_user"], self._get_admin_password()
-        ):
+
+        try:
+            pw_changed = self.grafana_service.password_has_been_changed(
+                self.model.config["admin_user"], self._get_admin_password()
+            )
+        except GrafanaCommError as e:
+            event.fail(f"Grafana is not reachable yet: {e}. Please try again in a few minutes.")
+            return
+
+        if pw_changed:
             event.set_results(
                 {"admin-password": "Admin password has been changed by an administrator"}
             )
         else:
             event.set_results({"admin-password": self._get_admin_password()})
 
-    def _get_admin_password(self) -> str:
-        """Returns the password for the admin user."""
+    def _generate_admin_password(self) -> None:
+        """Generate the admin password if it's not already in stored state, and store it there."""
         if not self._stored.admin_password:  # type: ignore[truthy-function]
+            logger.debug("Grafana admin password is not in stored state, so generating a new one.")
             self._stored.admin_password = self._generate_password()
+
+    def _get_admin_password(self) -> str:
+        """Returns the password for the admin user.
+
+        Assuming we can_connect, otherwise cannot produce output. Caller should guard.
+        """
+        ctr = self.containers["workload"]
+        svc = ctr.get_plan().services.get(self.name)
+        if svc:
+            # The grafana service has already started, which means the GF_SECURITY_ADMIN_PASSWORD
+            # envvar is the authoritative source for the admin password (just in case something
+            # went wrong with stored state; we need a single source of truth at all times).
+            if pw := svc.environment.get("GF_SECURITY_ADMIN_PASSWORD"):
+                self._stored.admin_password = pw
+            else:
+                # For some reason the password is blank. Generate one if it's not in stored state.
+                self._generate_admin_password()
+        else:
+            # We don't have a service for grafana in the pebble plan, which means this function was
+            # called by the layer builder. Generate password if it's not in stored state.
+            self._generate_admin_password()
 
         return self._stored.admin_password  # type: ignore
 
@@ -1152,12 +1188,11 @@ class GrafanaCharm(CharmBase):
         if web_external_url:
             return web_external_url
 
-        baseurl = ""
-        scheme = "https" if hasattr(self, "cert_handler") and self.cert_handler.cert else "http"
+        scheme = "https" if self.cert_handler.cert else "http"
         if self.ingress.external_host:
-            baseurl = "{}://{}".format(scheme, self.ingress.external_host)
-            return "{}/{}".format(baseurl, "{}-{}".format(self.model.name, self.model.app.name))
-        return "{}://{}:{}".format(scheme, socket.getfqdn(), PORT)
+            baseurl = f"{scheme}://{self.ingress.external_host}"
+            return f"{baseurl}/{self.model.name}-{self.model.app.name}"
+        return f"{scheme}://{socket.getfqdn()}:{PORT}"
 
     @property
     def _ingress_config(self) -> dict:
@@ -1262,6 +1297,7 @@ class GrafanaCharm(CharmBase):
 
     def _on_server_cert_changed(self, _):
         container = self.containers["workload"]
+        ca_cert_path = Path("/usr/local/share/ca-certificates/cos-ca.crt")
         if self.cert_handler.cert and self.cert_handler.key and self.cert_handler.ca:
             # Save the workload certificates
             container.push(
@@ -1276,16 +1312,23 @@ class GrafanaCharm(CharmBase):
             )
             # Save the CA among the trusted CAs and trust it
             container.push(
-                "/usr/local/share/ca-certificates/cos-ca.crt",
+                ca_cert_path,
                 self.cert_handler.ca,
                 make_dirs=True,
             )
-            container.exec(["update-ca-certificates", "--fresh"]).wait()
+
+            # Repeat for the charm container. We need it there for grafana client requests.
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(self.cert_handler.ca)
         else:
             container.remove_path("/etc/grafana/grafana.crt", recursive=True)
             container.remove_path("/etc/grafana/grafana.key", recursive=True)
-            container.remove_path("/usr/local/share/ca-certificates/cos-ca.crt", recursive=True)
-            container.exec(["update-ca-certificates", "--fresh"]).wait()
+            container.remove_path(ca_cert_path, recursive=True)
+            # Repeat for the charm container.
+            ca_cert_path.unlink(missing_ok=True)
+
+        container.exec(["update-ca-certificates", "--fresh"]).wait()
+        subprocess.run(["update-ca-certificates", "--fresh"])
         self._configure()
 
 
