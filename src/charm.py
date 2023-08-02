@@ -1095,7 +1095,7 @@ class GrafanaCharm(CharmBase):
         return datasources_string
 
     def _on_get_admin_password(self, event: ActionEvent) -> None:
-        """Returns the password for the admin user as an action response."""
+        """Returns the grafana url and password for the admin user as an action response."""
         if not self.grafana_service.is_ready:
             event.fail("Grafana is not reachable yet. Please try again in a few minutes")
             return
@@ -1110,10 +1110,15 @@ class GrafanaCharm(CharmBase):
 
         if pw_changed:
             event.set_results(
-                {"admin-password": "Admin password has been changed by an administrator"}
+                {
+                    "url": self.external_url,
+                    "admin-password": "Admin password has been changed by an administrator",
+                }
             )
         else:
-            event.set_results({"admin-password": self._get_admin_password()})
+            event.set_results(
+                {"url": self.external_url, "admin-password": self._get_admin_password()}
+            )
 
     def _generate_admin_password(self) -> None:
         """Generate the admin password if it's not already in stored state, and store it there."""
