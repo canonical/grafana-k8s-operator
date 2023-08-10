@@ -232,7 +232,10 @@ class TestCharm(unittest.TestCase):
         event = MagicMock()
         self.harness.charm._on_get_admin_password(event)
         event.set_results.assert_called_with(
-            {"admin-password": "Admin password has been changed by an administrator"}
+            {
+                "url": "http://grafana-k8s-0.testmodel.svc.cluster.local:3000",
+                "admin-password": "Admin password has been changed by an administrator",
+            }
         )
 
     def test_datasource_timeout_value_overrides_config_if_larger(self):
