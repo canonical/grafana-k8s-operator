@@ -891,9 +891,15 @@ class GrafanaCharm(CharmBase):
         # Juju Proxy settings
         extra_info.update(
             {
-                "https_proxy": os.environ["JUJU_CHARM_HTTPS_PROXY"],
-                "http_proxy": os.environ["JUJU_CHARM_HTTP_PROXY"],
-                "no_proxy": os.environ["JUJU_CHARM_NO_PROXY"],
+                "https_proxy": os.environ["JUJU_CHARM_HTTPS_PROXY"]
+                if "JUJU_CHARM_HTTPS_PROXY" in os.environ
+                else "",
+                "http_proxy": os.environ["JUJU_CHARM_HTTP_PROXY"]
+                if "JUJU_CHARM_HTTP_PROXY" in os.environ
+                else "",
+                "no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]
+                if "JUJU_CHARM_NO_PROXY" in os.environ
+                else "",
             }
         )
 
