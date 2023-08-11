@@ -888,6 +888,21 @@ class GrafanaCharm(CharmBase):
             "GF_DATABASE_TYPE": "sqlite3",
         }
 
+        # Juju Proxy settings
+        extra_info.update(
+            {
+                "https_proxy": os.environ["JUJU_CHARM_HTTPS_PROXY"]
+                if "JUJU_CHARM_HTTPS_PROXY" in os.environ
+                else "",
+                "http_proxy": os.environ["JUJU_CHARM_HTTP_PROXY"]
+                if "JUJU_CHARM_HTTP_PROXY" in os.environ
+                else "",
+                "no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]
+                if "JUJU_CHARM_NO_PROXY" in os.environ
+                else "",
+            }
+        )
+
         grafana_path = self.external_url
         if self._auth_env_vars:
             extra_info.update(self._auth_env_vars)
