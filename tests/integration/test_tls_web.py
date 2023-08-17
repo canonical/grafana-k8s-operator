@@ -15,7 +15,7 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-grafana = SimpleNamespace(name="grafana", scale=2, hostname="grafana.local")
+grafana = SimpleNamespace(name="grafana", scale=2)
 grafana_resources = {
     "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
     "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
@@ -31,7 +31,6 @@ async def test_deploy(ops_test, grafana_charm):
             application_name=grafana.name,
             num_units=2,
             trust=True,
-            config={"web_external_url": f"http://{grafana.hostname}"},
         ),
         ops_test.model.deploy(
             "ch:self-signed-certificates",
@@ -86,7 +85,8 @@ async def test_server_cert(ops_test: OpsTest):
             f"echo | openssl s_client -showcerts -servername {grafana_ip}:3000 -connect {grafana_ip}:3000 2>/dev/null | openssl x509 -inform pem -noout -text",
         ]
         retcode, stdout, stderr = await ops_test.run(*cmd)
-        assert grafana.hostname in stdout
+        fqdn = f"{grafana.name}-0.{grafana.name}-endpoints.{ops_test.model_name}.svc.cluster.local"
+        assert fqdn in stdout
 
 
 @pytest.mark.abort_on_fail
@@ -112,12 +112,13 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
 
         # Confirm alertmanager TLS endpoint reachable
         # curl --fail-with-body --capath /tmp --cacert /tmp/cacert.pem https://grafana.local:3000/-/ready
+        fqdn = f"{grafana.name}-0.{grafana.name}-endpoints.{ops_test.model_name}.svc.cluster.local"
         response = await curl(
             ops_test,
             cert_dir=temp_dir,
             cert_path=cert_path,
             ip_addr=await unit_address(ops_test, grafana.name, i),
-            mock_url=f"https://{grafana.hostname}:3000/-/ready",
+            mock_url=f"https://{fqdn}:3000/-/ready",
         )
         assert "Found" in response
 
