@@ -112,7 +112,7 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
 
         # Confirm alertmanager TLS endpoint reachable
         # curl --fail-with-body --capath /tmp --cacert /tmp/cacert.pem https://grafana.local:3000/-/ready
-        fqdn = f"{grafana.name}-0.{grafana.name}-endpoints.{ops_test.model_name}.svc.cluster.local"
+        fqdn = f"{grafana.name}-{i}.{grafana.name}-endpoints.{ops_test.model_name}.svc.cluster.local"
         response = await curl(
             ops_test,
             cert_dir=temp_dir,
