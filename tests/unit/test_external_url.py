@@ -38,7 +38,6 @@ class TestExternalUrl(unittest.TestCase):
         model_name = "testmodel"
         self.harness.set_model_name(model_name)
         for p in [
-            patch("charm.K8sServicePatch"),
             patch("lightkube.core.client.GenericSyncClient"),
             patch(
                 "socket.getfqdn", new=lambda *args: f"grafana-k8s-0.{model_name}.svc.cluster.local"

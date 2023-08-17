@@ -379,7 +379,6 @@ class TestCharmReplication(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
 
         for p in [
-            patch("charm.K8sServicePatch"),
             patch("lightkube.core.client.GenericSyncClient"),
             k8s_resource_multipatch,
             patch.object(GrafanaCharm, "grafana_version", "0.1.0"),

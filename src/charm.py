@@ -29,7 +29,7 @@ import string
 import time
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict
 from urllib.parse import urlparse
 import subprocess
 
@@ -63,7 +63,8 @@ from ops.charm import (
 )
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, OpenedPort
+
 from ops.pebble import (
     APIError,
     ConnectionError,
@@ -74,7 +75,6 @@ from ops.pebble import (
 )
 
 from grafana_client import Grafana, GrafanaCommError
-from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger()
 
@@ -120,7 +120,7 @@ class GrafanaCharm(CharmBase):
         }
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
-        self._stored.set_default(k8s_service_patched=False, admin_password="")
+        self._stored.set_default(admin_password="")
 
         # -- cert_handler
         self.cert_handler = CertHandler(
@@ -255,7 +255,7 @@ class GrafanaCharm(CharmBase):
 
     def _on_install(self, _):
         """Handler for the "install" event during which we will update the K8s service."""
-        self._patch_k8s_service()
+        self.set_ports()
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Event handler for the config-changed event.
@@ -585,25 +585,19 @@ class GrafanaCharm(CharmBase):
         except ConnectionError:
             logger.exception("Could not update dashboards. Pebble shutting down?")
 
-    #####################################
+    def set_ports(self):
+        """Open necessary (and close no longer needed) workload ports."""
+        planned_ports = {OpenedPort("tcp", PORT)} if self.unit.is_leader() else set()
+        actual_ports = self.unit.opened_ports()
 
-    # K8S WRANGLING
+        # Ports may change across an upgrade, so need to sync
+        ports_to_close = actual_ports.difference(planned_ports)
+        for p in ports_to_close:
+            self.unit.close_port(p.protocol, p.port)
 
-    #####################################
-
-    def _patch_k8s_service(self):
-        """Fix the Kubernetes service that was set up by Juju with correct port numbers."""
-        if self.unit.is_leader() and not self._stored.k8s_service_patched:  # type: ignore[truthy-function]
-            service_ports: List[Tuple[str, int, int]] = [
-                (self.app.name, PORT, PORT),
-            ]
-            try:
-                K8sServicePatch.set_ports(self.app.name, service_ports)
-            except PatchFailed as e:
-                logger.error("Unable to patch the Kubernetes service: %s", str(e))
-            else:
-                self._stored.k8s_service_patched = True
-                logger.info("Successfully patched the Kubernetes service!")
+        new_ports_to_open = planned_ports.difference(actual_ports)
+        for p in new_ports_to_open:
+            self.unit.open_port(p.protocol, p.port)
 
     #####################################
 
