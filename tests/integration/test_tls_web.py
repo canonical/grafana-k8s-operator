@@ -75,17 +75,17 @@ async def test_server_cert(ops_test: OpsTest):
     # echo \
     #   | openssl s_client -showcerts -servername $IPADDR:9093 -connect $IPADDR:9093 2>/dev/null \
     #   | openssl x509 -inform pem -noout -text
-    grafana_ip_addrs = [
-        await unit_address(ops_test, grafana.name, i) for i in range(grafana.scale)
-    ]
-    for grafana_ip in grafana_ip_addrs:
+    for i in range(grafana.scale):
+        grafana_ip = await unit_address(ops_test, grafana.name, i)
         cmd = [
             "sh",
             "-c",
             f"echo | openssl s_client -showcerts -servername {grafana_ip}:3000 -connect {grafana_ip}:3000 2>/dev/null | openssl x509 -inform pem -noout -text",
         ]
         retcode, stdout, stderr = await ops_test.run(*cmd)
-        fqdn = f"{grafana.name}-0.{grafana.name}-endpoints.{ops_test.model_name}.svc.cluster.local"
+        fqdn = (
+            f"{grafana.name}-{i}.{grafana.name}-endpoints.{ops_test.model_name}.svc.cluster.local"
+        )
         assert fqdn in stdout
 
 
