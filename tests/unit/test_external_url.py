@@ -89,7 +89,6 @@ class TestExternalUrl(unittest.TestCase):
 
     def test_external_url_precedence(self):
         """Precedence is [ingress] > [fqdn]."""
-        # FIXME delete this test after all tests pass
         # GIVEN a charm with the fqdn as its external URL
         # (this is set by a mock decorator)
 

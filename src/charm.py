@@ -856,25 +856,6 @@ class GrafanaCharm(CharmBase):
                 "not exist or is not responsive"
             )
 
-    # def _parse_grafana_path(self, parts: ParseResult) -> dict:
-    #     """Convert web_external_url into a usable path."""
-    #     # urlparse.path parsing is absolutely horrid and only
-    #     # guarantees any kind of sanity if there is a scheme
-    #     if not parts.scheme and not parts.path.startswith("/"):
-    #         # This could really be anything!
-    #         logger.warning(
-    #             "Could not determine web_external_url for Grafana. Please "
-    #             "use a fully-qualified path or a bare subpath"
-    #         )
-    #         return {}
-    #
-    #     return {
-    #         "scheme": parts.scheme or "http",
-    #         "host": "0.0.0.0",
-    #         "port": parts.netloc.split(":")[1] if ":" in parts.netloc else PORT,
-    #         "path": parts.path,
-    #     }
-
     def _build_layer(self) -> Layer:
         """Construct the pebble layer information."""
         # Placeholder for when we add "proper" mysql support for HA
