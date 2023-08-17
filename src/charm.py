@@ -1195,10 +1195,12 @@ class GrafanaCharm(CharmBase):
 
         redirect_middleware = (
             {
-                "redirectScheme": {
-                    "permanent": True,
-                    "port": 443,
-                    "scheme": "https",
+                f"juju-sidecar-redir-https-{self.model.name}-{self.model.app.name}": {
+                    "redirectScheme": {
+                        "permanent": True,
+                        "port": 443,
+                        "scheme": "https",
+                    }
                 }
             }
             if urlparse(self.internal_url).scheme == "https"
@@ -1208,21 +1210,21 @@ class GrafanaCharm(CharmBase):
         middlewares = {
             f"juju-sidecar-noprefix-{self.model.name}-{self.model.app.name}": {
                 "stripPrefix": {"forceSlash": False, "prefixes": [f"/{external_path}"]},
-                **redirect_middleware,
-            }
+            },
+            **redirect_middleware,
         }
 
         routers = {
             "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
                 "entryPoints": ["web"],
                 "rule": f"PathPrefix(`/{external_path}`)",
-                "middlewares": f"juju-sidecar-noprefix-{self.model.name}-{self.model.app.name}",
+                "middlewares": list(middlewares.keys()),
                 "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
             },
             "juju-{}-{}-router-tls".format(self.model.name, self.model.app.name): {
                 "entryPoints": ["websecure"],
                 "rule": f"PathPrefix(`/{external_path}`)",
-                "middlewares": f"juju-sidecar-noprefix-{self.model.name}-{self.model.app.name}",
+                "middlewares": list(middlewares.keys()),
                 "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
                 "tls": {
                     "domains": [
