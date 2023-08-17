@@ -317,13 +317,13 @@ class TestCharm(unittest.TestCase):
                 "routers": {
                     "juju-testmodel-grafana-k8s-router": {
                         "entryPoints": ["web"],
-                        "middlewares": "juju-sidecar-noprefix-testmodel-grafana-k8s",
+                        "middlewares": ["juju-sidecar-noprefix-testmodel-grafana-k8s"],
                         "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
                         "service": "juju-testmodel-grafana-k8s-service",
                     },
                     "juju-testmodel-grafana-k8s-router-tls": {
                         "entryPoints": ["websecure"],
-                        "middlewares": "juju-sidecar-noprefix-testmodel-grafana-k8s",
+                        "middlewares": ["juju-sidecar-noprefix-testmodel-grafana-k8s"],
                         "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
                         "service": "juju-testmodel-grafana-k8s-service",
                         "tls": {"domains": [{"main": "1.2.3.4", "sans": ["*.1.2.3.4"]}]},
