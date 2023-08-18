@@ -13,6 +13,8 @@ options:
     default: admin
   web_external_url:
     description: |
+      DEPRECATED. This config option is no longer used, in favor of "skipPrefix".
+
       The URL under which Grafana is externally reachable (for example,
       if Grafana is served via a reverse proxy).
 
