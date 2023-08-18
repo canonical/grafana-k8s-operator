@@ -778,6 +778,7 @@ class GrafanaCharm(CharmBase):
         self._configure()
         self.source_consumer.upgrade_keys()
         self.dashboard_consumer.update_dashboards()
+        self._on_dashboards_changed(event)
         version = self.grafana_version
         if version is not None:
             self.unit.set_workload_version(version)
