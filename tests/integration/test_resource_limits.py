@@ -31,7 +31,19 @@ async def test_resource_limits_apply(ops_test, grafana_charm):
         config={"cpu": "300m", "memory": "300M"},
     )
     await ops_test.model.wait_for_idle(
-        apps=[app_name], status="active", timeout=300, wait_for_exact_units=1, idle_period=10
+        apps=[app_name],
+        status="active",
+        timeout=300,
+        wait_for_exact_units=1,
+        idle_period=10,
+        raise_on_error=False,
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[app_name],
+        status="active",
+        wait_for_exact_units=1,
+        idle_period=10,
+        raise_on_error=True,
     )
     pod = json.loads(
         subprocess.check_output(
