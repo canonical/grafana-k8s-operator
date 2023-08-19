@@ -547,7 +547,9 @@ class GrafanaCharm(CharmBase):
                 )
 
     def _on_dashboards_changed(self, event) -> None:
-        """Handle dashboard events."""
+        self._update_dashboards(event)
+
+    def _update_dashboards(self, event) -> None:
         container = self.unit.get_container(self.name)
         dashboards_dir_path = os.path.join(PROVISIONING_PATH, "dashboards")
 
@@ -778,7 +780,7 @@ class GrafanaCharm(CharmBase):
         self._configure()
         self.source_consumer.upgrade_keys()
         self.dashboard_consumer.update_dashboards()
-        self._on_dashboards_changed(event)
+        self._update_dashboards(event)
         version = self.grafana_version
         if version is not None:
             self.unit.set_workload_version(version)
