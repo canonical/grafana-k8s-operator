@@ -290,17 +290,6 @@ class TestCharm(unittest.TestCase):
             "GF_SERVER_ROOT_URL", layer.to_dict()["services"]["grafana"]["environment"]
         )
 
-    def test_config_is_updated_with_subpath(self):
-        self.harness.set_leader(True)
-
-        self.harness.update_config({"web_external_url": "/grafana"})
-
-        services = (
-            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
-        )
-        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
-        self.assertTrue(services["environment"]["GF_SERVER_ROOT_URL"].endswith("/grafana"))
-
     @patch.object(grafana_client.Grafana, "build_info", new={"version": "1.0.0"})
     @patch.object(TraefikRouteRequirer, "external_host", new="1.2.3.4")
     def test_ingress_relation_sets_options_and_rel_data(self):
@@ -312,27 +301,39 @@ class TestCharm(unittest.TestCase):
         services = (
             self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
         )
-        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
-        self.assertTrue(
-            services["environment"]["GF_SERVER_ROOT_URL"].endswith("/testmodel-grafana-k8s")
-        )
+        self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
+        self.assertNotIn("GF_SERVER_ROOT_URL", services["environment"].keys())
 
         expected_rel_data = {
             "http": {
+                "middlewares": {
+                    "juju-sidecar-noprefix-testmodel-grafana-k8s": {
+                        "stripPrefix": {
+                            "forceSlash": False,
+                            "prefixes": ["/testmodel-grafana-k8s"],
+                        }
+                    }
+                },
                 "routers": {
                     "juju-testmodel-grafana-k8s-router": {
                         "entryPoints": ["web"],
+                        "middlewares": ["juju-sidecar-noprefix-testmodel-grafana-k8s"],
                         "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
                         "service": "juju-testmodel-grafana-k8s-service",
-                    }
+                    },
+                    "juju-testmodel-grafana-k8s-router-tls": {
+                        "entryPoints": ["websecure"],
+                        "middlewares": ["juju-sidecar-noprefix-testmodel-grafana-k8s"],
+                        "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
+                        "service": "juju-testmodel-grafana-k8s-service",
+                        "tls": {"domains": [{"main": "1.2.3.4", "sans": ["*.1.2.3.4"]}]},
+                    },
                 },
                 "services": {
                     "juju-testmodel-grafana-k8s-service": {
                         "loadBalancer": {
                             "servers": [
-                                {
-                                    "url": "http://grafana-k8s-0.grafana-k8s-endpoints.testmodel.svc.cluster.local:3000/"
-                                }
+                                {"url": "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"}
                             ]
                         }
                     }
@@ -343,6 +344,7 @@ class TestCharm(unittest.TestCase):
 
         # The insanity of YAML here. It works for the lib, but a single load just strips off
         # the extra quoting and leaves regular YAML. Double parse it for the tests
+        self.maxDiff = None
         self.assertEqual(yaml.safe_load(rel_data["config"]), expected_rel_data)
 
         self.assertEqual(self.harness.charm.external_url, "http://1.2.3.4/testmodel-grafana-k8s")
@@ -377,7 +379,6 @@ class TestCharmReplication(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
 
         for p in [
-            patch("charm.K8sServicePatch"),
             patch("lightkube.core.client.GenericSyncClient"),
             k8s_resource_multipatch,
             patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
