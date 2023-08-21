@@ -1195,6 +1195,7 @@ class GrafanaDashboardProvider(Object):
                 `grafana_dashboaard` relationship is joined
         """
         if self._charm.unit.is_leader():
+            self._update_all_dashboards_from_dir()
             self._upset_dashboards_on_relation(event.relation)
 
     def _on_grafana_dashboard_relation_changed(self, event: RelationChangedEvent) -> None:
