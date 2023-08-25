@@ -861,7 +861,7 @@ class GrafanaCharm(CharmBase):
     def _parse_grafana_path(self, parts: ParseResult) -> dict:
         """Convert external_url into a usable path."""
         # urlparse.path parsing is absolutely horrid and only
-        # guarantees any kind of sanity if there is a scheme
+        # guarantees any kind of confidence check if there is a scheme
         if not parts.scheme and not parts.path.startswith("/"):
             # This could really be anything!
             logger.warning(
