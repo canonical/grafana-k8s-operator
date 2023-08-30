@@ -30,7 +30,7 @@ import time
 from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict
-from urllib.parse import ParseResult, urlparse
+from urllib.parse import urlparse
 import subprocess
 
 import yaml
@@ -139,10 +139,11 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
 
-        url = self.external_url
+        # Assuming FQDN is always part of the SANs DNS.
         self.grafana_service = Grafana(
-            f"{urlparse(url).scheme}://{socket.getfqdn()}:{PORT}/{urlparse(url).path.strip('/')}"
+            f"{urlparse(self.external_url).scheme}://{socket.getfqdn()}:{PORT}"
         )
+
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
             jobs=self._scrape_jobs,
@@ -754,7 +755,7 @@ class GrafanaCharm(CharmBase):
             # We do not have "web_external_url" anymore, and we use strip_prefix, so the root_url
             # is always the fqdn.
             # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
-            "root_url": self.external_url,
+            "root_url": self.internal_url,
             "cert_key": "/etc/grafana/grafana.key",
             "cert_file": "/etc/grafana/grafana.crt",
             "enforce_domain": "False",
@@ -858,25 +859,6 @@ class GrafanaCharm(CharmBase):
                 "not exist or is not responsive"
             )
 
-    def _parse_grafana_path(self, parts: ParseResult) -> dict:
-        """Convert external_url into a usable path."""
-        # urlparse.path parsing is absolutely horrid and only
-        # guarantees any kind of confidence check if there is a scheme
-        if not parts.scheme and not parts.path.startswith("/"):
-            # This could really be anything!
-            logger.warning(
-                "Could not determine web_external_url for Grafana. Please "
-                "use a fully-qualified path or a bare subpath"
-            )
-            return {}
-
-        return {
-            "scheme": parts.scheme or "http",
-            "host": "0.0.0.0",
-            "port": parts.netloc.split(":")[1] if ":" in parts.netloc else PORT,
-            "path": parts.path,
-        }
-
     def _build_layer(self) -> Layer:
         """Construct the pebble layer information."""
         # Placeholder for when we add "proper" mysql support for HA
@@ -899,26 +881,22 @@ class GrafanaCharm(CharmBase):
             }
         )
 
-        grafana_path = self.external_url
         if self._auth_env_vars:
             extra_info.update(self._auth_env_vars)
 
-        # We have to do this dance because urlparse() doesn't have any good
-        # truthiness, and parsing an empty string is still 'true'
-        if grafana_path:
-            parts = self._parse_grafana_path(urlparse(grafana_path))
-
-            # It doesn't matter unless there's a subpath, since the
-            # redirect to login is fine with a bare hostname
-            if parts and parts["path"]:
-                extra_info.update(
-                    {
-                        "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
-                        "GF_SERVER_ROOT_URL": "{}://{}:{}{}".format(
-                            parts["scheme"], parts["host"], parts["port"], parts["path"]
-                        ),
-                    }
-                )
+        # # We have to do this dance because urlparse() doesn't have any good
+        # # truthiness, and parsing an empty string is still 'true'
+        # # It doesn't matter unless there's a subpath, since the
+        # # redirect to login is fine with a bare hostname
+        # if (parts := self._parse_grafana_path(urlparse(self.external_url))) and parts["path"].strip("/"):
+        #     extra_info.update(
+        #         {
+        #             "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
+        #             "GF_SERVER_ROOT_URL": "{}://{}:{}{}".format(
+        #                 parts["scheme"], parts["host"], parts["port"], parts["path"]
+        #             ),
+        #         }
+        #     )
 
         layer = Layer(
             {
@@ -1215,47 +1193,60 @@ class GrafanaCharm(CharmBase):
     @property
     def _ingress_config(self) -> dict:
         """Build a raw ingress configuration for Traefik."""
-        fqdn = urlparse(socket.getfqdn()).path
-        pattern = r"^{}\..*?{}\.".format(self.model.unit.name.replace("/", "-"), self.model.name)
-        domain = re.split(pattern, fqdn)[1]
+        # The path prefix is the same as in ingress per app
+        external_path = f"{self.model.name}-{self.model.app.name}"
 
-        if self.external_url == self.ingress.external_host:
-            external_path = "{}-{}".format(self.model.name, self.model.app.name)
-        else:
-            external_path = urlparse(self.external_url).path or "{}-{}".format(
-                self.model.name, self.model.app.name
-            )
+        redirect_middleware = (
+            {
+                f"juju-sidecar-redir-https-{self.model.name}-{self.model.app.name}": {
+                    "redirectScheme": {
+                        "permanent": True,
+                        "port": 443,
+                        "scheme": "https",
+                    }
+                }
+            }
+            if urlparse(self.internal_url).scheme == "https"
+            else {}
+        )
 
-        if not external_path.startswith("/"):
-            external_path = "/{}".format(external_path)
+        middlewares = {
+            f"juju-sidecar-noprefix-{self.model.name}-{self.model.app.name}": {
+                "stripPrefix": {"forceSlash": False, "prefixes": [f"/{external_path}"]},
+            },
+            **redirect_middleware,
+        }
 
         routers = {
             "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
                 "entryPoints": ["web"],
-                "rule": "PathPrefix(`{}`)".format(external_path),
+                "rule": f"PathPrefix(`/{external_path}`)",
+                "middlewares": list(middlewares.keys()),
                 "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-            }
+            },
+            "juju-{}-{}-router-tls".format(self.model.name, self.model.app.name): {
+                "entryPoints": ["websecure"],
+                "rule": f"PathPrefix(`/{external_path}`)",
+                "middlewares": list(middlewares.keys()),
+                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
+                "tls": {
+                    "domains": [
+                        {
+                            "main": self.ingress.external_host,
+                            "sans": [f"*.{self.ingress.external_host}"],
+                        },
+                    ],
+                },
+            },
         }
 
         services = {
             "juju-{}-{}-service".format(self.model.name, self.model.app.name): {
-                "loadBalancer": {
-                    "servers": [
-                        {
-                            "url": "http://{}.{}-endpoints.{}.{}:{}/".format(
-                                self.model.unit.name.replace("/", "-"),
-                                self.model.app.name,
-                                self.model.name,
-                                domain,
-                                PORT,
-                            )
-                        }
-                    ]
-                }
+                "loadBalancer": {"servers": [{"url": self.internal_url}]}
             }
         }
 
-        return {"http": {"routers": routers, "services": services}}
+        return {"http": {"routers": routers, "services": services, "middlewares": middlewares}}
 
     @property
     def _auth_env_vars(self):

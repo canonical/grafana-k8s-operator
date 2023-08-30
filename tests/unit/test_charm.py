@@ -301,27 +301,39 @@ class TestCharm(unittest.TestCase):
         services = (
             self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
         )
-        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
-        self.assertTrue(
-            services["environment"]["GF_SERVER_ROOT_URL"].endswith("/testmodel-grafana-k8s")
-        )
+        self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
+        self.assertNotIn("GF_SERVER_ROOT_URL", services["environment"].keys())
 
         expected_rel_data = {
             "http": {
+                "middlewares": {
+                    "juju-sidecar-noprefix-testmodel-grafana-k8s": {
+                        "stripPrefix": {
+                            "forceSlash": False,
+                            "prefixes": ["/testmodel-grafana-k8s"],
+                        }
+                    }
+                },
                 "routers": {
                     "juju-testmodel-grafana-k8s-router": {
                         "entryPoints": ["web"],
+                        "middlewares": ["juju-sidecar-noprefix-testmodel-grafana-k8s"],
                         "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
                         "service": "juju-testmodel-grafana-k8s-service",
-                    }
+                    },
+                    "juju-testmodel-grafana-k8s-router-tls": {
+                        "entryPoints": ["websecure"],
+                        "middlewares": ["juju-sidecar-noprefix-testmodel-grafana-k8s"],
+                        "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
+                        "service": "juju-testmodel-grafana-k8s-service",
+                        "tls": {"domains": [{"main": "1.2.3.4", "sans": ["*.1.2.3.4"]}]},
+                    },
                 },
                 "services": {
                     "juju-testmodel-grafana-k8s-service": {
                         "loadBalancer": {
                             "servers": [
-                                {
-                                    "url": "http://grafana-k8s-0.grafana-k8s-endpoints.testmodel.svc.cluster.local:3000/"
-                                }
+                                {"url": "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"}
                             ]
                         }
                     }
