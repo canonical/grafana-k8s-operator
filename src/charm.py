@@ -860,7 +860,10 @@ class GrafanaCharm(CharmBase):
             )
 
     def _build_layer(self) -> Layer:
-        """Construct the pebble layer information."""
+        """Construct the pebble layer information.
+
+        Ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini
+        """
         # Placeholder for when we add "proper" mysql support for HA
         extra_info = {
             "GF_DATABASE_TYPE": "sqlite3",
@@ -869,34 +872,28 @@ class GrafanaCharm(CharmBase):
         # Juju Proxy settings
         extra_info.update(
             {
-                "https_proxy": os.environ["JUJU_CHARM_HTTPS_PROXY"]
-                if "JUJU_CHARM_HTTPS_PROXY" in os.environ
-                else "",
-                "http_proxy": os.environ["JUJU_CHARM_HTTP_PROXY"]
-                if "JUJU_CHARM_HTTP_PROXY" in os.environ
-                else "",
-                "no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]
-                if "JUJU_CHARM_NO_PROXY" in os.environ
-                else "",
+                "https_proxy": os.environ.get("JUJU_CHARM_HTTPS_PROXY", ""),
+                "http_proxy": os.environ.get("JUJU_CHARM_HTTP_PROXY", ""),
+                "no_proxy": os.environ.get("JUJU_CHARM_NO_PROXY", ""),
             }
         )
 
         if self._auth_env_vars:
             extra_info.update(self._auth_env_vars)
 
-        # # We have to do this dance because urlparse() doesn't have any good
-        # # truthiness, and parsing an empty string is still 'true'
-        # # It doesn't matter unless there's a subpath, since the
-        # # redirect to login is fine with a bare hostname
-        # if (parts := self._parse_grafana_path(urlparse(self.external_url))) and parts["path"].strip("/"):
-        #     extra_info.update(
-        #         {
-        #             "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
-        #             "GF_SERVER_ROOT_URL": "{}://{}:{}{}".format(
-        #                 parts["scheme"], parts["host"], parts["port"], parts["path"]
-        #             ),
-        #         }
-        #     )
+        # For stripPrefix middleware to work correctly, we need to set serve_from_sub_path and
+        # root_url in a particular way.
+        extra_info.update(
+            {
+                "GF_SERVER_SERVE_FROM_SUB_PATH": "False",
+                "GF_SERVER_ROOT_URL": self.external_url,
+                # FIXME From https://grafana.com/tutorials/run-grafana-behind-a-proxy/#1:
+                #  "The protocol setting should be set to http, because the TLS handshake is being
+                #  handled by NGINX."
+                #  For us, this means that when traefik provides TLS termination then traefik is
+                #  https, but grafana is http, in which case we may need to set GF_SERVER_PROTOCOL.
+            }
+        )
 
         layer = Layer(
             {
@@ -1187,6 +1184,9 @@ class GrafanaCharm(CharmBase):
         """Return the external hostname configured, if any."""
         if self.ingress.external_host:
             path_prefix = f"{self.model.name}-{self.model.app.name}"
+            # FIXME self._scheme is incorrect: it needs to be the ingress URL's scheme:
+            #  If traefik is providing TLS termination then the ingress scheme is https, but
+            #  grafana's scheme is still http (cf. alertmanager's CatalogueItem).
             return f"{self._scheme}://{self.ingress.external_host}/{path_prefix}"
         return self.internal_url
 
