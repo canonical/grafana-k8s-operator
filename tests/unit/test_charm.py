@@ -286,8 +286,9 @@ class TestCharm(unittest.TestCase):
     def test_bare_charm_has_no_subpath_set_in_layer(self):
         self.harness.set_leader(True)
         layer = self.harness.charm._build_layer()
-        self.assertNotIn(
-            "GF_SERVER_ROOT_URL", layer.to_dict()["services"]["grafana"]["environment"]
+        self.assertEqual(
+            layer.to_dict()["services"]["grafana"]["environment"]["GF_SERVER_ROOT_URL"],
+            "http://grafana-k8s-0.testmodel.svc.cluster.local:3000",
         )
 
     @patch.object(grafana_client.Grafana, "build_info", new={"version": "1.0.0"})
@@ -301,8 +302,8 @@ class TestCharm(unittest.TestCase):
         services = (
             self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
         )
-        self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
-        self.assertNotIn("GF_SERVER_ROOT_URL", services["environment"].keys())
+        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
+        self.assertIn("GF_SERVER_ROOT_URL", services["environment"].keys())
 
         expected_rel_data = {
             "http": {

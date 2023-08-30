@@ -82,9 +82,12 @@ class TestExternalUrl(unittest.TestCase):
         # GIVEN a charm with an fqdn as its external URL
         # (this is set by a mock decorator)
 
-        # THEN root url and subpath envs are not defined (redirect to login is fine with a bare hostname)
-        self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", self.get_pebble_env())
-        self.assertNotIn("GF_SERVER_ROOT_URL", self.get_pebble_env())
+        # THEN root url and subpath envs are defined
+        self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+        self.assertEqual(
+            self.get_pebble_env()["GF_SERVER_ROOT_URL"],
+            "http://grafana-k8s-0.testmodel.svc.cluster.local:3000",
+        )
         self.assertTrue(self.is_service_running())
 
     def test_external_url_precedence(self):
@@ -102,26 +105,32 @@ class TestExternalUrl(unittest.TestCase):
                 self.harness.charm.model.get_relation("ingress", rel_id)
             )
 
-            # THEN root url is fqdn and the subpath envs are NOT defined
-            self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", self.get_pebble_env())
-            self.assertNotIn("GF_SERVER_ROOT_URL", self.get_pebble_env())
+            # THEN root url is fqdn and the subpath env is defined
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+            self.assertEqual(
+                self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://1.2.3.4/testmodel-grafana-k8s"
+            )
             self.assertTrue(self.is_service_running())
 
             # WHEN the web_external_url config option is set
             external_url_config = "http://foo.bar.config:8080/path/to/grafana"
             self.harness.update_config({"web_external_url": external_url_config})
 
-            # THEN root url is not affected (that config option is deprecated)
-            self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", self.get_pebble_env())
-            self.assertNotIn("GF_SERVER_ROOT_URL", self.get_pebble_env())
+            # THEN root url is not affected
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+            self.assertEqual(
+                self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://1.2.3.4/testmodel-grafana-k8s"
+            )
             self.assertTrue(self.is_service_running())
 
             # WHEN the web_external_url config option is cleared
             self.harness.update_config(unset=["web_external_url"])
 
             # THEN root url is still not affected
-            self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", self.get_pebble_env())
-            self.assertNotIn("GF_SERVER_ROOT_URL", self.get_pebble_env())
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+            self.assertEqual(
+                self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://1.2.3.4/testmodel-grafana-k8s"
+            )
 
         # WHEN the traefik relation is removed
         with patch.object(TraefikRouteRequirer, "external_host", new=""):
@@ -129,8 +138,11 @@ class TestExternalUrl(unittest.TestCase):
             self.harness.remove_relation(rel_id)
 
             # THEN root url and subpath envs are undefined (because fqdn is a bare hostname)
-            self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", self.get_pebble_env())
-            self.assertNotIn("GF_SERVER_ROOT_URL", self.get_pebble_env())
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+            self.assertEqual(
+                self.get_pebble_env()["GF_SERVER_ROOT_URL"],
+                "http://grafana-k8s-0.testmodel.svc.cluster.local:3000",
+            )
             self.assertTrue(self.is_service_running())
 
     @unittest.skip("The admin intentionally sets this. Leaving it not fully specced for now.")
