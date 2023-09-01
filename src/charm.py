@@ -887,11 +887,10 @@ class GrafanaCharm(CharmBase):
             {
                 "GF_SERVER_SERVE_FROM_SUB_PATH": "False",
                 "GF_SERVER_ROOT_URL": self.external_url,
-                # FIXME From https://grafana.com/tutorials/run-grafana-behind-a-proxy/#1:
-                #  "The protocol setting should be set to http, because the TLS handshake is being
-                #  handled by NGINX."
-                #  For us, this means that when traefik provides TLS termination then traefik is
-                #  https, but grafana is http, in which case we may need to set GF_SERVER_PROTOCOL.
+                # When traefik provides TLS termination then traefik is https, but grafana is http.
+                # We need to set GF_SERVER_PROTOCOL.
+                # https://grafana.com/tutorials/run-grafana-behind-a-proxy/#1
+                "GF_SERVER_PROTOCOL": self._scheme,
             }
         )
 
