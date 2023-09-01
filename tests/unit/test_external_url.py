@@ -96,7 +96,7 @@ class TestExternalUrl(unittest.TestCase):
         # (this is set by a mock decorator)
 
         # WHEN a relation with traefik is formed
-        with patch.object(TraefikRouteRequirer, "external_host", new="1.2.3.4"):
+        with patch.multiple("charm.TraefikRouteRequirer", external_host="1.2.3.4", scheme="http"):
             rel_id = self.harness.add_relation("ingress", "traefik-app")
             self.harness.add_relation_unit(rel_id, "traefik-app/0")
 

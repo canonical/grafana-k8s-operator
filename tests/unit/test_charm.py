@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import ops
 import yaml
-from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.testing import Harness
 
 import grafana_client
@@ -292,7 +291,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch.object(grafana_client.Grafana, "build_info", new={"version": "1.0.0"})
-    @patch.object(TraefikRouteRequirer, "external_host", new="1.2.3.4")
+    @patch.multiple("charm.TraefikRouteRequirer", external_host="1.2.3.4", scheme="http")
     def test_ingress_relation_sets_options_and_rel_data(self):
         self.harness.set_leader(True)
         self.harness.container_pebble_ready("grafana")
