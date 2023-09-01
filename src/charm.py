@@ -1184,10 +1184,10 @@ class GrafanaCharm(CharmBase):
         """Return the external hostname configured, if any."""
         if self.ingress.external_host:
             path_prefix = f"{self.model.name}-{self.model.app.name}"
-            # FIXME self._scheme is incorrect: it needs to be the ingress URL's scheme:
-            #  If traefik is providing TLS termination then the ingress scheme is https, but
-            #  grafana's scheme is still http (cf. alertmanager's CatalogueItem).
-            return f"{self._scheme}://{self.ingress.external_host}/{path_prefix}"
+            # The scheme we use here needs to be the ingress URL's scheme:
+            # If traefik is providing TLS termination then the ingress scheme is https, but
+            # grafana's scheme is still http.
+            return f"{self.ingress.scheme}://{self.ingress.external_host}/{path_prefix}"
         return self.internal_url
 
     @property
