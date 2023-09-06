@@ -1070,21 +1070,6 @@ class GrafanaCharm(CharmBase):
             if source_info.get("extra_fields", None):
                 source["jsonData"] = source_info.get("extra_fields")
 
-            if source_info["url"].startswith("https://"):
-                # Note: assuming the same CA cert for grafana and the datasource, so we use
-                # tlsSkipVerify for the _datasource_ if there is no CA for _grafana_. When we start
-                # using cert_swap, it will be hard to tell if we have a CA cert for a given
-                # datasource, so at that point we might _always_ use tlsSkipVerify.
-                if not self.cert_handler.enabled or not self.cert_handler.ca:
-                    json_data = source.get("jsonData", {})
-                    json_data.update({"tlsSkipVerify": True})
-                    source["jsonData"] = json_data
-
-                # Note: assuming that the datasource's CA cert is coming in somehow via
-                # `update-ca-certificates`, otherwise we would also need to:
-                #   source["jsonData"]["tlsAuthWithCACert"] = True
-                #   source["secureJsonData"]["tlsCACert"] = self.cert_handler.ca
-
             # set timeout for querying this data source
             timeout = int(source.get("jsonData", {}).get("timeout", 0))
             configured_timeout = int(self.model.config.get("datasource_query_timeout", 0))
