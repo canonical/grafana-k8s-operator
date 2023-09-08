@@ -142,9 +142,7 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.cert_handler.on.cert_changed, self._configure_ingress)
 
         # Assuming FQDN is always part of the SANs DNS.
-        self.grafana_service = Grafana(
-            f"{self._scheme}://{socket.getfqdn()}:{PORT}"
-        )
+        self.grafana_service = Grafana(f"{self._scheme}://{socket.getfqdn()}:{PORT}")
 
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,

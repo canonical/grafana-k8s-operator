@@ -83,7 +83,7 @@ class TestExternalUrl(unittest.TestCase):
         # (this is set by a mock decorator)
 
         # THEN root url and subpath envs are defined
-        self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+        self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
         self.assertEqual(
             self.get_pebble_env()["GF_SERVER_ROOT_URL"],
             "http://grafana-k8s-0.testmodel.svc.cluster.local:3000",
@@ -106,7 +106,7 @@ class TestExternalUrl(unittest.TestCase):
             )
 
             # THEN root url is fqdn and the subpath env is defined
-            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
             self.assertEqual(
                 self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://1.2.3.4/testmodel-grafana-k8s"
             )
@@ -117,7 +117,7 @@ class TestExternalUrl(unittest.TestCase):
             self.harness.update_config({"web_external_url": external_url_config})
 
             # THEN root url is not affected
-            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
             self.assertEqual(
                 self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://1.2.3.4/testmodel-grafana-k8s"
             )
@@ -127,7 +127,7 @@ class TestExternalUrl(unittest.TestCase):
             self.harness.update_config(unset=["web_external_url"])
 
             # THEN root url is still not affected
-            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
             self.assertEqual(
                 self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://1.2.3.4/testmodel-grafana-k8s"
             )
@@ -138,7 +138,7 @@ class TestExternalUrl(unittest.TestCase):
             self.harness.remove_relation(rel_id)
 
             # THEN root url and subpath envs are undefined (because fqdn is a bare hostname)
-            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "False")
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
             self.assertEqual(
                 self.get_pebble_env()["GF_SERVER_ROOT_URL"],
                 "http://grafana-k8s-0.testmodel.svc.cluster.local:3000",
