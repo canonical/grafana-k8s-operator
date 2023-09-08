@@ -68,6 +68,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, OpenedPort
 from ops.pebble import (
     APIError,
     ConnectionError,
+    ChangeError,
     ExecError,
     Layer,
     PathError,
@@ -138,6 +139,7 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
+        self.framework.observe(self.cert_handler.on.cert_changed, self._configure_ingress)
 
         # Assuming FQDN is always part of the SANs DNS.
         self.grafana_service = Grafana(
@@ -755,11 +757,11 @@ class GrafanaCharm(CharmBase):
             # We do not have "web_external_url" anymore, and we use strip_prefix, so the root_url
             # is always the fqdn.
             # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
-            "root_url": self.internal_url,
+            # "root_url": self.internal_url,
             "cert_key": "/etc/grafana/grafana.key",
             "cert_file": "/etc/grafana/grafana.crt",
             "enforce_domain": "False",
-            "protocol": "https" if self.cert_handler.cert else "http",
+            "protocol": self._scheme,
         }
 
         data = StringIO()
@@ -804,6 +806,13 @@ class GrafanaCharm(CharmBase):
             if self.containers["workload"].get_service(self.name).is_running():
                 self.containers["workload"].stop(self.name)
 
+            # Before 'start', we force a cert update. This is needed here to circumvent a code
+            # ordering issue that results in:
+            #   *api.HTTPServer run error: cert_file cannot be empty when using HTTPS
+            #   ERROR cannot start service: exited quickly with code 1
+            if self.cert_handler.cert:
+                self._update_cert()
+
             self.containers["workload"].start(self.name)
             logger.info("Restarted grafana-k8s")
 
@@ -835,6 +844,8 @@ class GrafanaCharm(CharmBase):
                 "Could not restart grafana-k8s -- Pebble socket does "
                 "not exist or is not responsive"
             )
+        except ChangeError as e:
+            logger.error("Could not restart grafana at this time: %s", e)
 
     def restart_litestream(self, leader: bool) -> None:
         """Restart the pebble container.
@@ -885,7 +896,8 @@ class GrafanaCharm(CharmBase):
         # root_url in a particular way.
         extra_info.update(
             {
-                "GF_SERVER_SERVE_FROM_SUB_PATH": "False",
+                "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
+                # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
                 "GF_SERVER_ROOT_URL": self.external_url,
                 # When traefik provides TLS termination then traefik is https, but grafana is http.
                 # We need to set GF_SERVER_PROTOCOL.
@@ -1171,7 +1183,7 @@ class GrafanaCharm(CharmBase):
             # The scheme we use here needs to be the ingress URL's scheme:
             # If traefik is providing TLS termination then the ingress scheme is https, but
             # grafana's scheme is still http.
-            return f"{self.ingress.scheme}://{self.ingress.external_host}/{path_prefix}"
+            return f"{self.ingress.scheme or 'http'}://{self.ingress.external_host}/{path_prefix}"
         return self.internal_url
 
     @property
@@ -1190,7 +1202,7 @@ class GrafanaCharm(CharmBase):
                     }
                 }
             }
-            if urlparse(self.internal_url).scheme == "https"
+            if self._scheme == "https"
             else {}
         )
 
@@ -1276,16 +1288,15 @@ class GrafanaCharm(CharmBase):
     @property
     def _scrape_jobs(self) -> list:
         parts = urlparse(self.internal_url)
-        job: Dict = {
-            "static_configs": [{"targets": [parts.netloc]}],
-        }
-
-        if self.cert_handler.cert:
-            job["scheme"] = "https"
+        job = {"static_configs": [{"targets": [parts.netloc]}], "scheme": self._scheme}
 
         return [job]
 
     def _on_server_cert_changed(self, _):
+        self._update_cert()
+        self._configure()
+
+    def _update_cert(self):
         container = self.containers["workload"]
         ca_cert_path = Path("/usr/local/share/ca-certificates/cos-ca.crt")
         if self.cert_handler.cert and self.cert_handler.key and self.cert_handler.ca:
@@ -1319,7 +1330,6 @@ class GrafanaCharm(CharmBase):
 
         container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
-        self._configure()
 
 
 if __name__ == "__main__":
