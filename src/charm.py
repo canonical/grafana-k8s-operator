@@ -736,27 +736,6 @@ class GrafanaCharm(CharmBase):
         data.close()
         return ret
 
-    def _generate_network_config(self) -> str:
-        """Generate a network configuration.
-
-        Returns:
-            A string containing the required networking information to be stubbed into the
-            config file.
-        """
-        config_ini = configparser.ConfigParser()
-
-        config_ini["server"] = {  # pyright: ignore
-            "cert_key": "/etc/grafana/grafana.key",
-            "cert_file": "/etc/grafana/grafana.crt",
-        }
-
-        data = StringIO()
-        config_ini.write(data)
-        data.seek(0)
-        ret = data.read()
-        data.close()
-        return ret
-
     #####################################
 
     # PEBBLE OPERATIONS
