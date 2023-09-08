@@ -13,11 +13,6 @@
 # - Able to log in from <unit ip>:3000 and <app ip>:3000.
 #   - Recent data is displayed in the graphs.
 
-# WORKS:
-#            GF_SERVER_PROTOCOL: http
-#            GF_SERVER_ROOT_URL: https://10.43.8.149/b1-graf
-#            GF_SERVER_SERVE_FROM_SUB_PATH: "True"
-
 bundle: kubernetes
 applications:
   ca:
@@ -47,11 +42,11 @@ applications:
     scale: 1
     trust: true
   trfk:
-#    charm: traefik-k8s
-#    channel: edge
-    charm: ../../traefik-k8s_ubuntu-20.04-amd64.charm
-    resources:
-      traefik-image: ghcr.io/canonical/traefik:2.10.4
+    charm: traefik-k8s
+    channel: edge
+#    charm: ../../traefik-k8s_ubuntu-20.04-amd64.charm
+#    resources:
+#      traefik-image: ghcr.io/canonical/traefik:2.10.4
     series: focal
     scale: 1
     trust: true

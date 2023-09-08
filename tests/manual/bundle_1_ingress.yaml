@@ -12,11 +12,6 @@
 # - Able to log in from <unit ip>:3000 and <app ip>:3000.
 #   - Recent data is displayed in the graphs.
 
-# WORKS:
-#            GF_SERVER_PROTOCOL: http
-#            GF_SERVER_ROOT_URL: http://10.43.8.149/b1-graf
-#            GF_SERVER_SERVE_FROM_SUB_PATH: "True"
-
 bundle: kubernetes
 applications:
   cat:

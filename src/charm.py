@@ -143,7 +143,7 @@ class GrafanaCharm(CharmBase):
 
         # Assuming FQDN is always part of the SANs DNS.
         self.grafana_service = Grafana(
-            f"{urlparse(self.external_url).scheme}://{socket.getfqdn()}:{PORT}"
+            f"{self._scheme}://{socket.getfqdn()}:{PORT}"
         )
 
         self.metrics_endpoint = MetricsEndpointProvider(
@@ -696,10 +696,6 @@ class GrafanaCharm(CharmBase):
         configs = []
         if self.has_db:
             configs.append(self._generate_database_config())
-        if self.cert_handler.cert and self.containers["workload"].exists(
-            "/etc/grafana/grafana.crt"
-        ):
-            configs.append(self._generate_network_config())
 
         return "\n".join(configs)
 
@@ -752,16 +748,8 @@ class GrafanaCharm(CharmBase):
         config_ini = configparser.ConfigParser()
 
         config_ini["server"] = {  # pyright: ignore
-            "http_addr": "",
-            "http_port": PORT,
-            # We do not have "web_external_url" anymore, and we use strip_prefix, so the root_url
-            # is always the fqdn.
-            # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
-            # "root_url": self.internal_url,
             "cert_key": "/etc/grafana/grafana.key",
             "cert_file": "/etc/grafana/grafana.crt",
-            "enforce_domain": "False",
-            "protocol": self._scheme,
         }
 
         data = StringIO()
@@ -899,12 +887,23 @@ class GrafanaCharm(CharmBase):
                 "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
                 # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
                 "GF_SERVER_ROOT_URL": self.external_url,
+                "GF_SERVER_ENFORCE_DOMAIN": "false",
                 # When traefik provides TLS termination then traefik is https, but grafana is http.
                 # We need to set GF_SERVER_PROTOCOL.
                 # https://grafana.com/tutorials/run-grafana-behind-a-proxy/#1
                 "GF_SERVER_PROTOCOL": self._scheme,
             }
         )
+
+        if self.cert_handler.cert and self.containers["workload"].exists(
+            "/etc/grafana/grafana.crt"
+        ):
+            extra_info.update(
+                {
+                    "GF_SERVER_CERT_KEY": "/etc/grafana/grafana.key",
+                    "GF_SERVER_CERT_FILE": "/etc/grafana/grafana.crt",
+                }
+            )
 
         layer = Layer(
             {

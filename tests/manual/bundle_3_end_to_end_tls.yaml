@@ -42,11 +42,11 @@ applications:
     scale: 1
     trust: true
   trfk:
-#    charm: traefik-k8s
-#    channel: edge
-    charm: ../../traefik-k8s_ubuntu-20.04-amd64.charm
-    resources:
-      traefik-image: ghcr.io/canonical/traefik:2.10.4
+    charm: traefik-k8s
+    channel: edge
+#    charm: ../../traefik-k8s_ubuntu-20.04-amd64.charm
+#    resources:
+#      traefik-image: ghcr.io/canonical/traefik:2.10.4
     series: focal
     scale: 1
     trust: true
