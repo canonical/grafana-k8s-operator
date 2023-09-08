@@ -82,52 +82,54 @@ class TestExternalUrl(unittest.TestCase):
         # GIVEN a charm with an fqdn as its external URL
         # (this is set by a mock decorator)
 
-        # THEN root url and subpath envs are not defined (redirect to login is fine with a bare hostname)
-        self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", self.get_pebble_env())
-        self.assertNotIn("GF_SERVER_ROOT_URL", self.get_pebble_env())
+        # THEN root url and subpath envs are defined
+        self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
+        self.assertEqual(
+            self.get_pebble_env()["GF_SERVER_ROOT_URL"],
+            "http://grafana-k8s-0.testmodel.svc.cluster.local:3000",
+        )
         self.assertTrue(self.is_service_running())
 
     def test_external_url_precedence(self):
-        """Precedence is [config option] > [ingress] > [fqdn]."""
+        """Precedence is [ingress] > [fqdn]."""
         # GIVEN a charm with the fqdn as its external URL
         # (this is set by a mock decorator)
 
         # WHEN a relation with traefik is formed
-        with patch.object(TraefikRouteRequirer, "external_host", new="1.2.3.4"):
+        with patch.multiple("charm.TraefikRouteRequirer", external_host="1.2.3.4", scheme="http"):
             rel_id = self.harness.add_relation("ingress", "traefik-app")
             self.harness.add_relation_unit(rel_id, "traefik-app/0")
+
             # AND ingress becomes ready
             self.harness.charm.ingress.on.ready.emit(
                 self.harness.charm.model.get_relation("ingress", rel_id)
             )
 
-            # THEN root url and subpath envs are defined
+            # THEN root url is fqdn and the subpath env is defined
             self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
             self.assertEqual(
-                self.get_pebble_env()["GF_SERVER_ROOT_URL"],
-                "http://0.0.0.0:3000/testmodel-grafana-k8s",
+                self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://1.2.3.4/testmodel-grafana-k8s"
             )
             self.assertTrue(self.is_service_running())
 
-            # # WHEN the web_external_url config option is set
-            # external_url_config = "http://foo.bar.config:8080/path/to/grafana"
-            # self.harness.update_config({"web_external_url": external_url_config})
+            # WHEN the web_external_url config option is set
+            external_url_config = "http://foo.bar.config:8080/path/to/grafana"
+            self.harness.update_config({"web_external_url": external_url_config})
 
-            # # THEN root url is updated (config option has higher precedence than ingress)
-            # self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
-            # self.assertEqual(
-            #     self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://0.0.0.0:8080/path/to/grafana"
-            # )
-            # self.assertTrue(self.is_service_running())
-
-            # # WHEN the web_external_url config option is cleared
-            # self.harness.update_config(unset=["web_external_url"])
-
-            # THEN root url is reverted to the one coming from ingress
+            # THEN root url is not affected
             self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
             self.assertEqual(
-                self.get_pebble_env()["GF_SERVER_ROOT_URL"],
-                "http://0.0.0.0:3000/testmodel-grafana-k8s",
+                self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://1.2.3.4/testmodel-grafana-k8s"
+            )
+            self.assertTrue(self.is_service_running())
+
+            # WHEN the web_external_url config option is cleared
+            self.harness.update_config(unset=["web_external_url"])
+
+            # THEN root url is still not affected
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
+            self.assertEqual(
+                self.get_pebble_env()["GF_SERVER_ROOT_URL"], "http://1.2.3.4/testmodel-grafana-k8s"
             )
 
         # WHEN the traefik relation is removed
@@ -135,9 +137,12 @@ class TestExternalUrl(unittest.TestCase):
             self.harness.remove_relation_unit(rel_id, "traefik-app/0")
             self.harness.remove_relation(rel_id)
 
-            # THEN root url and subpath envs are undefined again (because fqdn is a bare hostname)
-            self.assertNotIn("GF_SERVER_SERVE_FROM_SUB_PATH", self.get_pebble_env())
-            self.assertNotIn("GF_SERVER_ROOT_URL", self.get_pebble_env())
+            # THEN root url and subpath envs are undefined (because fqdn is a bare hostname)
+            self.assertEqual(self.get_pebble_env()["GF_SERVER_SERVE_FROM_SUB_PATH"], "True")
+            self.assertEqual(
+                self.get_pebble_env()["GF_SERVER_ROOT_URL"],
+                "http://grafana-k8s-0.testmodel.svc.cluster.local:3000",
+            )
             self.assertTrue(self.is_service_running())
 
     @unittest.skip("The admin intentionally sets this. Leaving it not fully specced for now.")

@@ -1,0 +1,60 @@
+# Key relations: catalogue - grafana - traefik
+# We need prom to make sure grafana can post requests and display a graph.
+
+# To test:
+# - Catalogue has the correct link (http://<traefik ip>/<model name>-graf).
+# - Able to log in from http://<traefik ip>/<model name>-graf.
+#   - All dashboards are listed:
+#     - Prometheus Operator Overview
+#     - Grafana Operator Overview
+#     - Traefik
+#   - Recent data is displayed in the graphs.
+# - Able to log in from <unit ip>:3000 and <app ip>:3000.
+#   - Recent data is displayed in the graphs.
+
+bundle: kubernetes
+applications:
+  cat:
+    charm: catalogue-k8s
+    channel: edge
+    series: focal
+    scale: 1
+  graf:
+    charm: ../../grafana-k8s_ubuntu-20.04-amd64.charm
+    series: focal
+    resources:
+      grafana-image: docker.io/ubuntu/grafana:9.2-22.04_beta
+      litestream-image: docker.io/litestream/litestream:0.4.0-beta.2
+    scale: 1
+    trust: true
+  prom:
+    charm: prometheus-k8s
+    channel: edge
+#    charm: ../../prometheus-k8s_ubuntu-20.04-amd64.charm
+#    resources:
+#      prometheus-image: ghcr.io/canonical/prometheus:latest
+    series: focal
+    scale: 1
+    trust: true
+  trfk:
+    charm: traefik-k8s
+    channel: edge
+#    charm: ../../traefik-k8s_ubuntu-20.04-amd64.charm
+#    resources:
+#      traefik-image: ghcr.io/canonical/traefik:2.10.4
+    series: focal
+    scale: 1
+    trust: true
+relations:
+- - graf:catalogue
+  - cat:catalogue
+- - graf:ingress
+  - trfk:traefik-route
+- - prom:metrics-endpoint
+  - graf:metrics-endpoint
+- - prom:grafana-dashboard
+  - graf:grafana-dashboard
+- - prom:grafana-source
+  - graf:grafana-source
+- - trfk:grafana-dashboard
+  - graf:grafana-dashboard

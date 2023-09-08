@@ -30,7 +30,7 @@ import time
 from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict
-from urllib.parse import ParseResult, urlparse
+from urllib.parse import urlparse
 import subprocess
 
 import yaml
@@ -68,6 +68,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, OpenedPort
 from ops.pebble import (
     APIError,
     ConnectionError,
+    ChangeError,
     ExecError,
     Layer,
     PathError,
@@ -138,11 +139,11 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
+        self.framework.observe(self.cert_handler.on.cert_changed, self._configure_ingress)
 
-        url = self.external_url
-        self.grafana_service = Grafana(
-            f"{urlparse(url).scheme}://{socket.getfqdn()}:{PORT}/{urlparse(url).path.strip('/')}"
-        )
+        # Assuming FQDN is always part of the SANs DNS.
+        self.grafana_service = Grafana(f"{self._scheme}://{socket.getfqdn()}:{PORT}")
+
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
             jobs=self._scrape_jobs,
@@ -693,10 +694,6 @@ class GrafanaCharm(CharmBase):
         configs = []
         if self.has_db:
             configs.append(self._generate_database_config())
-        if self.cert_handler.cert and self.containers["workload"].exists(
-            "/etc/grafana/grafana.crt"
-        ):
-            configs.append(self._generate_network_config())
 
         return "\n".join(configs)
 
@@ -739,35 +736,6 @@ class GrafanaCharm(CharmBase):
         data.close()
         return ret
 
-    def _generate_network_config(self) -> str:
-        """Generate a network configuration.
-
-        Returns:
-            A string containing the required networking information to be stubbed into the
-            config file.
-        """
-        config_ini = configparser.ConfigParser()
-
-        config_ini["server"] = {  # pyright: ignore
-            "http_addr": "",
-            "http_port": PORT,
-            # We do not have "web_external_url" anymore, and we use strip_prefix, so the root_url
-            # is always the fqdn.
-            # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
-            "root_url": self.external_url,
-            "cert_key": "/etc/grafana/grafana.key",
-            "cert_file": "/etc/grafana/grafana.crt",
-            "enforce_domain": "False",
-            "protocol": "https" if self.cert_handler.cert else "http",
-        }
-
-        data = StringIO()
-        config_ini.write(data)
-        data.seek(0)
-        ret = data.read()
-        data.close()
-        return ret
-
     #####################################
 
     # PEBBLE OPERATIONS
@@ -803,6 +771,13 @@ class GrafanaCharm(CharmBase):
             if self.containers["workload"].get_service(self.name).is_running():
                 self.containers["workload"].stop(self.name)
 
+            # Before 'start', we force a cert update. This is needed here to circumvent a code
+            # ordering issue that results in:
+            #   *api.HTTPServer run error: cert_file cannot be empty when using HTTPS
+            #   ERROR cannot start service: exited quickly with code 1
+            if self.cert_handler.cert:
+                self._update_cert()
+
             self.containers["workload"].start(self.name)
             logger.info("Restarted grafana-k8s")
 
@@ -834,6 +809,8 @@ class GrafanaCharm(CharmBase):
                 "Could not restart grafana-k8s -- Pebble socket does "
                 "not exist or is not responsive"
             )
+        except ChangeError as e:
+            logger.error("Could not restart grafana at this time: %s", e)
 
     def restart_litestream(self, leader: bool) -> None:
         """Restart the pebble container.
@@ -858,27 +835,11 @@ class GrafanaCharm(CharmBase):
                 "not exist or is not responsive"
             )
 
-    def _parse_grafana_path(self, parts: ParseResult) -> dict:
-        """Convert external_url into a usable path."""
-        # urlparse.path parsing is absolutely horrid and only
-        # guarantees any kind of confidence check if there is a scheme
-        if not parts.scheme and not parts.path.startswith("/"):
-            # This could really be anything!
-            logger.warning(
-                "Could not determine web_external_url for Grafana. Please "
-                "use a fully-qualified path or a bare subpath"
-            )
-            return {}
-
-        return {
-            "scheme": parts.scheme or "http",
-            "host": "0.0.0.0",
-            "port": parts.netloc.split(":")[1] if ":" in parts.netloc else PORT,
-            "path": parts.path,
-        }
-
     def _build_layer(self) -> Layer:
-        """Construct the pebble layer information."""
+        """Construct the pebble layer information.
+
+        Ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini
+        """
         # Placeholder for when we add "proper" mysql support for HA
         extra_info = {
             "GF_DATABASE_TYPE": "sqlite3",
@@ -887,38 +848,39 @@ class GrafanaCharm(CharmBase):
         # Juju Proxy settings
         extra_info.update(
             {
-                "https_proxy": os.environ["JUJU_CHARM_HTTPS_PROXY"]
-                if "JUJU_CHARM_HTTPS_PROXY" in os.environ
-                else "",
-                "http_proxy": os.environ["JUJU_CHARM_HTTP_PROXY"]
-                if "JUJU_CHARM_HTTP_PROXY" in os.environ
-                else "",
-                "no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]
-                if "JUJU_CHARM_NO_PROXY" in os.environ
-                else "",
+                "https_proxy": os.environ.get("JUJU_CHARM_HTTPS_PROXY", ""),
+                "http_proxy": os.environ.get("JUJU_CHARM_HTTP_PROXY", ""),
+                "no_proxy": os.environ.get("JUJU_CHARM_NO_PROXY", ""),
             }
         )
 
-        grafana_path = self.external_url
         if self._auth_env_vars:
             extra_info.update(self._auth_env_vars)
 
-        # We have to do this dance because urlparse() doesn't have any good
-        # truthiness, and parsing an empty string is still 'true'
-        if grafana_path:
-            parts = self._parse_grafana_path(urlparse(grafana_path))
+        # For stripPrefix middleware to work correctly, we need to set serve_from_sub_path and
+        # root_url in a particular way.
+        extra_info.update(
+            {
+                "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
+                # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
+                "GF_SERVER_ROOT_URL": self.external_url,
+                "GF_SERVER_ENFORCE_DOMAIN": "false",
+                # When traefik provides TLS termination then traefik is https, but grafana is http.
+                # We need to set GF_SERVER_PROTOCOL.
+                # https://grafana.com/tutorials/run-grafana-behind-a-proxy/#1
+                "GF_SERVER_PROTOCOL": self._scheme,
+            }
+        )
 
-            # It doesn't matter unless there's a subpath, since the
-            # redirect to login is fine with a bare hostname
-            if parts and parts["path"]:
-                extra_info.update(
-                    {
-                        "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
-                        "GF_SERVER_ROOT_URL": "{}://{}:{}{}".format(
-                            parts["scheme"], parts["host"], parts["port"], parts["path"]
-                        ),
-                    }
-                )
+        if self.cert_handler.cert and self.containers["workload"].exists(
+            "/etc/grafana/grafana.crt"
+        ):
+            extra_info.update(
+                {
+                    "GF_SERVER_CERT_KEY": "/etc/grafana/grafana.key",
+                    "GF_SERVER_CERT_FILE": "/etc/grafana/grafana.crt",
+                }
+            )
 
         layer = Layer(
             {
@@ -1194,53 +1156,69 @@ class GrafanaCharm(CharmBase):
         """Return the external hostname configured, if any."""
         if self.ingress.external_host:
             path_prefix = f"{self.model.name}-{self.model.app.name}"
-            return f"{self._scheme}://{self.ingress.external_host}/{path_prefix}"
+            # The scheme we use here needs to be the ingress URL's scheme:
+            # If traefik is providing TLS termination then the ingress scheme is https, but
+            # grafana's scheme is still http.
+            return f"{self.ingress.scheme or 'http'}://{self.ingress.external_host}/{path_prefix}"
         return self.internal_url
 
     @property
     def _ingress_config(self) -> dict:
         """Build a raw ingress configuration for Traefik."""
-        fqdn = urlparse(socket.getfqdn()).path
-        pattern = r"^{}\..*?{}\.".format(self.model.unit.name.replace("/", "-"), self.model.name)
-        domain = re.split(pattern, fqdn)[1]
+        # The path prefix is the same as in ingress per app
+        external_path = f"{self.model.name}-{self.model.app.name}"
 
-        if self.external_url == self.ingress.external_host:
-            external_path = "{}-{}".format(self.model.name, self.model.app.name)
-        else:
-            external_path = urlparse(self.external_url).path or "{}-{}".format(
-                self.model.name, self.model.app.name
-            )
+        redirect_middleware = (
+            {
+                f"juju-sidecar-redir-https-{self.model.name}-{self.model.app.name}": {
+                    "redirectScheme": {
+                        "permanent": True,
+                        "port": 443,
+                        "scheme": "https",
+                    }
+                }
+            }
+            if self._scheme == "https"
+            else {}
+        )
 
-        if not external_path.startswith("/"):
-            external_path = "/{}".format(external_path)
+        middlewares = {
+            f"juju-sidecar-noprefix-{self.model.name}-{self.model.app.name}": {
+                "stripPrefix": {"forceSlash": False, "prefixes": [f"/{external_path}"]},
+            },
+            **redirect_middleware,
+        }
 
         routers = {
             "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
                 "entryPoints": ["web"],
-                "rule": "PathPrefix(`{}`)".format(external_path),
+                "rule": f"PathPrefix(`/{external_path}`)",
+                "middlewares": list(middlewares.keys()),
                 "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-            }
+            },
+            "juju-{}-{}-router-tls".format(self.model.name, self.model.app.name): {
+                "entryPoints": ["websecure"],
+                "rule": f"PathPrefix(`/{external_path}`)",
+                "middlewares": list(middlewares.keys()),
+                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
+                "tls": {
+                    "domains": [
+                        {
+                            "main": self.ingress.external_host,
+                            "sans": [f"*.{self.ingress.external_host}"],
+                        },
+                    ],
+                },
+            },
         }
 
         services = {
             "juju-{}-{}-service".format(self.model.name, self.model.app.name): {
-                "loadBalancer": {
-                    "servers": [
-                        {
-                            "url": "http://{}.{}-endpoints.{}.{}:{}/".format(
-                                self.model.unit.name.replace("/", "-"),
-                                self.model.app.name,
-                                self.model.name,
-                                domain,
-                                PORT,
-                            )
-                        }
-                    ]
-                }
+                "loadBalancer": {"servers": [{"url": self.internal_url}]}
             }
         }
 
-        return {"http": {"routers": routers, "services": services}}
+        return {"http": {"routers": routers, "services": services, "middlewares": middlewares}}
 
     @property
     def _auth_env_vars(self):
@@ -1286,16 +1264,15 @@ class GrafanaCharm(CharmBase):
     @property
     def _scrape_jobs(self) -> list:
         parts = urlparse(self.internal_url)
-        job: Dict = {
-            "static_configs": [{"targets": [parts.netloc]}],
-        }
-
-        if self.cert_handler.cert:
-            job["scheme"] = "https"
+        job = {"static_configs": [{"targets": [parts.netloc]}], "scheme": self._scheme}
 
         return [job]
 
     def _on_server_cert_changed(self, _):
+        self._update_cert()
+        self._configure()
+
+    def _update_cert(self):
         container = self.containers["workload"]
         ca_cert_path = Path("/usr/local/share/ca-certificates/cos-ca.crt")
         if self.cert_handler.cert and self.cert_handler.key and self.cert_handler.ca:
@@ -1329,7 +1306,6 @@ class GrafanaCharm(CharmBase):
 
         container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
-        self._configure()
 
 
 if __name__ == "__main__":
