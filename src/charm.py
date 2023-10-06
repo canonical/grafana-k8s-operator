@@ -34,7 +34,7 @@ from urllib.parse import urlparse
 import subprocess
 
 import yaml
-from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
+from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_source import (
@@ -230,26 +230,20 @@ class GrafanaCharm(CharmBase):
             self.cert_handler.on.cert_changed, self._on_server_cert_changed  # pyright: ignore
         )
 
-        self.catalog = CatalogueConsumer(
-            charm=self,
-            refresh_event=[
-                self.on.grafana_pebble_ready,  # pyright: ignore
-                self.ingress.on.ready,  # pyright: ignore
-                # TODO use revoked instead of relation events when it becomes available
-                # https://github.com/canonical/traefik-route-k8s-operator/issues/21
-                # self.ingress.on.revoked,
-                self.on["ingress"].relation_broken,
-                self.on.config_changed,  # also covers upgrade-charm
-            ],
-            item=CatalogueItem(
-                name="Grafana",
-                icon="bar-chart",
-                url=self.external_url,
-                description=(
-                    "Grafana allows you to query, visualize, alert on, and "
-                    "visualize metrics from mixed datasources in configurable "
-                    "dashboards for observability."
-                ),
+        # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
+
+        self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
+
+    @property
+    def _catalogue_item(self) -> CatalogueItem:
+        return CatalogueItem(
+            name="Grafana",
+            icon="bar-chart",
+            url=self.external_url,
+            description=(
+                "Grafana allows you to query, visualize, alert on, and "
+                "visualize metrics from mixed datasources in configurable "
+                "dashboards for observability."
             ),
         )
 
@@ -457,6 +451,8 @@ class GrafanaCharm(CharmBase):
             # this is more or less the 'fallthrough' part of a case statement
             if not isinstance(self.unit.status, ActiveStatus):
                 self.unit.status = ActiveStatus()
+
+        self.catalog.update_item(item=self._catalogue_item)
 
     def _update_datasource_config(self, config: str) -> None:
         """Write an updated datasource configuration file to the Pebble container if necessary.
