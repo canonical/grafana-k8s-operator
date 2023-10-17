@@ -7,7 +7,7 @@
 [Charmed Grafana (`grafana-k8s`)][Grafana operator] is a charm for
 [Grafana].
 
-The charm imposes configurable resource limits on the workload, can be readily
+This charm imposes configurable resource limits on the workload, can be readily
 integrated with various data sources such as [prometheus][Prometheus operator]
 or [loki][Loki operator], automatically generates topology dropdowns, and comes
 with built-in alert rules for self-monitoring.
