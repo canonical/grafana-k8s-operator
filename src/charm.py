@@ -773,18 +773,22 @@ class GrafanaCharm(CharmBase):
 
         Note that Grafana does not support SIGHUP, so a full restart is needed.
         """
+
+        # Before building the layer, we update our certificates if tls is enabled.
+        # This is needed here to circumvent a code ordering issue that results in:
+        #   *api.HTTPServer run error: cert_file cannot be empty when using HTTPS
+        #   ERROR cannot start service: exited quickly with code 1
+        if self.cert_handler.enabled:
+            logger.info("TLS enabled: updating certs")
+            self._update_cert()
+            # now that this is done, build_layer should include cert and key into the config and we'll
+            # be sure that the files are actually there before grafana is (re)started.
+
         layer = self._build_layer()
         try:
             self.containers["workload"].add_layer(self.name, layer, combine=True)
             if self.containers["workload"].get_service(self.name).is_running():
                 self.containers["workload"].stop(self.name)
-
-            # Before 'start', we force a cert update. This is needed here to circumvent a code
-            # ordering issue that results in:
-            #   *api.HTTPServer run error: cert_file cannot be empty when using HTTPS
-            #   ERROR cannot start service: exited quickly with code 1
-            if self.cert_handler.enabled:
-                self._update_cert()
 
             self.containers["workload"].start(self.name)
             logger.info("Restarted grafana-k8s")
