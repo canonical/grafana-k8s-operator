@@ -408,7 +408,7 @@ class GrafanaCharm(CharmBase):
             return True
         return False
 
-    def _configure(self, force_restart:bool = False) -> None:
+    def _configure(self, force_restart: bool = False) -> None:
         """Configure Grafana.
 
         Generate configuration files and check the sums against what is
@@ -761,8 +761,12 @@ class GrafanaCharm(CharmBase):
     def _cert_ready(self):
         # Verify that the certificate and key are correctly configured
         workload = self.containers["workload"]
-        return self.cert_handler.cert and self.cert_handler.key and workload.exists(
-            GRAFANA_CRT_PATH) and workload.exists(GRAFANA_KEY_PATH)
+        return (
+            self.cert_handler.cert
+            and self.cert_handler.key
+            and workload.exists(GRAFANA_CRT_PATH)
+            and workload.exists(GRAFANA_KEY_PATH)
+        )
 
     def restart_grafana(self) -> None:
         """Restart the pebble container.
@@ -773,7 +777,6 @@ class GrafanaCharm(CharmBase):
 
         Note that Grafana does not support SIGHUP, so a full restart is needed.
         """
-
         # Before building the layer, we update our certificates if tls is enabled.
         # This is needed here to circumvent a code ordering issue that results in:
         #   *api.HTTPServer run error: cert_file cannot be empty when using HTTPS
