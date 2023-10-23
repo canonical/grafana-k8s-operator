@@ -93,6 +93,10 @@ VALID_AUTHENTICATION_MODES = {"proxy"}
 CONFIG_PATH = "/etc/grafana/grafana-config.ini"
 PROVISIONING_PATH = "/etc/grafana/provisioning"
 DATASOURCES_PATH = "/etc/grafana/provisioning/datasources/datasources.yaml"
+GRAFANA_CRT_PATH = "/etc/grafana/grafana.crt"
+GRAFANA_KEY_PATH = "/etc/grafana/grafana.key"
+CA_CERT_PATH = Path("/usr/local/share/ca-certificates/cos-ca.crt")
+
 DATABASE = "database"
 PEER = "grafana"
 PORT = 3000
@@ -404,17 +408,19 @@ class GrafanaCharm(CharmBase):
             return True
         return False
 
-    def _configure(self) -> None:
+    def _configure(self, force_restart:bool = False) -> None:
         """Configure Grafana.
 
         Generate configuration files and check the sums against what is
         already stored in the charm. If either the base Grafana config
         or the datasource config differs, restart Grafana.
+
+        If ``force_restart``: restart grafana regardless.
         """
         if not self.containers["workload"].can_connect():
             return
         logger.debug("Handling grafana-k8s configuration change")
-        restart = False
+        restart = force_restart
 
         # Generate a new base config and see if it differs from what we have.
         # If it does, store it and signal that we should restart Grafana
@@ -752,6 +758,12 @@ class GrafanaCharm(CharmBase):
                 "Cannot set workload version at this time: could not get Alertmanager version."
             )
 
+    def _cert_ready(self):
+        # Verify that the certificate and key are correctly configured
+        workload = self.containers["workload"]
+        return self.cert_handler.cert and self.cert_handler.key and workload.exists(
+            GRAFANA_CRT_PATH) and workload.exists(GRAFANA_KEY_PATH)
+
     def restart_grafana(self) -> None:
         """Restart the pebble container.
 
@@ -771,7 +783,7 @@ class GrafanaCharm(CharmBase):
             # ordering issue that results in:
             #   *api.HTTPServer run error: cert_file cannot be empty when using HTTPS
             #   ERROR cannot start service: exited quickly with code 1
-            if self.cert_handler.cert:
+            if self.cert_handler.enabled:
                 self._update_cert()
 
             self.containers["workload"].start(self.name)
@@ -868,13 +880,11 @@ class GrafanaCharm(CharmBase):
             }
         )
 
-        if self.cert_handler.cert and self.containers["workload"].exists(
-            "/etc/grafana/grafana.crt"
-        ):
+        if self._cert_ready():
             extra_info.update(
                 {
-                    "GF_SERVER_CERT_KEY": "/etc/grafana/grafana.key",
-                    "GF_SERVER_CERT_FILE": "/etc/grafana/grafana.crt",
+                    "GF_SERVER_CERT_KEY": GRAFANA_KEY_PATH,
+                    "GF_SERVER_CERT_FILE": GRAFANA_CRT_PATH,
                 }
             )
 
@@ -1265,40 +1275,44 @@ class GrafanaCharm(CharmBase):
         return [job]
 
     def _on_server_cert_changed(self, _):
-        self._update_cert()
-        self._configure()
+        self._configure(force_restart=True)
 
     def _update_cert(self):
         container = self.containers["workload"]
-        ca_cert_path = Path("/usr/local/share/ca-certificates/cos-ca.crt")
-        if self.cert_handler.cert and self.cert_handler.key and self.cert_handler.ca:
+        if self.cert_handler.cert:
             # Save the workload certificates
             container.push(
-                "/etc/grafana/grafana.crt",
+                GRAFANA_CRT_PATH,
                 self.cert_handler.cert,
                 make_dirs=True,
             )
+        else:
+            container.remove_path(GRAFANA_CRT_PATH, recursive=True)
+
+        if self.cert_handler.key:
             container.push(
-                "/etc/grafana/grafana.key",
+                GRAFANA_KEY_PATH,
                 self.cert_handler.key,
                 make_dirs=True,
             )
+        else:
+            container.remove_path(GRAFANA_KEY_PATH, recursive=True)
+
+        if self.cert_handler.ca:
             # Save the CA among the trusted CAs and trust it
             container.push(
-                ca_cert_path,
+                CA_CERT_PATH,
                 self.cert_handler.ca,
                 make_dirs=True,
             )
 
             # Repeat for the charm container. We need it there for grafana client requests.
-            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
-            ca_cert_path.write_text(self.cert_handler.ca)
+            CA_CERT_PATH.parent.mkdir(exist_ok=True, parents=True)
+            CA_CERT_PATH.write_text(self.cert_handler.ca)
         else:
-            container.remove_path("/etc/grafana/grafana.crt", recursive=True)
-            container.remove_path("/etc/grafana/grafana.key", recursive=True)
-            container.remove_path(ca_cert_path, recursive=True)
+            container.remove_path(CA_CERT_PATH, recursive=True)
             # Repeat for the charm container.
-            ca_cert_path.unlink(missing_ok=True)
+            CA_CERT_PATH.unlink(missing_ok=True)
 
         container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
