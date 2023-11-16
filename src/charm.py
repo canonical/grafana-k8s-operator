@@ -30,7 +30,7 @@ import time
 from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict, cast
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 import subprocess
 
 import yaml
