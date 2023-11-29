@@ -1298,11 +1298,6 @@ class GrafanaCharm(CharmBase):
         self._update_cert()
         self._configure()
 
-    def _update_system_certs(self):
-        container = self.containers["workload"]
-        container.exec(["update-ca-certificates", "--fresh"]).wait()
-        subprocess.run(["update-ca-certificates", "--fresh"])
-
     def _update_cert(self):
         container = self.containers["workload"]
         ca_cert_path = Path("/usr/local/share/ca-certificates/cos-ca.crt")
@@ -1335,7 +1330,8 @@ class GrafanaCharm(CharmBase):
             # Repeat for the charm container.
             ca_cert_path.unlink(missing_ok=True)
 
-        self._update_system_certs()
+        container.exec(["update-ca-certificates", "--fresh"]).wait()
+        subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _on_trusted_certificate_available(self, event: CertificateAvailableEvent):
         if not self.containers["workload"].can_connect():
@@ -1346,8 +1342,9 @@ class GrafanaCharm(CharmBase):
         self.restart_grafana()
 
     def _update_trusted_ca_certs(self):
-        """This function receives the trusted certificates from the certificate_transfer integration."""
-        """Grafana needs to restart to use newly received certificates. Certificates attached to the
+        """This function receives the trusted certificates from the certificate_transfer integration.
+
+        Grafana needs to restart to use newly received certificates. Certificates attached to the
         relation need to be pulled before Grafana is started.
         This function is needed because relation events are not emitted on upgrade, and because we
         do not have (nor do we want) persistent storage for certs.
@@ -1365,7 +1362,7 @@ class GrafanaCharm(CharmBase):
                 if cert := relation.data[unit].get("ca"):
                     container.push(cert_path, cert, make_dirs=True)
 
-        self._update_system_certs()
+        container.exec(["update-ca-certificates", "--fresh"]).wait()
 
     def _on_trusted_certificate_removed(self, event: CertificateRemovedEvent):
         # All certificates received from the relation are in separate files marked by the relation id.
