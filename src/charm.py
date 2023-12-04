@@ -1352,6 +1352,10 @@ class GrafanaCharm(CharmBase):
         if not self.model.get_relation(relation_name=self.trusted_cert_transfer.relationship_name):
             return
 
+        logger.info(
+            "Pulling trusted ca certificates from %s relation.",
+            self.trusted_cert_transfer.relationship_name,
+        )
         container = self.containers["workload"]
         for relation in self.model.relations.get(self.trusted_cert_transfer.relationship_name, []):
             # For some reason, relation.units includes our unit and app. Need to exclude them.
