@@ -69,7 +69,7 @@ resources:
   grafana-image:
     type: oci-image
     description: upstream docker image for Grafana
-    upstream-source: docker.io/ubuntu/grafana:9.2-22.04_beta
+    upstream-source: docker.io/ubuntu/grafana:10-22.04
   litestream-image:
     type: oci-image
     description: upstream image for sqlite streaming

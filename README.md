@@ -1,13 +1,12 @@
 # Grafana Operator (k8s)
 [![CharmHub Badge](https://charmhub.io/grafana-k8s/badge.svg)](https://charmhub.io/grafana-k8s)
-[![Release Edge](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release-edge.yaml/badge.svg)](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release-edge.yaml)
-[![Release Libraries](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release-libs.yaml/badge.svg)](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release-libs.yaml)
+[![Release](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release.yaml)
 [![Discourse Status](https://img.shields.io/discourse/status?server=https%3A%2F%2Fdiscourse.charmhub.io&style=flat&label=CharmHub%20Discourse)](https://discourse.charmhub.io)
 
 [Charmed Grafana (`grafana-k8s`)][Grafana operator] is a charm for
 [Grafana].
 
-The charm imposes configurable resource limits on the workload, can be readily
+This charm imposes configurable resource limits on the workload, can be readily
 integrated with various data sources such as [prometheus][Prometheus operator]
 or [loki][Loki operator], automatically generates topology dropdowns, and comes
 with built-in alert rules for self-monitoring.
