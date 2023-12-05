@@ -72,8 +72,8 @@ async def deploy_identity_bundle(ops_test: OpsTest, external_idp_manager: Extern
 
 
 async def access_application_login_page(page: Page, url: str, redirect_login_url: str = ""):
-    """Convenience function for navigating the browser to the login page."""
-    """
+    """Convenience function for navigating the browser to the login page.
+
     Usage:
         If the url of the application redirects to a login page, pass the application's url as url,
         and a pattern string for the login page as redirect_login_url.

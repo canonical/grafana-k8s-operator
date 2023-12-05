@@ -23,6 +23,7 @@ APPS = collections.namedtuple(
         "KRATOS",
         "KRATOS_EXTERNAL_IDP_INTEGRATOR",
         "IDENTITY_PLATFORM_LOGIN_UI_OPERATOR",
+        "SELF_SIGNED_CERTIFICATES",
     ],
 )(
     TRAEFIK_ADMIN="traefik-admin",
@@ -31,14 +32,16 @@ APPS = collections.namedtuple(
     KRATOS="kratos",
     KRATOS_EXTERNAL_IDP_INTEGRATOR="kratos-external-idp-integrator",
     IDENTITY_PLATFORM_LOGIN_UI_OPERATOR="identity-platform-login-ui-operator",
+    SELF_SIGNED_CERTIFICATES="self-signed-certificates",
 )
 
 OAUTH_RELATION = collections.namedtuple(
-    "OAUTH_RELATION", ["OAUTH_APPLICATION", "OAUTH_INTERFACE", "OAUTH_PROXY"]
+    "OAUTH_RELATION", ["OAUTH_APPLICATION", "OAUTH_INTERFACE", "OAUTH_PROXY", "OAUTH_CERTIFICATES"]
 )(
     OAUTH_APPLICATION="hydra",
     OAUTH_INTERFACE="oauth",
     OAUTH_PROXY="traefik-public",
+    OAUTH_CERTIFICATES="self-signed-certificates",
 )
 
 IDENTITY_BUNDLE = collections.namedtuple("IDENTITY_BUNDLE", ["NAME", "CHANNEL"])(

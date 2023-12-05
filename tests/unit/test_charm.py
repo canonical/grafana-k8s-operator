@@ -420,7 +420,9 @@ class TestCharm(unittest.TestCase):
             services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_ID"], "grafana_client_id"
         )
         self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET"], "s3cR#T")
-        self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_SCOPES"], "openid email")
+        self.assertEqual(
+            services["environment"]["GF_AUTH_GENERIC_OAUTH_SCOPES"], "openid email offline_access"
+        )
         self.assertEqual(
             services["environment"]["GF_AUTH_GENERIC_OAUTH_AUTH_URL"],
             "https://example.oidc.com/oauth2/auth",

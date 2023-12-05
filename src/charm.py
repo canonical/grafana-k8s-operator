@@ -117,7 +117,7 @@ TRUSTED_CA_TEMPLATE = string.Template(
     "/usr/local/share/ca-certificates/trusted-ca-cert-$rel_id-ca.crt"
 )
 OAUTH = "oauth"
-OAUTH_SCOPES = "openid email"
+OAUTH_SCOPES = "openid email offline_access"
 OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 
 
@@ -308,8 +308,7 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
-        if self.model.relations[OAUTH]:
-            self.oauth.update_client_config(client_config=self._oauth_client_config)
+        self.oauth.update_client_config(client_config=self._oauth_client_config)
 
         self._configure()
         self._configure_replication()
@@ -739,10 +738,16 @@ class GrafanaCharm(CharmBase):
         For now, this only creates database information, since everything else
         can be set in ENV variables, but leave for expansion later so we can
         hide auth secrets
+
+        The feature toggle accessTokenExpirationCheck is also set here. It's needed
+        for the oauth relation to provide refresh tokens.
         """
         configs = []
         if self.has_db:
             configs.append(self._generate_database_config())
+
+        if self.model.relations[OAUTH]:
+            configs.append(self._generate_oauth_refresh_config())
 
         return "\n".join(configs)
 
@@ -965,6 +970,7 @@ class GrafanaCharm(CharmBase):
                     "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
                     "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
                     "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
                 }
             )
 
@@ -1450,22 +1456,24 @@ class GrafanaCharm(CharmBase):
 
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
         """Event handler for the oauth_info_changed event."""
-        if not self.unit.is_leader():
-            return
-
-        self.oauth.update_client_config(client_config=self._oauth_client_config)
         logger.info(f"Received oauth provider info: {self.oauth.get_provider_info()}")
 
-        if not event.client_id or not event.client_secret_id:
-            return
-        self.restart_grafana()
+        self._configure()
 
     def _on_oauth_info_removed(self, event: OAuthInfoRemovedEvent) -> None:
         """Event handler for the oauth_info_removed event."""
         logger.info("Oauth relation is broken, removing related settings")
 
         # Reset generic_oauth settings
-        self.restart_grafana()
+        self._configure()
+
+    def _generate_oauth_refresh_config(self) -> str:
+        """Generate a configuration for automatic refreshing of oauth authentication.
+
+        Returns:
+            A string containing the required feature toggle information to be stubbed into the config file.
+        """
+        return "[feature_toggles]\naccessTokenExpirationCheck = true\n"
 
 
 if __name__ == "__main__":

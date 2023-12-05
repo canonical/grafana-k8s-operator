@@ -50,7 +50,7 @@ class ExternalIdpManager:
         self._redirect_uri = redirect_uri
         self._apply_dex_resources()
 
-    def close(self) -> None:
+    def remove_idp_service(self) -> None:
         # Removes the identity provider deployment
         if self._ops_test.keep_model:
             return

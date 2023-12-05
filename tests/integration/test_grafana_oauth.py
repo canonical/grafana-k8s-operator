@@ -11,6 +11,7 @@ with the oauth integration.
 import logging
 from helpers import oci_image
 
+import os
 import pytest
 import requests
 from playwright.async_api._generated import Page, BrowserContext
@@ -26,7 +27,7 @@ from tests.integration.oauth_tools.oauth_test_helper import (
     verify_page_loads,
     get_cookie_from_browser_by_name,
 )
-from oauth_tools.constants import OAUTH_RELATION
+from oauth_tools.constants import OAUTH_RELATION, EXTERNAL_USER_EMAIL
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +63,17 @@ async def test_build_and_deploy(ops_test: OpsTest, grafana_charm):
         f"grafana:{OAUTH_RELATION.OAUTH_INTERFACE}", OAUTH_RELATION.OAUTH_APPLICATION
     )
     await ops_test.model.integrate("grafana:ingress", f"{OAUTH_RELATION.OAUTH_PROXY}")
+    await ops_test.model.integrate(
+        "grafana:receive-ca-cert", f"{OAUTH_RELATION.OAUTH_CERTIFICATES}"
+    )
 
     await ops_test.model.wait_for_idle(
-        apps=[OAUTH_RELATION.OAUTH_APPLICATION, "grafana", OAUTH_RELATION.OAUTH_PROXY],
+        apps=[
+            OAUTH_RELATION.OAUTH_APPLICATION,
+            "grafana",
+            OAUTH_RELATION.OAUTH_PROXY,
+            OAUTH_RELATION.OAUTH_CERTIFICATES,
+        ],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
@@ -80,7 +89,7 @@ async def test_oauth_login_with_identity_bundle(
     grafana_proxy = await get_reverse_proxy_app_url(
         ops_test, OAUTH_RELATION.OAUTH_PROXY, "grafana"
     )
-    redirect_login = f"{grafana_proxy}login"
+    redirect_login = os.path.join(grafana_proxy, "login")
 
     await access_application_login_page(
         page=page, url=grafana_proxy, redirect_login_url=redirect_login
@@ -94,7 +103,7 @@ async def test_oauth_login_with_identity_bundle(
         page=page, ops_test=ops_test, external_idp_manager=external_idp_manager
     )
 
-    redirect_url = grafana_proxy + "?*"
+    redirect_url = os.path.join(grafana_proxy, "?*")
     await verify_page_loads(page=page, url=redirect_url)
 
     # Verifying that the login flow was successful is application specific.
@@ -103,10 +112,13 @@ async def test_oauth_login_with_identity_bundle(
         browser_context=context, name="grafana_session"
     )
     request = requests.get(
-        f"{grafana_proxy}api/user",
+        os.path.join(grafana_proxy, "api/user"),
         headers={"Cookie": f"grafana_session={grafana_session_cookie}"},
         verify=False,
     )
     assert request.status_code == 200
+    assert request.status_code == 200
+    request.raise_for_status()
+    assert request.json()["email"] == EXTERNAL_USER_EMAIL
 
-    external_idp_manager.close()
+    external_idp_manager.remove_idp_service()
