@@ -75,6 +75,11 @@ url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
 
 """
 
+
+OAUTH_CONFIG_INI = """[feature_toggles]
+accessTokenExpirationCheck = true
+"""
+
 AUTH_PROVIDER_APPLICATION = "auth_provider"
 
 
@@ -435,6 +440,13 @@ class TestCharm(unittest.TestCase):
             services["environment"]["GF_AUTH_GENERIC_OAUTH_API_URL"],
             "https://example.oidc.com/userinfo",
         )
+        self.assertEqual(
+            services["environment"]["GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN"],
+            "True",
+        )
+
+        config = self.harness.charm.containers["workload"].pull(CONFIG_PATH)
+        self.assertEqual(config.read(), OAUTH_CONFIG_INI)
 
 
 class TestCharmReplication(unittest.TestCase):
