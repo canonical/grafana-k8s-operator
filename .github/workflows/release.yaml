@@ -9,3 +9,6 @@ jobs:
   release:
     uses: canonical/observability/.github/workflows/charm-release.yaml@main
     secrets: inherit
+    with:
+      ip-range-start: 10.64.140.43
+      ip-range-end: 10.64.140.49
