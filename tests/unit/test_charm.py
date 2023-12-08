@@ -79,6 +79,9 @@ url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
 OAUTH_CONFIG_INI = """[feature_toggles]
 accessTokenExpirationCheck = true
 """
+OAUTH_CLIENT_ID = "grafana_client_id"
+OAUTH_CLIENT_SECRET = "s3cR#T"
+
 
 AUTH_PROVIDER_APPLICATION = "auth_provider"
 
@@ -401,13 +404,13 @@ class TestCharm(unittest.TestCase):
         )
 
         # update databag with client details - received once a grafana client is created in hydra
-        secret_id = self.harness.add_model_secret("hydra", {"secret": "s3cR#T"})
+        secret_id = self.harness.add_model_secret("hydra", {"secret": OAUTH_CLIENT_SECRET})
         self.harness.grant_secret(secret_id, "grafana-k8s")
         self.harness.update_relation_data(
             rel_id,
             "hydra",
             {
-                "client_id": "grafana_client_id",
+                "client_id": OAUTH_CLIENT_ID,
                 "client_secret_id": secret_id,
             },
         )
@@ -422,23 +425,25 @@ class TestCharm(unittest.TestCase):
             services["environment"]["GF_AUTH_GENERIC_OAUTH_NAME"], "external identity provider"
         )
         self.assertEqual(
-            services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_ID"], "grafana_client_id"
+            services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_ID"], OAUTH_CLIENT_ID
         )
-        self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET"], "s3cR#T")
+        self.assertEqual(
+            services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET"], OAUTH_CLIENT_SECRET
+        )
         self.assertEqual(
             services["environment"]["GF_AUTH_GENERIC_OAUTH_SCOPES"], "openid email offline_access"
         )
         self.assertEqual(
             services["environment"]["GF_AUTH_GENERIC_OAUTH_AUTH_URL"],
-            "https://example.oidc.com/oauth2/auth",
+            oauth_provider_info["authorization_endpoint"],
         )
         self.assertEqual(
             services["environment"]["GF_AUTH_GENERIC_OAUTH_TOKEN_URL"],
-            "https://example.oidc.com/oauth2/token",
+            oauth_provider_info["token_endpoint"],
         )
         self.assertEqual(
             services["environment"]["GF_AUTH_GENERIC_OAUTH_API_URL"],
-            "https://example.oidc.com/userinfo",
+            oauth_provider_info["userinfo_endpoint"],
         )
         self.assertEqual(
             services["environment"]["GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN"],

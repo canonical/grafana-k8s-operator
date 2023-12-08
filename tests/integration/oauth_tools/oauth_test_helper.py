@@ -14,7 +14,6 @@ from pytest_operator.plugin import OpsTest
 from oauth_tools.dex import ExternalIdpManager
 from oauth_tools.constants import (
     APPS,
-    OAUTH_RELATION,
     IDENTITY_BUNDLE,
     EXTERNAL_USER_EMAIL,
     EXTERNAL_USER_PASSWORD,
@@ -104,7 +103,7 @@ async def complete_external_idp_login(
     """Convenience function for navigating the external identity provider's user interface."""
     expected_url = join(
         await get_reverse_proxy_app_url(
-            ops_test, OAUTH_RELATION.OAUTH_PROXY, APPS.IDENTITY_PLATFORM_LOGIN_UI_OPERATOR
+            ops_test, APPS.TRAEFIK_PUBLIC, APPS.IDENTITY_PLATFORM_LOGIN_UI_OPERATOR
         ),
         "ui/login",
     )

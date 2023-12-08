@@ -35,15 +35,6 @@ APPS = collections.namedtuple(
     SELF_SIGNED_CERTIFICATES="self-signed-certificates",
 )
 
-OAUTH_RELATION = collections.namedtuple(
-    "OAUTH_RELATION", ["OAUTH_APPLICATION", "OAUTH_INTERFACE", "OAUTH_PROXY", "OAUTH_CERTIFICATES"]
-)(
-    OAUTH_APPLICATION="hydra",
-    OAUTH_INTERFACE="oauth",
-    OAUTH_PROXY="traefik-public",
-    OAUTH_CERTIFICATES="self-signed-certificates",
-)
-
 IDENTITY_BUNDLE = collections.namedtuple("IDENTITY_BUNDLE", ["NAME", "CHANNEL"])(
     NAME="identity-platform",
     CHANNEL="0.1/edge",

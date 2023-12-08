@@ -308,8 +308,6 @@ class GrafanaCharm(CharmBase):
         Args:
             event: a :class:`ConfigChangedEvent` to signal that something happened
         """
-        self.oauth.update_client_config(client_config=self._oauth_client_config)
-
         self._configure()
         self._configure_replication()
 
@@ -746,7 +744,7 @@ class GrafanaCharm(CharmBase):
         if self.has_db:
             configs.append(self._generate_database_config())
 
-        if self.model.relations[OAUTH]:
+        if self.oauth.is_client_created():
             configs.append(self._generate_oauth_refresh_config())
 
         return "\n".join(configs)

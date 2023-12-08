@@ -11,4 +11,4 @@ jobs:
     secrets: inherit
     with:
       ip-range-start: 10.64.140.43
-      ip-range-end: 10.64.140.49
+      ip-range-end: 10.64.140.46

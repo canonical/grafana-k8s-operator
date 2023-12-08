@@ -27,7 +27,7 @@ from tests.integration.oauth_tools.oauth_test_helper import (
     verify_page_loads,
     get_cookie_from_browser_by_name,
 )
-from oauth_tools.constants import OAUTH_RELATION, EXTERNAL_USER_EMAIL
+from oauth_tools.constants import EXTERNAL_USER_EMAIL, APPS
 
 logger = logging.getLogger(__name__)
 
@@ -59,20 +59,16 @@ async def test_build_and_deploy(ops_test: OpsTest, grafana_charm):
     )
 
     # Integrate grafana with the identity bundle
-    await ops_test.model.integrate(
-        f"grafana:{OAUTH_RELATION.OAUTH_INTERFACE}", OAUTH_RELATION.OAUTH_APPLICATION
-    )
-    await ops_test.model.integrate("grafana:ingress", f"{OAUTH_RELATION.OAUTH_PROXY}")
-    await ops_test.model.integrate(
-        "grafana:receive-ca-cert", f"{OAUTH_RELATION.OAUTH_CERTIFICATES}"
-    )
+    await ops_test.model.integrate("grafana:oauth", APPS.HYDRA)
+    await ops_test.model.integrate("grafana:ingress", APPS.TRAEFIK_PUBLIC)
+    await ops_test.model.integrate("grafana:receive-ca-cert", APPS.SELF_SIGNED_CERTIFICATES)
 
     await ops_test.model.wait_for_idle(
         apps=[
-            OAUTH_RELATION.OAUTH_APPLICATION,
+            APPS.HYDRA,
+            APPS.TRAEFIK_PUBLIC,
+            APPS.SELF_SIGNED_CERTIFICATES,
             "grafana",
-            OAUTH_RELATION.OAUTH_PROXY,
-            OAUTH_RELATION.OAUTH_CERTIFICATES,
         ],
         status="active",
         raise_on_blocked=False,
@@ -86,9 +82,7 @@ async def test_oauth_login_with_identity_bundle(
 ) -> None:
     external_idp_manager = ExternalIdpManager(ops_test=ops_test)
 
-    grafana_proxy = await get_reverse_proxy_app_url(
-        ops_test, OAUTH_RELATION.OAUTH_PROXY, "grafana"
-    )
+    grafana_proxy = await get_reverse_proxy_app_url(ops_test, APPS.TRAEFIK_PUBLIC, "grafana")
     redirect_login = os.path.join(grafana_proxy, "login")
 
     await access_application_login_page(
@@ -117,8 +111,6 @@ async def test_oauth_login_with_identity_bundle(
         verify=False,
     )
     assert request.status_code == 200
-    assert request.status_code == 200
-    request.raise_for_status()
     assert request.json()["email"] == EXTERNAL_USER_EMAIL
 
     external_idp_manager.remove_idp_service()
