@@ -43,7 +43,16 @@ async def test_auth_proxy_is_set(ops_test, grafana_charm, grafana_tester_charm):
         ),
     )
     await ops_test.model.wait_for_idle(
-        apps=[grafana_app_name, tester_app_name], status="active", wait_for_units=1, timeout=300
+        apps=[grafana_app_name],
+        status="active",
+        wait_for_at_least_units=1,
+        timeout=300,
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[tester_app_name],
+        status="active",
+        wait_for_at_least_units=1,
+        timeout=300,
     )
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
     await ops_test.model.add_relation(

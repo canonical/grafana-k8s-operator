@@ -41,12 +41,12 @@ async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.wait_for_idle(
             apps=[grafana_app_name],
-            wait_for_units=2,
+            wait_for_at_least_units=2,
             timeout=600,
         ),
         ops_test.model.wait_for_idle(
             apps=["traefik"],
-            wait_for_units=1,
+            wait_for_at_least_units=1,
             timeout=600,
         ),
     )

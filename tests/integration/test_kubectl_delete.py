@@ -102,7 +102,7 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
     logger.debug(stdout)
 
     await ops_test.model.wait_for_idle(
-        apps=[grafana_app_name], status="active", wait_for_units=1, timeout=1000
+        apps=[grafana_app_name], status="active", wait_for_at_least_units=1, timeout=1000
     )
 
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)

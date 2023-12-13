@@ -46,7 +46,10 @@ async def test_grafana_source_relation_data_with_grafana_tester(
         ),
     )
     await ops_test.model.wait_for_idle(
-        apps=[grafana_app_name, tester_app_name], status="active", wait_for_units=1, timeout=300
+        apps=[grafana_app_name, tester_app_name],
+        status="active",
+        wait_for_at_least_units=1,
+        timeout=300,
     )
 
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)

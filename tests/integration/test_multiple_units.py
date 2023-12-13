@@ -58,13 +58,13 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
             apps=[grafana_app_name], status="active", wait_for_exact_units=2, timeout=300
         ),
         ops_test.model.wait_for_idle(
-            apps=[tester_app_name], status="active", wait_for_units=1, timeout=300
+            apps=[tester_app_name], status="active", wait_for_at_least_units=1, timeout=300
         ),
     )
 
     logging.info("waiting for idle to ensure the second unit has an address")
     await ops_test.model.wait_for_idle(
-        apps=[grafana_app_name], status="active", wait_for_units=2, timeout=300
+        apps=[grafana_app_name], status="active", wait_for_at_least_units=2, timeout=300
     )
 
     assert ops_test.model.applications[grafana_app_name].units[0].workload_status == "active"
