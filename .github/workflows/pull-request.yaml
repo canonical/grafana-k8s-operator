@@ -11,5 +11,4 @@ jobs:
     uses: canonical/observability/.github/workflows/charm-pull-request.yaml@main
     secrets: inherit
     with:
-      ip-range-start: 10.64.140.43
-      ip-range-end: 10.64.140.46
+      ip-range: 10.64.140.43/30
