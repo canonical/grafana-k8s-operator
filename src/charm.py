@@ -782,7 +782,7 @@ class GrafanaCharm(CharmBase):
         #   *api.HTTPServer run error: cert_file cannot be empty when using HTTPS
         #   ERROR cannot start service: exited quickly with code 1
         if self.cert_handler.enabled:
-            logger.info("TLS enabled: updating certs")
+            logger.debug("TLS enabled: updating certs")
             self._update_cert()
             # now that this is done, build_layer should include cert and key into the config and we'll
             # be sure that the files are actually there before grafana is (re)started.
@@ -1282,6 +1282,7 @@ class GrafanaCharm(CharmBase):
         return [job]
 
     def _on_server_cert_changed(self, _):
+        # this triggers a restart, which triggers a cert update.
         self._configure(force_restart=True)
 
     def _update_cert(self):
