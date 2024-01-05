@@ -43,7 +43,7 @@ from charms.grafana_k8s.v0.grafana_source import (
     SourceFieldsMissingError,
 )
 from charms.hydra.v0.oauth import (
-    ClientConfig,
+    ClientConfig as OauthClientConfig,
     OAuthInfoChangedEvent,
     OAuthInfoRemovedEvent,
     OAuthRequirer,
@@ -116,7 +116,6 @@ PORT = 3000
 TRUSTED_CA_TEMPLATE = string.Template(
     "/usr/local/share/ca-certificates/trusted-ca-cert-$rel_id-ca.crt"
 )
-OAUTH = "oauth"
 OAUTH_SCOPES = "openid email offline_access"
 OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 
@@ -313,8 +312,6 @@ class GrafanaCharm(CharmBase):
 
     def _on_ingress_ready(self, _) -> None:
         """Once Traefik tells us our external URL, make sure we reconfigure Grafana."""
-        self.oauth.update_client_config(client_config=self._oauth_client_config)
-
         self._configure()
 
     def _configure_ingress(self, event: HookEvent) -> None:
@@ -476,6 +473,8 @@ class GrafanaCharm(CharmBase):
             logger.info("Updated Grafana's base configuration")
 
             restart = True
+
+        self.oauth.update_client_config(client_config=self._oauth_client_config)
 
         if self._check_datasource_provisioning():
             # Non-leaders will get updates from litestream
@@ -736,16 +735,10 @@ class GrafanaCharm(CharmBase):
         For now, this only creates database information, since everything else
         can be set in ENV variables, but leave for expansion later so we can
         hide auth secrets
-
-        The feature toggle accessTokenExpirationCheck is also set here. It's needed
-        for the oauth relation to provide refresh tokens.
         """
         configs = []
         if self.has_db:
             configs.append(self._generate_database_config())
-
-        if self.oauth.is_client_created():
-            configs.append(self._generate_oauth_refresh_config())
 
         return "\n".join(configs)
 
@@ -969,6 +962,8 @@ class GrafanaCharm(CharmBase):
                     "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
                     "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
                     "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
+                    # TODO: This toggle will be removed on grafana v10.3, remove it
+                    "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
                 }
             )
 
@@ -1445,8 +1440,8 @@ class GrafanaCharm(CharmBase):
         self.restart_grafana()
 
     @property
-    def _oauth_client_config(self) -> ClientConfig:
-        return ClientConfig(
+    def _oauth_client_config(self) -> OauthClientConfig:
+        return OauthClientConfig(
             os.path.join(self.external_url, "login/generic_oauth"),
             OAUTH_SCOPES,
             OAUTH_GRANT_TYPES,
@@ -1454,24 +1449,12 @@ class GrafanaCharm(CharmBase):
 
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
         """Event handler for the oauth_info_changed event."""
-        logger.info(f"Received oauth provider info: {self.oauth.get_provider_info()}")
-
         self._configure()
 
     def _on_oauth_info_removed(self, event: OAuthInfoRemovedEvent) -> None:
         """Event handler for the oauth_info_removed event."""
-        logger.info("Oauth relation is broken, removing related settings")
-
         # Reset generic_oauth settings
         self._configure()
-
-    def _generate_oauth_refresh_config(self) -> str:
-        """Generate a configuration for automatic refreshing of oauth authentication.
-
-        Returns:
-            A string containing the required feature toggle information to be stubbed into the config file.
-        """
-        return "[feature_toggles]\naccessTokenExpirationCheck = true\n"
 
 
 if __name__ == "__main__":

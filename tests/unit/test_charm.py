@@ -76,13 +76,6 @@ url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
 """
 
 
-OAUTH_CONFIG_INI = """[feature_toggles]
-accessTokenExpirationCheck = true
-"""
-OAUTH_CLIENT_ID = "grafana_client_id"
-OAUTH_CLIENT_SECRET = "s3cR#T"
-
-
 AUTH_PROVIDER_APPLICATION = "auth_provider"
 
 
@@ -121,7 +114,7 @@ k8s_resource_multipatch = patch.multiple(
 )
 
 
-class TestCharm(unittest.TestCase):
+class BaseTestCharm(unittest.TestCase):
     def setUp(self, *unused):
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
@@ -152,6 +145,8 @@ class TestCharm(unittest.TestCase):
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
         ).hexdigest()
 
+
+class TestCharm(BaseTestCharm):
     def test_datasource_config_is_updated_by_raw_grafana_source_relation(self):
         self.harness.set_leader(True)
 
@@ -379,79 +374,6 @@ class TestCharm(unittest.TestCase):
         )
         self.assertIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())
         self.assertEqual(services["environment"]["GF_AUTH_PROXY_ENABLED"], "True")
-
-    def test_config_is_updated_with_oauth_relation_data(self):
-        self.harness.set_leader(True)
-        self.harness.container_pebble_ready("grafana")
-
-        oauth_provider_info = {
-            "authorization_endpoint": "https://example.oidc.com/oauth2/auth",
-            "introspection_endpoint": "https://example.oidc.com/admin/oauth2/introspect",
-            "issuer_url": "https://example.oidc.com",
-            "jwks_endpoint": "https://example.oidc.com/.well-known/jwks.json",
-            "scope": "openid profile email phone",
-            "token_endpoint": "https://example.oidc.com/oauth2/token",
-            "userinfo_endpoint": "https://example.oidc.com/userinfo",
-        }
-
-        # add oauth relation with provider endpoints details
-        rel_id = self.harness.add_relation("oauth", "hydra")
-        self.harness.add_relation_unit(rel_id, "hydra/0")
-        self.harness.update_relation_data(
-            rel_id,
-            "hydra",
-            oauth_provider_info,
-        )
-
-        # update databag with client details - received once a grafana client is created in hydra
-        secret_id = self.harness.add_model_secret("hydra", {"secret": OAUTH_CLIENT_SECRET})
-        self.harness.grant_secret(secret_id, "grafana-k8s")
-        self.harness.update_relation_data(
-            rel_id,
-            "hydra",
-            {
-                "client_id": OAUTH_CLIENT_ID,
-                "client_secret_id": secret_id,
-            },
-        )
-
-        # assert that generic_oauth config is updated
-        services = (
-            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
-        )
-
-        self.assertEqual(services["environment"]["GF_AUTH_GENERIC_OAUTH_ENABLED"], "True")
-        self.assertEqual(
-            services["environment"]["GF_AUTH_GENERIC_OAUTH_NAME"], "external identity provider"
-        )
-        self.assertEqual(
-            services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_ID"], OAUTH_CLIENT_ID
-        )
-        self.assertEqual(
-            services["environment"]["GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET"], OAUTH_CLIENT_SECRET
-        )
-        self.assertEqual(
-            services["environment"]["GF_AUTH_GENERIC_OAUTH_SCOPES"], "openid email offline_access"
-        )
-        self.assertEqual(
-            services["environment"]["GF_AUTH_GENERIC_OAUTH_AUTH_URL"],
-            oauth_provider_info["authorization_endpoint"],
-        )
-        self.assertEqual(
-            services["environment"]["GF_AUTH_GENERIC_OAUTH_TOKEN_URL"],
-            oauth_provider_info["token_endpoint"],
-        )
-        self.assertEqual(
-            services["environment"]["GF_AUTH_GENERIC_OAUTH_API_URL"],
-            oauth_provider_info["userinfo_endpoint"],
-        )
-        self.assertEqual(
-            services["environment"]["GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN"],
-            "True",
-        )
-
-        config = self.harness.charm.containers["workload"].pull(CONFIG_PATH)
-        self.assertEqual(config.read(), OAUTH_CONFIG_INI)
 
 
 class TestCharmReplication(unittest.TestCase):
