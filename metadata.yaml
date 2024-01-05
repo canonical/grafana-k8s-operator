@@ -62,6 +62,7 @@ requires:
   oauth:
     interface: oauth
     limit: 1
+    description: Receive oauth server's info and a set of client credentials.
 
 provides:
   metrics-endpoint:
