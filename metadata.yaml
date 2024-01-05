@@ -76,9 +76,8 @@ resources:
   grafana-image:
     type: oci-image
     description: upstream docker image for Grafana
-    upstream-source: ghcr.io/canonical/grafana:dev
-    # TODO revert to dockerhub once the oci-factory CI is fixed
-    # upstream-source: docker.io/ubuntu/grafana:10-22.04
+    #upstream-source: ghcr.io/canonical/grafana:dev
+    upstream-source: docker.io/ubuntu/grafana:10-22.04
   litestream-image:
     type: oci-image
     description: upstream image for sqlite streaming
