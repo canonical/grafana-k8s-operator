@@ -814,9 +814,6 @@ class GrafanaCharm(CharmBase):
             # now that this is done, build_layer should include cert and key into the config and we'll
             # be sure that the files are actually there before grafana is (re)started.
 
-            # If available, we collect all trusted certs from the receive-ca-cert relation
-            self._update_trusted_ca_certs()
-
         layer = self._build_layer()
         try:
             self.containers["workload"].add_layer(self.name, layer, combine=True)
@@ -834,6 +831,10 @@ class GrafanaCharm(CharmBase):
                     permissions=0o755,
                     make_dirs=True,
                 )
+
+                # If available, we collect all trusted certs from the receive-ca-cert relation
+                # we do this here, downstream from a container readiness check
+                self._update_trusted_ca_certs()
 
                 pragma = self.containers["workload"].exec(
                     [
