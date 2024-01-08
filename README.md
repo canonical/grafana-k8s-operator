@@ -1,4 +1,4 @@
-# Grafana Operator (k8s)
+# Grafana Operator for k8s
 [![CharmHub Badge](https://charmhub.io/grafana-k8s/badge.svg)](https://charmhub.io/grafana-k8s)
 [![Release](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/grafana-k8s-operator/actions/workflows/release.yaml)
 [![Discourse Status](https://img.shields.io/discourse/status?server=https%3A%2F%2Fdiscourse.charmhub.io&style=flat&label=CharmHub%20Discourse)](https://discourse.charmhub.io)

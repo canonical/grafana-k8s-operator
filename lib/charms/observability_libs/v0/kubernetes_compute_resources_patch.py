@@ -107,7 +107,7 @@ from decimal import Decimal
 from math import ceil, floor
 from typing import Callable, Dict, List, Optional, Union
 
-from lightkube import ApiError, Client
+from lightkube import ApiError, Client  # pyright: ignore
 from lightkube.core import exceptions
 from lightkube.models.apps_v1 import StatefulSetSpec
 from lightkube.models.core_v1 import (
@@ -133,7 +133,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 6
 
 
 _Decimal = Union[Decimal, float, str, int]  # types that are potentially convertible to Decimal
@@ -322,7 +322,7 @@ class ResourcePatcher:
         self.namespace = namespace
         self.statefulset_name = statefulset_name
         self.container_name = container_name
-        self.client = Client()
+        self.client = Client()  # pyright: ignore
 
     def _patched_delta(self, resource_reqs: ResourceRequirements) -> StatefulSet:
         statefulset = self.client.get(
@@ -366,7 +366,7 @@ class ResourcePatcher:
         """
         return equals_canonically(self.get_templated(), resource_reqs)
 
-    def get_templated(self) -> ResourceRequirements:
+    def get_templated(self) -> Optional[ResourceRequirements]:
         """Returns the resource limits specified in the StatefulSet template."""
         statefulset = self.client.get(
             StatefulSet, name=self.statefulset_name, namespace=self.namespace
@@ -377,7 +377,7 @@ class ResourcePatcher:
         )
         return podspec_tpl.resources
 
-    def get_actual(self, pod_name: str) -> ResourceRequirements:
+    def get_actual(self, pod_name: str) -> Optional[ResourceRequirements]:
         """Return the resource limits that are in effect for the container in the given pod."""
         pod = self.client.get(Pod, name=pod_name, namespace=self.namespace)
         podspec = self._get_container(
@@ -421,7 +421,7 @@ class ResourcePatcher:
 class KubernetesComputeResourcesPatch(Object):
     """A utility for patching the Kubernetes compute resources set up by Juju."""
 
-    on = K8sResourcePatchEvents()
+    on = K8sResourcePatchEvents()  # pyright: ignore
 
     def __init__(
         self,

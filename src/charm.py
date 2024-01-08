@@ -49,6 +49,11 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     adjust_resource_requirements,
 )
 from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateAvailableEvent,
+    CertificateRemovedEvent,
+    CertificateTransferRequires,
+)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.charm import (
@@ -101,6 +106,11 @@ DATABASE = "database"
 PEER = "grafana"
 PORT = 3000
 
+# Template for storing trusted certificate in a file.
+TRUSTED_CA_TEMPLATE = string.Template(
+    "/usr/local/share/ca-certificates/trusted-ca-cert-$rel_id-ca.crt"
+)
+
 
 class GrafanaCharm(CharmBase):
     """Charm to run Grafana on Kubernetes.
@@ -134,6 +144,9 @@ class GrafanaCharm(CharmBase):
             peer_relation_name="replicas",
             extra_sans_dns=[socket.getfqdn()],
         )
+
+        # -- trusted_cert_transfer
+        self.trusted_cert_transfer = CertificateTransferRequires(self, "receive-ca-cert")
 
         # -- ingress via raw traefik_route
         # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
@@ -232,6 +245,16 @@ class GrafanaCharm(CharmBase):
         # -- cert_handler observations
         self.framework.observe(
             self.cert_handler.on.cert_changed, self._on_server_cert_changed  # pyright: ignore
+        )
+
+        # -- trusted_cert_transfer observations
+        self.framework.observe(
+            self.trusted_cert_transfer.on.certificate_available,
+            self._on_trusted_certificate_available,  # pyright: ignore
+        )
+        self.framework.observe(
+            self.trusted_cert_transfer.on.certificate_removed,
+            self._on_trusted_certificate_removed,  # pyright: ignore
         )
 
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
@@ -750,6 +773,10 @@ class GrafanaCharm(CharmBase):
         self.source_consumer.upgrade_keys()
         self.dashboard_consumer.update_dashboards()
         self._update_dashboards(event)
+
+        # In case of a restart caused by an error, we collect all trusted certs from relation receive-ca-cert
+        self._update_trusted_ca_certs()
+
         version = self.grafana_version
         if version is not None:
             self.unit.set_workload_version(version)
@@ -786,6 +813,9 @@ class GrafanaCharm(CharmBase):
             self._update_cert()
             # now that this is done, build_layer should include cert and key into the config and we'll
             # be sure that the files are actually there before grafana is (re)started.
+
+            # If available, we collect all trusted certs from the receive-ca-cert relation
+            self._update_trusted_ca_certs()
 
         layer = self._build_layer()
         try:
@@ -1324,6 +1354,49 @@ class GrafanaCharm(CharmBase):
 
         container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
+
+    def _on_trusted_certificate_available(self, event: CertificateAvailableEvent):
+        if not self.containers["workload"].can_connect():
+            logger.warning("Cannot connect to Pebble. Deferring event.")
+            event.defer()
+            return
+
+        self.restart_grafana()
+
+    def _update_trusted_ca_certs(self):
+        """This function receives the trusted certificates from the certificate_transfer integration.
+
+        Grafana needs to restart to use newly received certificates. Certificates attached to the
+        relation need to be pulled before Grafana is started.
+        This function is needed because relation events are not emitted on upgrade, and because we
+        do not have (nor do we want) persistent storage for certs.
+        """
+        if not self.model.get_relation(relation_name=self.trusted_cert_transfer.relationship_name):
+            return
+
+        logger.info(
+            "Pulling trusted ca certificates from %s relation.",
+            self.trusted_cert_transfer.relationship_name,
+        )
+        container = self.containers["workload"]
+        for relation in self.model.relations.get(self.trusted_cert_transfer.relationship_name, []):
+            # For some reason, relation.units includes our unit and app. Need to exclude them.
+            for unit in set(relation.units).difference([self.app, self.unit]):
+                # Note: this nested loop handles the case of multi-unit CA, each unit providing
+                # a different ca cert, but that is not currently supported by the lib itself.
+                cert_path = TRUSTED_CA_TEMPLATE.substitute(rel_id=relation.id)
+                if cert := relation.data[unit].get("ca"):
+                    container.push(cert_path, cert, make_dirs=True)
+
+        container.exec(["update-ca-certificates", "--fresh"]).wait()
+
+    def _on_trusted_certificate_removed(self, event: CertificateRemovedEvent):
+        # All certificates received from the relation are in separate files marked by the relation id.
+        container = self.containers["workload"]
+        cert_path = TRUSTED_CA_TEMPLATE.substitute(rel_id=event.relation_id)
+        container.remove_path(cert_path, recursive=True)
+
+        self.restart_grafana()
 
 
 if __name__ == "__main__":
