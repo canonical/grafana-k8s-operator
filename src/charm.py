@@ -45,7 +45,6 @@ from charms.grafana_k8s.v0.grafana_source import (
 from charms.hydra.v0.oauth import (
     ClientConfig as OauthClientConfig,
     OAuthInfoChangedEvent,
-    OAuthInfoRemovedEvent,
     OAuthRequirer,
 )
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
@@ -116,6 +115,7 @@ PORT = 3000
 TRUSTED_CA_TEMPLATE = string.Template(
     "/usr/local/share/ca-certificates/trusted-ca-cert-$rel_id-ca.crt"
 )
+# https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/generic-oauth
 OAUTH_SCOPES = "openid email offline_access"
 OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 
@@ -272,7 +272,7 @@ class GrafanaCharm(CharmBase):
             self.oauth.on.oauth_info_changed, self._on_oauth_info_changed  # pyright: ignore
         )
         self.framework.observe(
-            self.oauth.on.oauth_info_removed, self._on_oauth_info_removed  # pyright: ignore
+            self.oauth.on.oauth_info_removed, self._on_oauth_info_changed  # pyright: ignore
         )
 
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
@@ -1449,11 +1449,6 @@ class GrafanaCharm(CharmBase):
 
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
         """Event handler for the oauth_info_changed event."""
-        self._configure()
-
-    def _on_oauth_info_removed(self, event: OAuthInfoRemovedEvent) -> None:
-        """Event handler for the oauth_info_removed event."""
-        # Reset generic_oauth settings
         self._configure()
 
 
