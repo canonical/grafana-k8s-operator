@@ -6,4 +6,4 @@ pyyaml
 urllib3
 jsonschema
 cryptography
-git+ssh://git@github.com/canonical/iam-bundle@IAM-640-outsource-oauth-tools-package#egg=oauth_tools
+git+https://github.com/canonical/iam-bundle@IAM-640-outsource-oauth-tools-package#egg=oauth_tools
