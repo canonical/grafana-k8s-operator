@@ -18,7 +18,7 @@ from playwright.async_api._generated import Page, BrowserContext
 from pytest_operator.plugin import OpsTest
 
 from oauth_tools.dex import ExternalIdpManager
-from tests.integration.oauth_tools.oauth_test_helper import (
+from oauth_tools.oauth_test_helper import (
     deploy_identity_bundle,
     get_reverse_proxy_app_url,
     complete_external_idp_login,
