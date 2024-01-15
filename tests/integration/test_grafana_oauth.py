@@ -27,6 +27,7 @@ from oauth_tools.oauth_test_helper import (
     verify_page_loads,
     get_cookie_from_browser_by_name,
 )
+from oauth_tools.conftest import *  # noqa
 from oauth_tools.constants import EXTERNAL_USER_EMAIL, APPS
 
 logger = logging.getLogger(__name__)
