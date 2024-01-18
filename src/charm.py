@@ -29,7 +29,7 @@ import string
 import time
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, cast
 from urllib.parse import urlparse
 import subprocess
 
@@ -41,6 +41,11 @@ from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
     GrafanaSourceEvents,
     SourceFieldsMissingError,
+)
+from charms.hydra.v0.oauth import (
+    ClientConfig as OauthClientConfig,
+    OAuthInfoChangedEvent,
+    OAuthRequirer,
 )
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
@@ -110,6 +115,9 @@ PORT = 3000
 TRUSTED_CA_TEMPLATE = string.Template(
     "/usr/local/share/ca-certificates/trusted-ca-cert-$rel_id-ca.crt"
 )
+# https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/generic-oauth
+OAUTH_SCOPES = "openid email offline_access"
+OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 
 
 class GrafanaCharm(CharmBase):
@@ -255,6 +263,16 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(
             self.trusted_cert_transfer.on.certificate_removed,
             self._on_trusted_certificate_removed,  # pyright: ignore
+        )
+        # oauth relation
+        self.oauth = OAuthRequirer(self, self._oauth_client_config)
+
+        # oauth relation observations
+        self.framework.observe(
+            self.oauth.on.oauth_info_changed, self._on_oauth_info_changed  # pyright: ignore
+        )
+        self.framework.observe(
+            self.oauth.on.oauth_info_removed, self._on_oauth_info_changed  # pyright: ignore
         )
 
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
@@ -455,6 +473,8 @@ class GrafanaCharm(CharmBase):
             logger.info("Updated Grafana's base configuration")
 
             restart = True
+
+        self.oauth.update_client_config(client_config=self._oauth_client_config)
 
         if self._check_datasource_provisioning():
             # Non-leaders will get updates from litestream
@@ -814,6 +834,10 @@ class GrafanaCharm(CharmBase):
             # now that this is done, build_layer should include cert and key into the config and we'll
             # be sure that the files are actually there before grafana is (re)started.
 
+        # If available, we collect all trusted certs from the receive-ca-cert relation
+        # we do this here, downstream from a container readiness check
+        self._update_trusted_ca_certs()
+
         layer = self._build_layer()
         try:
             self.containers["workload"].add_layer(self.name, layer, combine=True)
@@ -831,10 +855,6 @@ class GrafanaCharm(CharmBase):
                     permissions=0o755,
                     make_dirs=True,
                 )
-
-                # If available, we collect all trusted certs from the receive-ca-cert relation
-                # we do this here, downstream from a container readiness check
-                self._update_trusted_ca_certs()
 
                 pragma = self.containers["workload"].exec(
                     [
@@ -923,6 +943,27 @@ class GrafanaCharm(CharmBase):
                 {
                     "GF_SERVER_CERT_KEY": GRAFANA_KEY_PATH,
                     "GF_SERVER_CERT_FILE": GRAFANA_CRT_PATH,
+                }
+            )
+
+        if self.oauth.is_client_created():
+            oauth_provider_info = self.oauth.get_provider_info()
+
+            extra_info.update(
+                {
+                    "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
+                    "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
+                    "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(str, oauth_provider_info.client_id),
+                    "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
+                        str, oauth_provider_info.client_secret
+                    ),
+                    "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
+                    "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
+                    # TODO: This toggle will be removed on grafana v10.3, remove it
+                    "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
                 }
             )
 
@@ -1396,8 +1437,19 @@ class GrafanaCharm(CharmBase):
         container = self.containers["workload"]
         cert_path = TRUSTED_CA_TEMPLATE.substitute(rel_id=event.relation_id)
         container.remove_path(cert_path, recursive=True)
-
         self.restart_grafana()
+
+    @property
+    def _oauth_client_config(self) -> OauthClientConfig:
+        return OauthClientConfig(
+            os.path.join(self.external_url, "login/generic_oauth"),
+            OAUTH_SCOPES,
+            OAUTH_GRANT_TYPES,
+        )
+
+    def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
+        """Event handler for the oauth_info_changed event."""
+        self._configure()
 
 
 if __name__ == "__main__":

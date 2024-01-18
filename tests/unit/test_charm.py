@@ -75,6 +75,7 @@ url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
 
 """
 
+
 AUTH_PROVIDER_APPLICATION = "auth_provider"
 
 
@@ -113,7 +114,7 @@ k8s_resource_multipatch = patch.multiple(
 )
 
 
-class TestCharm(unittest.TestCase):
+class BaseTestCharm(unittest.TestCase):
     def setUp(self, *unused):
         self.harness = Harness(GrafanaCharm)
         self.addCleanup(self.harness.cleanup)
@@ -144,6 +145,8 @@ class TestCharm(unittest.TestCase):
             str(yaml.dump(MINIMAL_DATASOURCES_CONFIG)).encode("utf-8")
         ).hexdigest()
 
+
+class TestCharm(BaseTestCharm):
     def test_datasource_config_is_updated_by_raw_grafana_source_relation(self):
         self.harness.set_leader(True)
 

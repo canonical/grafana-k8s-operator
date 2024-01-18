@@ -59,6 +59,12 @@ requires:
       This relation can be used with a local CA to obtain the CA cert that was used to sign proxied
       endpoints.
     limit: 1
+  oauth:
+    interface: oauth
+    limit: 1
+    description: |
+      Receive oauth server's info and a set of client credentials.
+      This relation can be used to integrate grafana with an oAuth2/OIDC Provider.
 
 provides:
   metrics-endpoint:

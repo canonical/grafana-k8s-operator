@@ -22,7 +22,6 @@ grafana_resources = {
 }
 
 
-@pytest.mark.xfail
 async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.deploy(
@@ -33,7 +32,7 @@ async def test_deploy(ops_test, grafana_charm):
             trust=True,
         ),
         ops_test.model.deploy(
-            "ch:self-signed-certificates",
+            "self-signed-certificates",
             application_name="ca",
             channel="edge",
         ),
@@ -43,13 +42,11 @@ async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.wait_for_idle(
             apps=[grafana.name],
-            wait_for_units=2,
             raise_on_error=False,
             timeout=1200,
         ),
         ops_test.model.wait_for_idle(
             apps=["ca"],
-            wait_for_units=1,
             raise_on_error=False,
             timeout=600,
         ),
