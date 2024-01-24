@@ -10,8 +10,6 @@ source: https://github.com/canonical/grafana-k8s-operator
 issues: https://github.com/canonical/grafana-k8s-operator/issues
 docs: https://discourse.charmhub.io/t/grafana-operator-k8s-docs-index/5612
 
-maintainers:
-  - Ryan Barry <ryan.barry@canonical.com>
 description: |
   Grafana provides dashboards for monitoring data and this
   charm is written to allow for HA on Kubernetes and can take
@@ -83,7 +81,7 @@ resources:
     type: oci-image
     description: upstream docker image for Grafana
     #upstream-source: ghcr.io/canonical/grafana:dev
-    upstream-source: docker.io/ubuntu/grafana:10-22.04
+    upstream-source: docker.io/ubuntu/grafana:9-22.04
   litestream-image:
     type: oci-image
     description: upstream image for sqlite streaming
