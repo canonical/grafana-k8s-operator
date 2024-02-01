@@ -19,8 +19,8 @@ def ctx():
         patch.multiple(
             "charm.KubernetesComputeResourcesPatch",
             _namespace="test-namespace",
-            _patch=lambda *a, **kw: True,
-            is_ready=lambda *a, **kw: True,
+            _patch=tautology,
+            is_ready=tautology,
         ),
         patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
         patch("ops.testing._TestingModelBackend.network_get"),
