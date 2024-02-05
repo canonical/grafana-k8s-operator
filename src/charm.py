@@ -29,7 +29,7 @@ import string
 import time
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, cast
+from typing import Any, Callable, Dict, cast, Optional
 from urllib.parse import urlparse
 import subprocess
 
@@ -71,6 +71,8 @@ from ops.charm import (
     RelationJoinedEvent,
     UpgradeCharmEvent,
 )
+from charms.tempo_k8s.v1.charm_tracing import trace_charm
+from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, OpenedPort
@@ -120,6 +122,18 @@ OAUTH_SCOPES = "openid email offline_access"
 OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 
 
+@trace_charm(
+    tracing_endpoint="tracing_endpoint",
+    server_cert="server_cert_path",
+    extra_types=[
+        AuthRequirer,
+        CertHandler,
+        GrafanaDashboardConsumer,
+        GrafanaSourceConsumer,
+        KubernetesComputeResourcesPatch,
+        MetricsEndpointProvider,
+    ],
+)
 class GrafanaCharm(CharmBase):
     """Charm to run Grafana on Kubernetes.
 
@@ -178,6 +192,7 @@ class GrafanaCharm(CharmBase):
                 self.cert_handler.on.cert_changed,  # pyright: ignore
             ],
         )
+        self.tracing = TracingEndpointRequirer(self)
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
@@ -1450,6 +1465,16 @@ class GrafanaCharm(CharmBase):
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
         """Event handler for the oauth_info_changed event."""
         self._configure()
+
+    @property
+    def tracing_endpoint(self) -> Optional[str]:
+        """Tempo endpoint for charm tracing."""
+        return self.tracing.otlp_http_endpoint()
+
+    @property
+    def server_cert_path(self) -> Optional[str]:
+        """Server certificate path for TLS tracing."""
+        return GRAFANA_CRT_PATH
 
 
 if __name__ == "__main__":
