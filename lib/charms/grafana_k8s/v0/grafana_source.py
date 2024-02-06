@@ -726,7 +726,8 @@ class GrafanaSourceConsumer(Object):
         """Put information into the peer data bucket instead of `StoredState`."""
         peers = self._charm.peers  # type: ignore[attr-defined]
         if not peers:
-            logger.info("no peer relation: skipping set_peer_data call")
+            # https://bugs.launchpad.net/juju/+bug/1998282
+            logger.info("set_peer_data: no peer relation. Is the charm being installed/removed?")
             return
 
         peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore[attr-defined]
@@ -735,6 +736,7 @@ class GrafanaSourceConsumer(Object):
         """Retrieve information from the peer data bucket instead of `StoredState`."""
         peers = self._charm.peers  # type: ignore[attr-defined]
         if not peers:
+            # https://bugs.launchpad.net/juju/+bug/1998282
             logger.warning(
                 "get_peer_data: no peer relation. Is the charm being installed/removed?"
             )
