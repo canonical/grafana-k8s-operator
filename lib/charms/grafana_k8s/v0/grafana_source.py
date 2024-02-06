@@ -581,6 +581,9 @@ class GrafanaSourceConsumer(Object):
             if source_data.get("extra_fields", None):
                 host_data["extra_fields"] = source_data.get("extra_fields")
 
+            if source_data.get("secure_extra_fields", None):
+                host_data["secure_extra_fields"] = source_data.get("secure_extra_fields")
+
             if host_data["source_name"] in sources_to_delete:
                 sources_to_delete.remove(host_data["source_name"])
 
