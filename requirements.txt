@@ -9,3 +9,4 @@ cryptography
 
 # lib/charms/tempo_k8s/v1/charm_tracing.py
 opentelemetry-exporter-otlp-proto-http
+pydantic

@@ -160,7 +160,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 19
+LIBPATCH = 20
 
 logger = logging.getLogger(__name__)
 
@@ -648,7 +648,7 @@ class GrafanaSourceConsumer(Object):
 
     def _remove_source(self, source_name: str) -> None:
         """Remove a datasource by name."""
-        sources_to_delete = self.get_peer_data("sources_to_delete")
+        sources_to_delete = self.get_peer_data("sources_to_delete") or []
         if source_name not in sources_to_delete:
             sources_to_delete.append(source_name)
             self.set_peer_data("sources_to_delete", sources_to_delete)
@@ -713,7 +713,7 @@ class GrafanaSourceConsumer(Object):
     @property
     def sources_to_delete(self) -> List[str]:
         """Returns an array of source names which have been removed."""
-        return self.get_peer_data("sources_to_delete")
+        return self.get_peer_data("sources_to_delete") or []
 
     def _set_default_data(self) -> None:
         """Set defaults if they are not in peer relation data."""
@@ -724,9 +724,23 @@ class GrafanaSourceConsumer(Object):
 
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
-        self._charm.peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore[attr-defined]
+        peers = self._charm.peers  # type: ignore[attr-defined]
+        if not peers:
+            # https://bugs.launchpad.net/juju/+bug/1998282
+            logger.info("set_peer_data: no peer relation. Is the charm being installed/removed?")
+            return
+
+        peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore[attr-defined]
 
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
+        peers = self._charm.peers  # type: ignore[attr-defined]
+        if not peers:
+            # https://bugs.launchpad.net/juju/+bug/1998282
+            logger.warning(
+                "get_peer_data: no peer relation. Is the charm being installed/removed?"
+            )
+            return {}
+
         data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore[attr-defined]
         return json.loads(data) if data else {}
