@@ -63,6 +63,9 @@ requires:
     description: |
       Receive oauth server's info and a set of client credentials.
       This relation can be used to integrate grafana with an oAuth2/OIDC Provider.
+  tracing:
+    interface: tracing
+    limit: 1
 
 provides:
   metrics-endpoint:
