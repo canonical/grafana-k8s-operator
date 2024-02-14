@@ -1,8 +1,13 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 name: grafana-k8s
+
 assumes:
   - k8s-api
+
+  # Juju 3.0.3+ needed for secrets and open-port
+  - juju >= 3.0.3
+
 summary: Data visualization and observability with Grafana
 
 website: https://charmhub.io/grafana-k8s
