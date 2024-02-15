@@ -32,6 +32,8 @@ The default arguments are:
     `refresh_event`: A `PebbleReady` event from `charm`, used to refresh
         the IP address sent to Grafana on a charm lifecycle event or
         pod restart
+    `extra_fields`: None
+    `secure_extra_fields`: None
 
 The value of `source_url` should be a fully-resolvable URL for a valid Grafana
 source, e.g., `http://example.com/api` or similar.
@@ -160,7 +162,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 20
+LIBPATCH = 21
 
 logger = logging.getLogger(__name__)
 
@@ -324,6 +326,7 @@ class GrafanaSourceProvider(Object):
         refresh_event: Optional[Union[BoundEvent, List[BoundEvent]]] = None,
         relation_name: str = DEFAULT_RELATION_NAME,
         extra_fields: Optional[dict] = None,
+        secure_extra_fields: Optional[dict] = None,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -364,6 +367,8 @@ class GrafanaSourceProvider(Object):
                 machine/VM restart.
             extra_fields: a :dict: which is used for additional information required
                 for some datasources in the `jsonData` field
+            secure_extra_fields: a :dict: which is used for additional information required
+                for some datasources in the `secureJsonData`
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
@@ -382,6 +387,7 @@ class GrafanaSourceProvider(Object):
                 extra_fields["implementation"] = "prometheus"
 
         self._extra_fields = extra_fields
+        self._secure_extra_fields = secure_extra_fields
 
         if not refresh_event:
             if len(self._charm.meta.containers) == 1:
@@ -450,6 +456,7 @@ class GrafanaSourceProvider(Object):
             "application": str(self._charm.model.app.name),
             "type": self._source_type,
             "extra_fields": self._extra_fields,
+            "secure_extra_fields": self._secure_extra_fields,
         }
         return data
 
@@ -573,6 +580,9 @@ class GrafanaSourceConsumer(Object):
             }
             if source_data.get("extra_fields", None):
                 host_data["extra_fields"] = source_data.get("extra_fields")
+
+            if source_data.get("secure_extra_fields", None):
+                host_data["secure_extra_fields"] = source_data.get("secure_extra_fields")
 
             if host_data["source_name"] in sources_to_delete:
                 sources_to_delete.remove(host_data["source_name"])

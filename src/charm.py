@@ -1131,6 +1131,8 @@ class GrafanaCharm(CharmBase):
             }
             if source_info.get("extra_fields", None):
                 source["jsonData"] = source_info.get("extra_fields")
+            if source_info.get("secure_extra_fields", None):
+                source["secureJsonData"] = source_info.get("secure_extra_fields")
 
             # set timeout for querying this data source
             timeout = int(source.get("jsonData", {}).get("timeout", 0))
