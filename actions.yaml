@@ -1,5 +1,0 @@
-get-admin-password:
-  description: |
-    Get the dashboard url and initial admin password for the Grafana web interface. Initial
-    admin password is generated at charm deployment time. If the password has been changed,
-    a notice of that fact will be returned by this action instead.
