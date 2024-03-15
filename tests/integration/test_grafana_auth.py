@@ -10,7 +10,6 @@ It tests that the charms are able to relate and to exchange data.
 import asyncio
 import logging
 
-from pathlib import Path
 import pytest
 from helpers import check_grafana_is_ready, get_grafana_environment_variable, oci_image
 
