@@ -38,8 +38,8 @@ tester_resources = {
     )
 }
 grafana_resources = {
-    "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
-    "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
+    "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
+    "litestream-image": oci_image("./charmcraft.yaml", "litestream-image"),
 }
 
 

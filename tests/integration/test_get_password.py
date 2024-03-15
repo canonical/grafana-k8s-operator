@@ -11,11 +11,11 @@ from helpers import oci_image
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 app_name = "grafana"
 grafana_resources = {
-    "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
-    "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
+    "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
+    "litestream-image": oci_image("./charmcraft.yaml", "litestream-image"),
 }
 
 
