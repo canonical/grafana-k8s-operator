@@ -1,6 +1,19 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 options:
+  allow_anonymous_access:
+    type: boolean
+    default: false
+    description: |
+      Whether Grafana should allow anonymous access to dashboards. Unless
+      you have some other authentication mechanism in front of your deployment,
+      you likely do not want to enable this.
+  allow_embedding:
+    type: boolean
+    default: false
+    description: |
+      Whether Grafana should allow embedding dashboards using iframes. Unless
+      you have a clear reason for doing so, you likely do not want to enable this.
   log_level:
     type: string
     description: |
