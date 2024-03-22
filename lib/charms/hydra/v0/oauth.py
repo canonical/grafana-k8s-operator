@@ -74,7 +74,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 logger = logging.getLogger(__name__)
 
@@ -395,9 +395,6 @@ class OAuthRequirer(OAuthRelation):
         self.on.oauth_info_removed.emit()
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
-        if not self.model.unit.is_leader():
-            return
-
         data = event.relation.data[event.app]
         if not data:
             logger.info("No relation data available.")
