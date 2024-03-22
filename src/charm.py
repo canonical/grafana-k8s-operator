@@ -27,11 +27,13 @@ import secrets
 import socket
 import string
 import time
+import zipfile
 from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict, cast, Optional
 from urllib.parse import urlparse
 import subprocess
+from urllib.request import urlretrieve
 
 import yaml
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
@@ -1151,6 +1153,41 @@ class GrafanaCharm(CharmBase):
 
         datasources_string = yaml.dump(datasources_dict)
         return datasources_string
+
+    def _on_install_plugin(self, event: ActionEvent) -> None:
+        """Install an official grafana plugin."""
+        name = event.params['name']
+        version = event.params['version']
+        url = f"https://grafana.com/api/plugins/{name}/versions/{version}/download"
+        path = Path('/var/lib/grafana/plugins')
+        if not path.exists():
+            path.mkdir()
+
+        download_path = path / 'download'
+
+        try:
+            urlretrieve(url, download_path)
+        except Exception as e:
+            logger.exception(f"cannot download plugin {name}:{version}")
+            event.fail(f"failed to download plugin from {url}, please make sure it's correct.")
+            return
+
+        with zipfile.ZipFile(download_path, 'r') as zip_ref:
+            try:
+                zip_ref.extractall(path)
+            except Exception as e:
+                logger.exception(f"cannot unzip {download_path}")
+                event.fail(f"failed to unzip downloaded file at {download_path}")
+                return
+
+        installed_plugins = [o.strip() for o in subprocess.getoutput("grafana cli plugin ls").splitlines()[1:]]
+        download_path.unlink()
+        event.set_results(
+            {"success": name in installed_plugins,
+             "installed_plugins": ", ".join(installed_plugins)}
+        )
+
+        self.containers['workload'].restart("grafana")
 
     def _on_get_admin_password(self, event: ActionEvent) -> None:
         """Returns the grafana url and password for the admin user as an action response."""

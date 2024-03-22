@@ -3,3 +3,18 @@ get-admin-password:
     Get the dashboard url and initial admin password for the Grafana web interface. Initial
     admin password is generated at charm deployment time. If the password has been changed,
     a notice of that fact will be returned by this action instead.
+
+install-plugin:
+  description: |
+    Installs a grafana plugin.
+  params:
+    name:
+      type: string
+      description: |
+        Name of the plugin. Must be hosted at https://grafana.com/grafana/plugins`.
+        For example "grafana-snowflake-datasource" or "grafana-piechart-panel".
+    version:
+      type: string
+      description: |  
+        Full version of the plugin you want to install. 
+        Must include major, minor, and revision. For example "1.2.3" or "0.0.1"
