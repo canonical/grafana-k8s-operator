@@ -21,14 +21,14 @@ logger = logging.getLogger(__name__)
 grafana_app_name = "grafana"
 tester_app_name = "grafana-tester"
 config = {"log_level": "error", "datasource_query_timeout": "600"}
-grafana_resources = {
-    "grafana-image": oci_image("./metadata.yaml", "grafana-image"),
-    "litestream-image": oci_image("./metadata.yaml", "litestream-image"),
-}
 tester_resources = {
     "grafana-tester-image": oci_image(
         "./tests/integration/grafana-tester/metadata.yaml", "grafana-tester-image"
     )
+}
+grafana_resources = {
+    "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
+    "litestream-image": oci_image("./charmcraft.yaml", "litestream-image"),
 }
 
 

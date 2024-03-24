@@ -1,6 +1,103 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 type: charm
+name: grafana-k8s
+summary: Data visualization and observability with Grafana
+description: |
+  Grafana provides dashboards for monitoring data and this
+  charm is written to allow for HA on Kubernetes and can take
+  multiple data sources (for example, Prometheus).
+
+links:
+  documentation: https://discourse.charmhub.io/t/grafana-operator-k8s-docs-index/5612
+  website:
+    - https://charmhub.io/grafana-k8s
+  source:
+    - https://github.com/canonical/grafana-k8s-operator
+  issues:
+    - https://github.com/canonical/grafana-k8s-operator/issues
+
+assumes:
+  - k8s-api
+  - juju >= 3.0.3 # Juju 3.0.3+ needed for secrets and open-port
+
+containers:
+  grafana:
+    resource: grafana-image
+    mounts:
+      - storage: database
+        location: /var/lib/grafana
+  litestream:
+    resource: litestream-image
+    mounts:
+      - storage: database
+        location: /var/lib/grafana
+
+storage:
+  database:
+    type: filesystem
+
+requires:
+  grafana-source:
+    interface: grafana_datasource
+  grafana-dashboard:
+    interface: grafana_dashboard
+  grafana-auth:
+    interface: grafana_auth
+  database:
+    interface: db
+    limit: 1
+  catalogue:
+    interface: catalogue
+  ingress:
+    interface: traefik_route
+    limit: 1
+    description: Grafana needs "ingress per leader" (not per app and not per unit).
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    description: Certificate and key files for Grafana to use with TLS.
+  receive-ca-cert:
+    interface: certificate_transfer
+    description: |
+      Receive a CA cert for grafana to trust.
+      This relation can be used with a local CA to obtain the CA cert that was used to sign proxied
+      endpoints.
+    limit: 1
+  oauth:
+    interface: oauth
+    limit: 1
+    description: |
+      Receive oauth server's info and a set of client credentials.
+      This relation can be used to integrate grafana with an oAuth2/OIDC Provider.
+  tracing:
+    interface: tracing
+    limit: 1
+
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+    description: Links to grafana's own `/metrics` endpoint.
+
+peers:
+  grafana:
+    interface: grafana_peers
+  replicas:
+    # Peer relation used as storage for TLS data
+    interface: grafana_replicas
+
+resources:
+  grafana-image:
+    type: oci-image
+    description: upstream docker image for Grafana
+    #upstream-source: ghcr.io/canonical/grafana:dev
+    upstream-source: docker.io/ubuntu/grafana:9-22.04
+  litestream-image:
+    type: oci-image
+    description: upstream image for sqlite streaming
+    upstream-source: docker.io/litestream/litestream:0.4.0-beta.2
+
 bases:
   - build-on:
       - name: "ubuntu"
@@ -8,6 +105,7 @@ bases:
     run-on:
       - name: "ubuntu"
         channel: "20.04"
+
 parts:
   charm:
     # This is currently necessary because it cuts on packing times.
@@ -31,3 +129,86 @@ parts:
     override-pull: |
       curl -L -O https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_TARGET_ARCH}
       chmod +x cos-tool-*
+
+actions:
+  get-admin-password:
+    description: |
+      Get the dashboard url and initial admin password for the Grafana web interface. Initial
+      admin password is generated at charm deployment time. If the password has been changed,
+      a notice of that fact will be returned by this action instead.
+
+config:
+  options:
+    allow_anonymous_access:
+      type: boolean
+      default: false
+      description: |
+        Whether Grafana should allow anonymous access to dashboards. Unless
+        you have some other authentication mechanism in front of your deployment,
+        you likely do not want to enable this.
+    allow_embedding:
+      type: boolean
+      default: false
+      description: |
+        Whether Grafana should allow embedding dashboards using iframes. Unless
+        you have a clear reason for doing so, you likely do not want to enable this.
+    log_level:
+      type: string
+      description: |
+        Logging level for Grafana. Options are “debug”, “info”,
+        “warn”, “error”, and “critical”.
+      default: info
+    admin_user:
+      description: The Grafana administrative user
+      type: string
+      default: admin
+    web_external_url:
+      description: |
+        DEPRECATED. This config option is no longer used, in favor of "skipPrefix".
+
+        The URL under which Grafana is externally reachable (for example,
+        if Grafana is served via a reverse proxy).
+
+        Used for generating relative and absolute links back to
+        Grafana itself. If the URL has a path portion, it will be used to
+        prefix all HTTP endpoints served by Grafana.
+
+        If omitted, relevant URL components will be derived automatically.
+
+        If provided, this should be a complete URI, including scheme, or a
+        fully qualified subpath starting with `/`.
+
+        If Grafana is being served directly from the root of a fully-qualified
+        host or a bare A record, this may be omitted.
+      type: string
+      default: ""
+    enable_auto_assign_org:
+      description: |
+        Set to true to automatically add new users to the main organization (id 1). When set to
+        false, new users automatically cause a new organization to be created for that new user.
+      type: boolean
+      default: true
+    datasource_query_timeout:
+      description: |
+        The default timeout for querying a Grafana datasource. Each datasource can
+        also configure its own preferred timeout value through relation data. If the
+        value configured through relation data is larger than datasource_query_timeout
+        then that value is left unchanged. The value of this configuration option must
+        be a positive integer representing the maximum number of seconds Grafana will
+        wait for a datasource to respond to a query.
+      type: int
+      default: 300
+    cpu:
+      description: |
+        K8s cpu resource limit, e.g. "1" or "500m". Default is unset (no limit). This value is used
+        for the "limits" portion of the resource requirements (the "requests" portion is
+        automatically deduced from it).
+        See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+      type: string
+    memory:
+      description: |
+        K8s memory resource limit, e.g. "1Gi". Default is unset (no limit). This value is used
+        for the "limits" portion of the resource requirements (the "requests" portion is
+        automatically deduced from it).
+        See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+      type: string
