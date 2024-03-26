@@ -8,10 +8,12 @@ import logging
 import pytest
 from helpers import (
     check_grafana_is_ready,
+    create_org,
     get_config_values,
     get_dashboard_by_search,
     get_datasource_for,
     get_grafana_datasources,
+    get_org,
     oci_image,
     uk8s_group,
 )
@@ -84,6 +86,9 @@ async def test_create_and_check_datasource_and_dashboard_before_delete(ops_test)
 
 
 async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_test):
+    org_name = "D10S"
+    await create_org(ops_test, grafana_app_name, 0, org_name)
+
     pod_name = f"{grafana_app_name}-0"
 
     cmd = [
@@ -107,6 +112,9 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
 
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
     assert (await get_config_values(ops_test, grafana_app_name)).items() >= config.items()
+
+    org = await get_org(ops_test, grafana_app_name, 0, "D10S")
+    assert org["name"] == org_name
 
 
 async def test_dashboards_and_datasources_are_retained_after_pod_deleted_and_restarted(ops_test):

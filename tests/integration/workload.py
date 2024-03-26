@@ -119,3 +119,29 @@ class Grafana:
             async with session.get(uri) as response:
                 result = await response.json()
                 return result if response.status == 200 else {}
+
+    async def fetch_org(self, name: str) -> dict:
+        """Get the JSON representation of orgs.
+
+        Returns:
+          Organisation.
+        """
+        api_path = f"/api/orgs/name/{name}"
+        uri = f"{self.base_uri}{api_path}"
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            async with session.get(uri) as response:
+                result = await response.json()
+                return result if response.status == 200 else {}
+
+    async def create_org(self, name: str) -> dict:
+        """Create org.
+
+        Returns:
+          Dict containing the orgId.
+        """
+        api_path = "/api/orgs"
+        uri = f"{self.base_uri}{api_path}"
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            async with session.post(uri, json={"name": name}) as response:
+                result = await response.json()
+                return result if response.status == 200 else {}
