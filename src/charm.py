@@ -112,6 +112,7 @@ CA_CERT_PATH = Path("/usr/local/share/ca-certificates/cos-ca.crt")
 DATABASE = "database"
 PEER = "grafana"
 PORT = 3000
+DATABASE_PATH = "/var/lib/grafana/grafana.db"
 
 # Template for storing trusted certificate in a file.
 TRUSTED_CA_TEMPLATE = string.Template(
@@ -378,7 +379,7 @@ class GrafanaCharm(CharmBase):
         ):
             restart = True
 
-        litestream_config = {"addr": ":9876", "dbs": [{"path": "/var/lib/grafana/grafana.db"}]}
+        litestream_config = {"addr": ":9876", "dbs": [{"path": DATABASE_PATH}]}
 
         if not leader:
             litestream_config["dbs"][0].update({"upstream": {"url": "http://${LITESTREAM_UPSTREAM_URL}"}})  # type: ignore
@@ -754,6 +755,16 @@ class GrafanaCharm(CharmBase):
         configs = []
         if self.has_db:
             configs.append(self._generate_database_config())
+        else:
+            with StringIO() as data:
+                config_ini = configparser.ConfigParser()
+                config_ini["database"] = {
+                    "type": "sqlite3",
+                    "path": DATABASE_PATH,
+                }
+                config_ini.write(data)
+                data.seek(0)
+                configs.append(data.read())
 
         return "\n".join(configs)
 
@@ -874,7 +885,7 @@ class GrafanaCharm(CharmBase):
                 pragma = self.containers["workload"].exec(
                     [
                         "/usr/local/bin/sqlite3",
-                        "/var/lib/grafana/grafana.db",
+                        DATABASE_PATH,
                         "pragma journal_mode=wal;",
                     ]
                 )

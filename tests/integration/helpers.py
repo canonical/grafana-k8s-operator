@@ -74,6 +74,44 @@ async def check_grafana_is_ready(ops_test: OpsTest, app_name: str, unit_num: int
     return is_ready
 
 
+async def create_org(ops_test: OpsTest, app_name: str, unit_num: int, org_name: str) -> dict:
+    """Create Organisation.
+
+    Args:
+        ops_test: pytest-operator plugin
+        app_name: string name of Grafana application
+        unit_num: integer number of a Grafana juju unit
+        org_name: string name of Org.
+
+    Returns:
+        Oranisation created.
+    """
+    host = await unit_address(ops_test, app_name, unit_num)
+    pw = await grafana_password(ops_test, app_name)
+    grafana = Grafana(host=host, pw=pw)
+    org = await grafana.create_org(name=org_name)
+    return org
+
+
+async def get_org(ops_test: OpsTest, app_name: str, unit_num: int, org_name: str) -> dict:
+    """Fetch Organisation.
+
+    Args:
+        ops_test: pytest-operator plugin
+        app_name: string name of Grafana application
+        unit_num: integer number of a Grafana juju unit
+        org_name: string name of Org.
+
+    Returns:
+        Oranisation.
+    """
+    host = await unit_address(ops_test, app_name, unit_num)
+    pw = await grafana_password(ops_test, app_name)
+    grafana = Grafana(host=host, pw=pw)
+    org = await grafana.fetch_org(name=org_name)
+    return org
+
+
 async def get_grafana_settings(ops_test: OpsTest, app_name: str, unit_num: int) -> dict:
     """Fetch Grafana settings.
 
