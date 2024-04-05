@@ -72,7 +72,7 @@ from ops.charm import (
     UpgradeCharmEvent,
 )
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, OpenedPort
@@ -193,7 +193,7 @@ class GrafanaCharm(CharmBase):
                 self.cert_handler.on.cert_changed,  # pyright: ignore
             ],
         )
-        self.tracing = TracingEndpointRequirer(self)
+        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
@@ -1486,7 +1486,7 @@ class GrafanaCharm(CharmBase):
     @property
     def tracing_endpoint(self) -> Optional[str]:
         """Tempo endpoint for charm tracing."""
-        return self.tracing.otlp_http_endpoint()
+        return self.tracing.get_endpoint("otlp_http")
 
     @property
     def server_cert_path(self) -> Optional[str]:
