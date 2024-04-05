@@ -780,6 +780,9 @@ class GrafanaCharm(CharmBase):
         tracing = self.tracing
         if not tracing.is_ready():
             return ""
+        endpoint = tracing.otlp_grpc_endpoint()
+        if endpoint is None:
+            return ""
 
         config_ini = configparser.ConfigParser()
         config_ini["tracing.opentelemetry"] = {
@@ -788,7 +791,7 @@ class GrafanaCharm(CharmBase):
         }
         # ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini#L1505
         config_ini["tracing.opentelemetry.otlp"] = {
-            "address": tracing.otlp_grpc_endpoint(),
+            "address": endpoint,
         }
 
         # This is silly, but a ConfigParser() handles this nicer than
@@ -830,8 +833,7 @@ class GrafanaCharm(CharmBase):
             "url": db_url,
         }
 
-        # This is silly, but a ConfigParser() handles this nicer than
-        # raw string manipulation
+        # This is still silly
         data = StringIO()
         config_ini.write(data)
         data.seek(0)
