@@ -798,9 +798,7 @@ class GrafanaCharm(CharmBase):
         # raw string manipulation
         data = StringIO()
         config_ini.write(data)
-        data.seek(0)
-        ret = data.read()
-        data.close()
+        ret = data.getvalue()
         return ret
 
     def _generate_database_config(self) -> str:
@@ -836,9 +834,7 @@ class GrafanaCharm(CharmBase):
         # This is still silly
         data = StringIO()
         config_ini.write(data)
-        data.seek(0)
-        ret = data.read()
-        data.close()
+        ret = data.getvalue()
         return ret
 
     #####################################
