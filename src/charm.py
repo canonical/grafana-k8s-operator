@@ -193,7 +193,7 @@ class GrafanaCharm(CharmBase):
                 self.cert_handler.on.cert_changed,  # pyright: ignore
             ],
         )
-        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
+        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http", "otlp_grpc"])
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
@@ -752,7 +752,7 @@ class GrafanaCharm(CharmBase):
         can be set in ENV variables, but leave for expansion later so we can
         hide auth secrets
         """
-        configs = []
+        configs = [self._generate_tracing_config()]
         if self.has_db:
             configs.append(self._generate_database_config())
         else:
@@ -766,7 +766,38 @@ class GrafanaCharm(CharmBase):
                 data.seek(0)
                 configs.append(data.read())
 
-        return "\n".join(configs)
+        return "\n".join(filter(bool, configs))
+
+    def _generate_tracing_config(self) -> str:
+        """Generate tracing configuration.
+
+        Returns:
+            A string containing the required tracing information to be stubbed into the config
+            file.
+        """
+        tracing = self.tracing
+        if not tracing.is_ready():
+            return ""
+        endpoint = tracing.otlp_grpc_endpoint()
+        if endpoint is None:
+            return ""
+
+        config_ini = configparser.ConfigParser()
+        config_ini["tracing.opentelemetry"] = {
+            "sampler_type": "probabilistic",
+            "sampler_param": "0.01",
+        }
+        # ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini#L1505
+        config_ini["tracing.opentelemetry.otlp"] = {
+            "address": endpoint,
+        }
+
+        # This is silly, but a ConfigParser() handles this nicer than
+        # raw string manipulation
+        data = StringIO()
+        config_ini.write(data)
+        ret = data.getvalue()
+        return ret
 
     def _generate_database_config(self) -> str:
         """Generate a database configuration.
@@ -798,13 +829,10 @@ class GrafanaCharm(CharmBase):
             "url": db_url,
         }
 
-        # This is silly, but a ConfigParser() handles this nicer than
-        # raw string manipulation
+        # This is still silly
         data = StringIO()
         config_ini.write(data)
-        data.seek(0)
-        ret = data.read()
-        data.close()
+        ret = data.getvalue()
         return ret
 
     #####################################
