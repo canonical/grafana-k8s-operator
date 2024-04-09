@@ -1516,6 +1516,7 @@ class GrafanaCharm(CharmBase):
         """Tempo endpoint for charm tracing."""
         if self.tracing.is_ready():
             return self.tracing.get_endpoint("otlp_http")
+        return None
 
     @property
     def server_cert_path(self) -> Optional[str]:
