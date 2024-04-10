@@ -780,7 +780,7 @@ class GrafanaCharm(CharmBase):
         tracing = self.tracing
         if not tracing.is_ready():
             return ""
-        endpoint = tracing.otlp_grpc_endpoint()
+        # endpoint = tracing.get()
         if endpoint is None:
             return ""
 
@@ -789,8 +789,8 @@ class GrafanaCharm(CharmBase):
             "sampler_type": "probabilistic",
             "sampler_param": "0.01",
         }
-        # ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini#L1505
-        config_ini["tracing.opentelemetry.otlp"] = {
+        # ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini#L1500
+        config_ini["tracing.opentelemetry.jaeger"] = {
             "address": endpoint,
         }
 
