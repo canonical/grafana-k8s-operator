@@ -1036,12 +1036,14 @@ class GrafanaCharm(CharmBase):
                             "GF_LOG_LEVEL": cast(str, self.model.config["log_level"]),
                             "GF_PLUGINS_ENABLE_ALPHA": "true",
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
-                            "GF_SECURITY_ALLOW_EMBEDDING": cast(str, self.model.config["allow_embedding"]),
+                            "GF_SECURITY_ALLOW_EMBEDDING": cast(
+                                str, self.model.config["allow_embedding"]
+                            ),
                             "GF_SECURITY_ADMIN_USER": cast(str, self.model.config["admin_user"]),
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
-                            "GF_AUTH_ANONYMOUS_ENABLED": cast(str, self.model.config[
-                                "allow_anonymous_access"
-                            ]),
+                            "GF_AUTH_ANONYMOUS_ENABLED": cast(
+                                str, self.model.config["allow_anonymous_access"]
+                            ),
                             "GF_USERS_AUTO_ASSIGN_ORG": str(
                                 self.model.config["enable_auto_assign_org"]
                             ),
