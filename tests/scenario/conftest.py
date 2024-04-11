@@ -1,3 +1,5 @@
+import tempfile
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -29,7 +31,11 @@ def ctx():
     for p in patches:
         p.__enter__()
 
-    yield Context(GrafanaCharm)
+    with tempfile.TemporaryDirectory() as vroot:
+        sqlite_static = Path(vroot) / "sqlite-static"
+        sqlite_static.write_text("foo")
+
+        yield Context(GrafanaCharm, charm_root=vroot)
 
     for p in patches:
         p.__exit__(None, None, None)
