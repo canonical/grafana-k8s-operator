@@ -848,7 +848,16 @@ class GrafanaCharm(CharmBase):
         self.dashboard_consumer.update_dashboards()
         self._update_dashboards(event)
 
-        # In case of a restart caused by an error, we collect all trusted certs from relation receive-ca-cert
+        # Create provisioning subfolders to avoid errors on startup
+        workload = self.containers["workload"]
+        for d in (
+            Path(PROVISIONING_PATH) / "plugins",
+            Path(PROVISIONING_PATH) / "notifiers",
+        ):
+            workload.make_dir(d, make_parents=True)
+
+        # In case of a restart caused by an error, we collect all trusted certs from relation
+        # receive-ca-cert
         self._update_trusted_ca_certs()
 
         version = self.grafana_version
@@ -992,7 +1001,10 @@ class GrafanaCharm(CharmBase):
             }
         )
 
-        if self._cert_ready():
+        # Checking both "enabled" (relation in place) and "ready" (certs are in place) to
+        # potentially circumvent an edge case, where we still get
+        # "error: cert_file cannot be empty when using HTTPS".
+        if self.cert_handler.enabled and self._cert_ready():
             extra_info.update(
                 {
                     "GF_SERVER_CERT_KEY": GRAFANA_KEY_PATH,
