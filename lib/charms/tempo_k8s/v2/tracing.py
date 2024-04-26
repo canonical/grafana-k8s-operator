@@ -294,6 +294,7 @@ class Receiver(BaseModel):  # noqa: D101
 
     protocol: ReceiverProtocol
     port: int
+    path: Optional[str] = None
 
 
 class TracingProviderAppData(DatabagModel):  # noqa: D101
@@ -306,9 +307,9 @@ class TracingProviderAppData(DatabagModel):  # noqa: D101
     """Enabled receivers and ports at which they are listening."""
 
     external_url: Optional[str] = None
-    """Server url. If an ingress is present, it will be the ingress address."""
+    """Server url. If an ingress is present, it will be the ingress address. Else, the local fqdn."""
 
-
+    
 class TracingRequirerAppData(DatabagModel):  # noqa: D101
     """Application databag model for the tracing requirer."""
 
@@ -561,6 +562,7 @@ class TracingEndpointProvider(Object):
         try:
             databag = TracingRequirerAppData.load(relation.data[app])
         except (json.JSONDecodeError, pydantic.ValidationError, DataValidationError):
+            logger.exception("What was that error again?")
             logger.info(f"relation {relation} is not ready to talk tracing v2")
             raise NotReadyError()
         return databag.receivers
@@ -592,7 +594,7 @@ class TracingEndpointProvider(Object):
                     host=self._host,
                     external_url=self._external_url,
                     receivers=[
-                        Receiver(port=port, protocol=protocol) for protocol, port in receivers
+                        Receiver(port=port, protocol=protocol, path=f"/{protocol}") for protocol, port in receivers
                     ],
                 ).dump(relation.data[self._charm.app])
 

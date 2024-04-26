@@ -193,7 +193,7 @@ class GrafanaCharm(CharmBase):
                 self.cert_handler.on.cert_changed,  # pyright: ignore
             ],
         )
-        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http", "otlp_grpc"])
+        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http", "jaeger_thrift_http"])
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
@@ -778,7 +778,7 @@ class GrafanaCharm(CharmBase):
         tracing = self.tracing
         if not tracing.is_ready():
             return ""
-        endpoint = tracing.otlp_grpc_endpoint()
+        endpoint = tracing.get_endpoint("jaeger_thrift_http")
         if endpoint is None:
             return ""
 
@@ -787,9 +787,9 @@ class GrafanaCharm(CharmBase):
             "sampler_type": "probabilistic",
             "sampler_param": "0.01",
         }
-        # ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini#L1505
-        config_ini["tracing.opentelemetry.otlp"] = {
-            "address": endpoint,
+        # ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini#L1500
+        config_ini["tracing.opentelemetry.jaeger"] = {
+            "address": endpoint + "/api/traces",
         }
 
         # This is silly, but a ConfigParser() handles this nicer than
@@ -911,7 +911,7 @@ class GrafanaCharm(CharmBase):
                 # We should also make sure sqlite is in WAL mode for replication
                 self.containers["workload"].push(
                     "/usr/local/bin/sqlite3",
-                    Path("sqlite-static").read_bytes(),
+                    self.framework.charm_dir.joinpath("sqlite-static").read_bytes(),
                     permissions=0o755,
                     make_dirs=True,
                 )
