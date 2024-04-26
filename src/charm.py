@@ -848,7 +848,13 @@ class GrafanaCharm(CharmBase):
         self.dashboard_consumer.update_dashboards()
         self._update_dashboards(event)
 
-        # In case of a restart caused by an error, we collect all trusted certs from relation receive-ca-cert
+        # Create provisioning subfolders to avoid errors on startup
+        workload = self.containers["workload"]
+        for d in ("plugins", "notifiers", "alerting"):
+            workload.make_dir(Path(PROVISIONING_PATH) / d, make_parents=True)
+
+        # In case of a restart caused by an error, we collect all trusted certs from relation
+        # receive-ca-cert
         self._update_trusted_ca_certs()
 
         version = self.grafana_version
@@ -992,7 +998,13 @@ class GrafanaCharm(CharmBase):
             }
         )
 
-        if self._cert_ready():
+        # For consistency, set cert entries on the same condition as scheme is set to https.
+        # NOTE: On one hand, we want to tell grafana to use TLS as soon as the tls relation is in
+        # place; on the other hand, the certs may not be written to disk yet (they need to be
+        # returned over relation data, go to peer data, and eventually be written to disk). When
+        # grafana is restarted in HTTPS mode but without certs in place, we'll see a brief error:
+        # "error: cert_file cannot be empty when using HTTPS".
+        if self._scheme == "https":
             extra_info.update(
                 {
                     "GF_SERVER_CERT_KEY": GRAFANA_KEY_PATH,

@@ -117,15 +117,13 @@ ReceiverProtocol = Literal[
     "zipkin",
     "kafka",
     "opencensus",
-    "tempo",  # legacy, renamed to tempo_http
     "tempo_http",
     "tempo_grpc",
     "otlp_grpc",
     "otlp_http",
-    "jaeger_grpc",
+    # "jaeger_grpc",
     "jaeger_thrift_compact",
     "jaeger_thrift_http",
-    "jaeger_http_thrift",  # legacy, renamed to jaeger_thrift_http
     "jaeger_thrift_binary",
 ]
 
@@ -303,7 +301,7 @@ class TracingProviderAppData(DatabagModel):  # noqa: D101
     """Application databag model for the tracing provider."""
 
     host: str
-    """Server hostname."""
+    """Server hostname (local fqdn)."""
 
     receivers: List[Receiver]
     """Enabled receivers and ports at which they are listening."""
@@ -311,8 +309,7 @@ class TracingProviderAppData(DatabagModel):  # noqa: D101
     external_url: Optional[str] = None
     """Server url. If an ingress is present, it will be the ingress address. Else, the local fqdn."""
 
-
-
+    
 class TracingRequirerAppData(DatabagModel):  # noqa: D101
     """Application databag model for the tracing requirer."""
 
@@ -497,7 +494,7 @@ class TracingEndpointProvider(Object):
         self,
         charm: CharmBase,
         host: str,
-        external_url: str,
+        external_url: Optional[str] = None,
         relation_name: str = DEFAULT_RELATION_NAME,
     ):
         """Initialize.
@@ -505,7 +502,8 @@ class TracingEndpointProvider(Object):
         Args:
             charm: a `CharmBase` instance that manages this instance of the Tempo service.
             host: address of the node hosting the tempo server.
-            external_url: external address of the node hosting the tempo server.
+            external_url: external address of the node hosting the tempo server,
+                if an ingress is present.
             relation_name: an optional string name of the relation between `charm`
                 and the Tempo charmed service. The default is "tracing".
 
@@ -788,10 +786,7 @@ class TracingEndpointRequirer(Object):
 
         data = TracingProviderAppData.load(relation.data[relation.app])
         self.on.endpoint_changed.emit(  # type: ignore
-            relation,
-            data.host,
-            data.external_url,
-            [i.dict() for i in data.receivers]
+            relation, data.host, data.external_url, [i.dict() for i in data.receivers]
         )
 
     def _on_tracing_relation_broken(self, event: RelationBrokenEvent):
@@ -814,30 +809,32 @@ class TracingEndpointRequirer(Object):
         app_data = self.get_all_endpoints(relation)
         if not app_data:
             return None
-        receivers: List[Receiver] = list(filter(lambda i: i.protocol == protocol, app_data.receivers))
+        receivers: List[Receiver] = list(
+            filter(lambda i: i.protocol == protocol, app_data.receivers)
+        )
         if not receivers:
             logger.error(f"no receiver found with protocol={protocol!r}")
             return
         if len(receivers) > 1:
-            logger.error(f"too many receivers with protocol={protocol!r}; using first one. Found: {receivers}")
+            logger.error(
+                f"too many receivers with protocol={protocol!r}; using first one. Found: {receivers}"
+            )
             return
 
         receiver = receivers[0]
         # if there's an external_url argument (v2.5+), use that. Otherwise, we use the tempo local fqdn
         if app_data.external_url:
-            base_url = app_data.external_url
+            url = app_data.external_url
         else:
             # FIXME: if we don't get an external url but only a
             #  hostname, we don't know what scheme we need to be using. ASSUME HTTP
-            base_url = f"http://{app_data.host}:{receiver.port}"
+            url = f"http://{app_data.host}:{receiver.port}"
 
         if receiver.protocol.endswith("grpc"):
             # TCP protocols don't want an http/https scheme prefix
-            base_url = base_url.split('://')[1]
+            url = url.split("://")[1]
 
-        # TODO does this really work well with GRPC traces? there's grpc_pass in Tempo nginx so it should
-        suffix = receiver.path or ''
-        return f"{base_url}{suffix}"
+        return url
 
     def get_endpoint(
         self, protocol: ReceiverProtocol, relation: Optional[Relation] = None

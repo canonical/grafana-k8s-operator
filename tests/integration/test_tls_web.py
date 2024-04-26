@@ -22,6 +22,7 @@ grafana_resources = {
 }
 
 
+@pytest.mark.abort_on_fail
 async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.deploy(
