@@ -1535,7 +1535,7 @@ class GrafanaCharm(CharmBase):
     @property
     def server_ca_cert_path(self) -> Optional[str]:
         """Server CA certificate path for TLS tracing."""
-        return CA_CERT_PATH if self.cert_handler.enabled else None
+        return str(CA_CERT_PATH) if self.cert_handler.enabled else None
 
 
 if __name__ == "__main__":
