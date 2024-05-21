@@ -12,7 +12,7 @@ Charms seeking to push traces to Tempo, must do so using the `TracingEndpointReq
 object from this charm library. For the simplest use cases, using the `TracingEndpointRequirer`
 object only requires instantiating it, typically in the constructor of your charm. The
 `TracingEndpointRequirer` constructor requires the name of the relation over which a tracing endpoint
- is exposed by the Tempo charm, and a list of protocols it intends to send traces with. 
+ is exposed by the Tempo charm, and a list of protocols it intends to send traces with.
  This relation must use the `tracing` interface.
  The `TracingEndpointRequirer` object may be instantiated as follows
 
@@ -21,7 +21,7 @@ object only requires instantiating it, typically in the constructor of your char
     def __init__(self, *args):
         super().__init__(*args)
         # ...
-        self.tracing = TracingEndpointRequirer(self, 
+        self.tracing = TracingEndpointRequirer(self,
             protocols=['otlp_grpc', 'otlp_http', 'jaeger_http_thrift']
         )
         # ...
@@ -29,20 +29,20 @@ object only requires instantiating it, typically in the constructor of your char
 Note that the first argument (`self`) to `TracingEndpointRequirer` is always a reference to the
 parent charm.
 
-Alternatively to providing the list of requested protocols at init time, the charm can do it at 
-any point in time by calling the 
-`TracingEndpointRequirer.request_protocols(*protocol:str, relation:Optional[Relation])` method. 
+Alternatively to providing the list of requested protocols at init time, the charm can do it at
+any point in time by calling the
+`TracingEndpointRequirer.request_protocols(*protocol:str, relation:Optional[Relation])` method.
 Using this method also allows you to use per-relation protocols.
 
-Units of provider charms obtain the tempo endpoint to which they will push their traces by calling 
+Units of provider charms obtain the tempo endpoint to which they will push their traces by calling
 `TracingEndpointRequirer.get_endpoint(protocol: str)`, where `protocol` is, for example:
 - `otlp_grpc`
 - `otlp_http`
 - `zipkin`
 - `tempo`
 
-If the `protocol` is not in the list of protocols that the charm requested at endpoint set-up time, 
-the library will raise an error. 
+If the `protocol` is not in the list of protocols that the charm requested at endpoint set-up time,
+the library will raise an error.
 
 ## Requirer Library Usage
 
@@ -104,7 +104,7 @@ LIBAPI = 2
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 5
 
 PYDEPS = ["pydantic"]
 
@@ -308,6 +308,9 @@ class TracingProviderAppData(DatabagModel):  # noqa: D101
     external_url: Optional[str] = None
     """Server url. If an ingress is present, it will be the ingress address."""
 
+    internal_scheme: Optional[str] = None
+    """Scheme for internal communication. If it is present, it will be protocol accepted by the provider."""
+
 
 class TracingRequirerAppData(DatabagModel):  # noqa: D101
     """Application databag model for the tracing requirer."""
@@ -495,6 +498,7 @@ class TracingEndpointProvider(Object):
         host: str,
         external_url: Optional[str] = None,
         relation_name: str = DEFAULT_RELATION_NAME,
+        internal_scheme: Optional[Literal["http", "https"]] = "http",
     ):
         """Initialize.
 
@@ -505,6 +509,7 @@ class TracingEndpointProvider(Object):
                 if an ingress is present.
             relation_name: an optional string name of the relation between `charm`
                 and the Tempo charmed service. The default is "tracing".
+            internal_scheme: scheme to use with internal urls.
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -525,6 +530,7 @@ class TracingEndpointProvider(Object):
         self._host = host
         self._external_url = external_url
         self._relation_name = relation_name
+        self._internal_scheme = internal_scheme
         self.framework.observe(
             self._charm.on[relation_name].relation_joined, self._on_relation_event
         )
@@ -590,10 +596,11 @@ class TracingEndpointProvider(Object):
             try:
                 TracingProviderAppData(
                     host=self._host,
-                    external_url=self._external_url,
+                    external_url=self._external_url or None,
                     receivers=[
                         Receiver(port=port, protocol=protocol) for protocol, port in receivers
                     ],
+                    internal_scheme=self._internal_scheme,
                 ).dump(relation.data[self._charm.app])
 
             except ModelError as e:
@@ -822,11 +829,10 @@ class TracingEndpointRequirer(Object):
         receiver = receivers[0]
         # if there's an external_url argument (v2.5+), use that. Otherwise, we use the tempo local fqdn
         if app_data.external_url:
-            url = app_data.external_url
+            url = f"{app_data.external_url}:{receiver.port}"
         else:
-            # FIXME: if we don't get an external url but only a
-            #  hostname, we don't know what scheme we need to be using. ASSUME HTTP
-            url = f"http://{app_data.host}:{receiver.port}"
+            # if we didn't receive a scheme (old provider), we assume HTTP is used
+            url = f"{app_data.internal_scheme or 'http'}://{app_data.host}:{receiver.port}"
 
         if receiver.protocol.endswith("grpc"):
             # TCP protocols don't want an http/https scheme prefix

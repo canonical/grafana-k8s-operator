@@ -125,7 +125,7 @@ OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 
 @trace_charm(
     tracing_endpoint="tracing_endpoint",
-    server_cert="server_cert_path",
+    server_cert="server_ca_cert_path",
     extra_types=[
         AuthRequirer,
         CertHandler,
@@ -1533,9 +1533,9 @@ class GrafanaCharm(CharmBase):
         return None
 
     @property
-    def server_cert_path(self) -> Optional[str]:
-        """Server certificate path for TLS tracing."""
-        return GRAFANA_CRT_PATH
+    def server_ca_cert_path(self) -> Optional[str]:
+        """Server CA certificate path for TLS tracing."""
+        return str(CA_CERT_PATH) if self.cert_handler.enabled else None
 
 
 if __name__ == "__main__":
