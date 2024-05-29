@@ -34,3 +34,7 @@ pythonPlatform = "All"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.codespell]
+skip = ".git,.tox,build,venv*"
+ignore-words-list = "assertIn"
