@@ -778,7 +778,7 @@ class GrafanaCharm(CharmBase):
         tracing = self.tracing
         if not tracing.is_ready():
             return ""
-        endpoint = tracing.otlp_grpc_endpoint()
+        endpoint = tracing.get_endpoint("otlp_grpc")
         if endpoint is None:
             return ""
 
