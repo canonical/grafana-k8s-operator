@@ -1050,6 +1050,7 @@ class GrafanaDashboardProvider(Object):
 
         self.framework.observe(self._charm.on.leader_elected, self._update_all_dashboards_from_dir)
         self.framework.observe(self._charm.on.upgrade_charm, self._update_all_dashboards_from_dir)
+        self.framework.observe(self._charm.on.config_changed, self._update_all_dashboards_from_dir)
 
         self.framework.observe(
             self._charm.on[self._relation_name].relation_created,
