@@ -646,7 +646,6 @@ def _replace_template_fields(  # noqa: C901
 
     return dict_content
 
-
 def _template_panels(
     panels: dict,
     replacements: dict,
