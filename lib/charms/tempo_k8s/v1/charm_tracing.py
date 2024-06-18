@@ -126,15 +126,14 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import Span, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.trace import INVALID_SPAN, Tracer
+from opentelemetry.trace import get_current_span as otlp_get_current_span
 from opentelemetry.trace import (
-    INVALID_SPAN,
-    Tracer,
     get_tracer,
     get_tracer_provider,
     set_span_in_context,
     set_tracer_provider,
 )
-from opentelemetry.trace import get_current_span as otlp_get_current_span
 from ops.charm import CharmBase
 from ops.framework import Framework
 
@@ -147,7 +146,7 @@ LIBAPI = 1
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 6
+LIBPATCH = 9
 
 PYDEPS = ["opentelemetry-exporter-otlp-proto-http==1.21.0"]
 
@@ -295,8 +294,8 @@ def _setup_root_span_initializer(
         # self.handle = Handle(None, self.handle_kind, None)
 
         original_event_context = framework._event_context
-
-        _service_name = service_name or self.app.name
+        # default service name isn't just app name because it could conflict with the workload service name
+        _service_name = service_name or f"{self.app.name}-charm"
 
         resource = Resource.create(
             attributes={
@@ -509,18 +508,20 @@ def trace_type(cls: _T) -> _T:
             logger.info(f"skipping {method} (dunder)")
             continue
 
-        isstatic = isinstance(inspect.getattr_static(cls, method.__name__), staticmethod)
-        setattr(cls, name, trace_method(method, static=isstatic))
+        new_method = trace_method(method)
+        if isinstance(inspect.getattr_static(cls, method.__name__), staticmethod):
+            new_method = staticmethod(new_method)
+        setattr(cls, name, new_method)
 
     return cls
 
 
-def trace_method(method: _F, static: bool = False) -> _F:
+def trace_method(method: _F) -> _F:
     """Trace this method.
 
     A span will be opened when this method is called and closed when it returns.
     """
-    return _trace_callable(method, "method", static=static)
+    return _trace_callable(method, "method")
 
 
 def trace_function(function: _F) -> _F:
@@ -531,20 +532,14 @@ def trace_function(function: _F) -> _F:
     return _trace_callable(function, "function")
 
 
-def _trace_callable(callable: _F, qualifier: str, static: bool = False) -> _F:
+def _trace_callable(callable: _F, qualifier: str) -> _F:
     logger.info(f"instrumenting {callable}")
 
     # sig = inspect.signature(callable)
     @functools.wraps(callable)
     def wrapped_function(*args, **kwargs):  # type: ignore
         name = getattr(callable, "__qualname__", getattr(callable, "__name__", str(callable)))
-        with _span(f"{'(static) ' if static else ''}{qualifier} call: {name}"):  # type: ignore
-            if static:
-                # fixme: do we or don't we need [1:]?
-                #  The _trace_callable decorator doesn't always play nice with @staticmethods.
-                #  Sometimes it will receive 'self', sometimes it won't.
-                # return callable(*args, **kwargs)  # type: ignore
-                return callable(*args[1:], **kwargs)  # type: ignore
+        with _span(f"{qualifier} call: {name}"):  # type: ignore
             return callable(*args, **kwargs)  # type: ignore
 
     # wrapped_function.__signature__ = sig
