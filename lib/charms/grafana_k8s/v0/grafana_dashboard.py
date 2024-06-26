@@ -157,7 +157,7 @@ by adding itself as an observer for these events:
         self._on_dashboards_changed,
     )
 
-Dashboards can be retrieved the :meth:`dashboards`:
+Dashboards can be retrieved via the `dashboards` method:
 
 It will be returned in the format of:
 
