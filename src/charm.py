@@ -648,6 +648,9 @@ class GrafanaCharm(CharmBase):
         except ConnectionError:
             logger.exception("Could not update dashboards. Pebble shutting down?")
 
+        # Restart grafana here to pick up the changed dashboards
+        self.restart_grafana()
+
     def set_ports(self):
         """Open necessary (and close no longer needed) workload ports."""
         planned_ports = {OpenedPort("tcp", PORT)} if self.unit.is_leader() else set()
