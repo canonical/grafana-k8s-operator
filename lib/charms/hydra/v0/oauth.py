@@ -48,21 +48,14 @@ class SomeCharm(CharmBase):
 ```
 """
 
-import inspect
 import json
 import logging
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from typing import Dict, List, Mapping, Optional
 
 import jsonschema
-from ops.charm import (
-    CharmBase,
-    RelationBrokenEvent,
-    RelationChangedEvent,
-    RelationCreatedEvent,
-    RelationDepartedEvent,
-)
+from ops.charm import CharmBase, RelationBrokenEvent, RelationChangedEvent, RelationCreatedEvent
 from ops.framework import EventBase, EventSource, Handle, Object, ObjectEvents
 from ops.model import Relation, Secret, TooManyRelatedAppsError
 
@@ -74,12 +67,20 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 9
+
+PYDEPS = ["jsonschema"]
+
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_RELATION_NAME = "oauth"
-ALLOWED_GRANT_TYPES = ["authorization_code", "refresh_token", "client_credentials"]
+ALLOWED_GRANT_TYPES = [
+    "authorization_code",
+    "refresh_token",
+    "client_credentials",
+    "urn:ietf:params:oauth:grant-type:device_code",
+]
 ALLOWED_CLIENT_AUTHN_METHODS = ["client_secret_basic", "client_secret_post"]
 CLIENT_SECRET_FIELD = "secret"
 
@@ -127,6 +128,7 @@ OAUTH_PROVIDER_JSON_SCHEMA = {
         },
         "groups": {"type": "string", "default": None},
         "ca_chain": {"type": "array", "items": {"type": "string"}, "default": []},
+        "jwt_access_token": {"type": "string", "default": "False"},
     },
     "required": [
         "issuer_url",
@@ -153,13 +155,13 @@ OAUTH_REQUIRER_JSON_SCHEMA = {
             "type": "array",
             "default": None,
             "items": {
-                "enum": ["authorization_code", "client_credentials", "refresh_token"],
+                "enum": ALLOWED_GRANT_TYPES,
                 "type": "string",
             },
         },
         "token_endpoint_auth_method": {
             "type": "string",
-            "enum": ["client_secret_basic", "client_secret_post"],
+            "enum": ALLOWED_CLIENT_AUTHN_METHODS,
             "default": "client_secret_basic",
         },
     },
@@ -200,9 +202,30 @@ def _dump_data(data: Dict, schema: Optional[Dict] = None) -> Dict:
                 ret[k] = json.dumps(v)
             except json.JSONDecodeError as e:
                 raise DataValidationError(f"Failed to encode relation json: {e}")
+        elif isinstance(v, bool):
+            ret[k] = str(v)
         else:
             ret[k] = v
     return ret
+
+
+def strtobool(val: str) -> bool:
+    """Convert a string representation of truth to true (1) or false (0).
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
+    are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
+    'val' is anything else.
+    """
+    if not isinstance(val, str):
+        raise ValueError(f"invalid value type {type(val)}")
+
+    val = val.lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return True
+    elif val in ("n", "no", "f", "false", "off", "0"):
+        return False
+    else:
+        raise ValueError(f"invalid truth value {val}")
 
 
 class OAuthRelation(Object):
@@ -291,11 +314,22 @@ class OauthProviderConfig:
     client_secret: Optional[str] = None
     groups: Optional[str] = None
     ca_chain: Optional[str] = None
+    jwt_access_token: Optional[bool] = False
 
     @classmethod
     def from_dict(cls, dic: Dict) -> "OauthProviderConfig":
         """Generate OauthProviderConfig instance from dict."""
-        return cls(**{k: v for k, v in dic.items() if k in inspect.signature(cls).parameters})
+        jwt_access_token = False
+        if "jwt_access_token" in dic:
+            jwt_access_token = strtobool(dic["jwt_access_token"])
+        return cls(
+            jwt_access_token=jwt_access_token,
+            **{
+                k: v
+                for k, v in dic.items()
+                if k in [f.name for f in fields(cls)] and k != "jwt_access_token"
+            },
+        )
 
 
 class OAuthInfoChangedEvent(EventBase):
@@ -315,6 +349,7 @@ class OAuthInfoChangedEvent(EventBase):
 
     def restore(self, snapshot: Dict) -> None:
         """Restore event."""
+        super().restore(snapshot)
         self.client_id = snapshot["client_id"]
         self.client_secret_id = snapshot["client_secret_id"]
 
@@ -454,7 +489,9 @@ class OAuthRequirer(OAuthRelation):
             and "client_secret_id" in relation.data[relation.app]
         )
 
-    def get_provider_info(self, relation_id: Optional[int] = None) -> OauthProviderConfig:
+    def get_provider_info(
+        self, relation_id: Optional[int] = None
+    ) -> Optional[OauthProviderConfig]:
         """Get the provider information from the databag."""
         if len(self.model.relations) == 0:
             return None
@@ -647,8 +684,8 @@ class OAuthProvider(OAuthRelation):
             self._get_client_config_from_relation_data,
         )
         self.framework.observe(
-            events.relation_departed,
-            self._on_relation_departed,
+            events.relation_broken,
+            self._on_relation_broken,
         )
 
     def _get_client_config_from_relation_data(self, event: RelationChangedEvent) -> None:
@@ -696,7 +733,7 @@ class OAuthProvider(OAuthRelation):
     def _get_secret_label(self, relation: Relation) -> str:
         return f"client_secret_{relation.id}"
 
-    def _on_relation_departed(self, event: RelationDepartedEvent) -> None:
+    def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
         # Workaround for https://github.com/canonical/operator/issues/888
         self._pop_relation_data(event.relation.id)
 
@@ -725,6 +762,7 @@ class OAuthProvider(OAuthRelation):
         scope: str,
         groups: Optional[str] = None,
         ca_chain: Optional[str] = None,
+        jwt_access_token: Optional[bool] = False,
     ) -> None:
         """Put the provider information in the databag."""
         if not self.model.unit.is_leader():
@@ -738,6 +776,7 @@ class OAuthProvider(OAuthRelation):
             "userinfo_endpoint": userinfo_endpoint,
             "jwks_endpoint": jwks_endpoint,
             "scope": scope,
+            "jwt_access_token": jwt_access_token,
         }
         if groups:
             data["groups"] = groups
