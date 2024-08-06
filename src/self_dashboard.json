@@ -959,7 +959,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(grafana_http_request_duration_seconds_bucket{juju_charm=\"grafana-k8s\"}[$__interval])) by (le,handler))",
+          "expr": "histogram_quantile(0.95, sum(rate(grafana_http_request_duration_seconds_bucket{juju_charm=\"grafana-k8s\"}[$__rate_interval])) by (le,handler))",
           "interval": "",
           "legendFormat": "{{ handler }}",
           "refId": "A"
