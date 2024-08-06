@@ -17,6 +17,8 @@ target-version = ["py38"]
 [tool.ruff]
 line-length = 99
 extend-exclude = ["__pycache__", "*.egg_info"]
+
+[tool.ruff.lint]
 select = ["E", "W", "F", "C", "N", "R", "D"]
 # Ignore E501 because using black creates errors with this
 # Ignore D107 Missing docstring in __init__
@@ -24,7 +26,7 @@ ignore = ["W505", "E501", "D107", "C901", "N818", "RET504"]
 # D100, D101, D102, D103: Ignore missing docstrings in tests
 per-file-ignores = {"tests/*" = ["D100","D101","D102","D103"]}
 
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.pyright]
