@@ -8,7 +8,7 @@ from typing import Dict
 from unittest.mock import MagicMock, patch
 
 import ops
-from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
+from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.model import ActiveStatus
 from ops.testing import Harness
 
