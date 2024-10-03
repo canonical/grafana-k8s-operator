@@ -1,0 +1,26 @@
+# Import other goss.yaml files
+command:
+  validate-model-configuration:
+    exec: juju status -m cos-model grafana --format=json
+    exit-status: 0
+    stdout:
+      gjson:
+        applications.grafana.scale: 1
+        applications.grafana.application-status.current: active
+        applications.grafana.units.*.juju-status.current: idle
+        applications.grafana.units.*.workload-status.current: active
+        applications.grafana.relations.@keys:
+          - catalogue
+          - grafana
+          - grafana-dashboard
+          - grafana-source
+          - ingress
+          - metrics-endpoint
+          - replicas
+    stderr: ""
+
+  loki-can-reach-altermanager-internally:
+    exec: bash goss/scripts/compare-dashboard-uids.sh cos-model grafana alertmanager 
+    exit-status: 0
+    stdout: "Match found."
+    stderr: ""
