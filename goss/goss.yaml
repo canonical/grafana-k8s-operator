@@ -1,2 +1,2 @@
 gossfile:
-  g*.yaml: {}
+  goss-*.yaml: {}
