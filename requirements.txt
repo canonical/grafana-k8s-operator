@@ -1,7 +1,7 @@
 jinja2 < 3
 lightkube >= 0.11
 markupsafe == 2.0.1
-ops <= 2.16
+ops
 pyyaml
 urllib3
 jsonschema

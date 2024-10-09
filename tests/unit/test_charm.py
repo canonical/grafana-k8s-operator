@@ -117,6 +117,7 @@ k8s_resource_multipatch = patch.multiple(
 class BaseTestCharm(unittest.TestCase):
     def setUp(self, *unused):
         self.harness = Harness(GrafanaCharm)
+        self.harness.handle_exec('grafana', [], result=0)
         self.addCleanup(self.harness.cleanup)
 
         for p in [
@@ -125,8 +126,6 @@ class BaseTestCharm(unittest.TestCase):
             patch("socket.gethostbyname", new=lambda *args: "1.2.3.4"),
             k8s_resource_multipatch,
             patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
-            patch("ops.testing._TestingModelBackend.network_get"),
-            patch("ops.testing._TestingPebbleClient.exec", MagicMock()),
         ]:
             p.start()
             self.addCleanup(p.stop)
@@ -379,13 +378,13 @@ class TestCharm(BaseTestCharm):
 class TestCharmReplication(unittest.TestCase):
     def setUp(self, *unused):
         self.harness = Harness(GrafanaCharm)
+        self.harness.handle_exec('grafana', [], result=0)
         self.addCleanup(self.harness.cleanup)
 
         for p in [
             patch("lightkube.core.client.GenericSyncClient"),
             k8s_resource_multipatch,
             patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
-            patch("ops.testing._TestingPebbleClient.exec", MagicMock()),
         ]:
             p.start()
             self.addCleanup(p.stop)
@@ -399,7 +398,6 @@ class TestCharmReplication(unittest.TestCase):
         ).hexdigest()
 
     @patch("socket.getfqdn", lambda: "1.2.3.4")
-    @patch("ops.testing._TestingModelBackend.network_get")
     def test_primary_sets_correct_peer_data(self, mock_unit_ip):
         fake_network = {
             "bind-addresses": [
@@ -425,7 +423,6 @@ class TestCharmReplication(unittest.TestCase):
         self.assertEqual(unit_ip, replica_address)
 
     @patch("socket.getfqdn", lambda: "2.3.4.5")
-    @patch("ops.testing._TestingModelBackend.network_get")
     def test_replicas_get_correct_environment_variables(self, mock_unit_ip):
         fake_network = {
             "bind-addresses": [
