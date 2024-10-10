@@ -5,7 +5,7 @@
 import logging
 import unittest
 from typing import Dict
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import ops
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
@@ -33,7 +33,7 @@ class TestExternalUrl(unittest.TestCase):
 
     def setUp(self, *unused):
         self.harness = Harness(GrafanaCharm)
-        self.harness.handle_exec('grafana', [], result=0)
+        self.harness.handle_exec("grafana", [], result=0)
         self.addCleanup(self.harness.cleanup)
 
         model_name = "testmodel"
