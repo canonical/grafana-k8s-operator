@@ -35,12 +35,6 @@ variable "revision" {
   default     = null
 }
 
-variable "trust" {
-  description = "Equiv of juju deploy --trust"
-  type        = bool
-  default     = false
-}
-
 variable "units" {
   description = "Number of units"
   type        = number
