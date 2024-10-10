@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from scenario import Context
@@ -23,8 +23,6 @@ def ctx():
             is_ready=tautology,
         ),
         patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
-        patch("ops.testing._TestingModelBackend.network_get"),
-        patch("ops.testing._TestingPebbleClient.exec", MagicMock()),
     )
     for p in patches:
         p.__enter__()
