@@ -60,7 +60,7 @@ from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferRequires,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
+from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.charm import (
     ActionEvent,
     CharmBase,

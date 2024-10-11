@@ -110,7 +110,7 @@ parts:
   charm:
     # This is currently necessary because it cuts on packing times.
     # It can be removed when we have at least multithreading on charmcraft pack.
-    charm-binary-python-packages: [cryptography, jsonschema]
+    charm-binary-python-packages: [cryptography, jsonschema, pydantic, maturin]
     build-packages:
       - git
   static-sqlite3:
