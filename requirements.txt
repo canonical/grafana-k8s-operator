@@ -1,7 +1,8 @@
 jinja2 < 3
 lightkube >= 0.11
 markupsafe == 2.0.1
-ops
+# pinned to 2.16 as 2.17 breaks our unittests
+ops == 2.16
 pyyaml
 urllib3
 jsonschema
