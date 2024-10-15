@@ -1,6 +1,5 @@
 resource "juju_application" "grafana" {
   name = var.app_name
-  # Coordinator and worker must be in the same model
   model = var.model_name
   trust = true
   charm {
