@@ -1,5 +1,5 @@
 resource "juju_application" "grafana" {
-  name = var.app_name
+  name  = var.app_name
   model = var.model_name
   trust = true
   charm {
