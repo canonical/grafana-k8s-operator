@@ -13,12 +13,12 @@ output "requires" {
     ingress           = "ingress",
     oauth             = "oauth",
     receive_ca_cert   = "receive-ca-cert",
-    tracing           = "tracing"
+    tracing           = "tracing",
   }
 }
 
 output "provides" {
   value = {
-    metrics_endpoint = "metrics-endpoint"
+    metrics_endpoint = "metrics-endpoint",
   }
 }
