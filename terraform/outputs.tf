@@ -4,16 +4,16 @@ output "app_name" {
 
 output "requires" {
   value = {
-    catalogue = "catalogue",
-    certificates = "certificates",
-    database = "database",
-    grafana_auth = "grafana-auth",
+    catalogue         = "catalogue",
+    certificates      = "certificates",
+    database          = "database",
+    grafana_auth      = "grafana-auth",
     grafana_dashboard = "grafana-dashboard",
-    grafana_source = "grafana-source",
-    ingress = "ingress",
-    oauth = "oauth",
-    receive_ca_cert = "receive-ca-cert",
-    tracing = "tracing"
+    grafana_source    = "grafana-source",
+    ingress           = "ingress",
+    oauth             = "oauth",
+    receive_ca_cert   = "receive-ca-cert",
+    tracing           = "tracing"
   }
 }
 
