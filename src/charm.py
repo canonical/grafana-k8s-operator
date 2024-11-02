@@ -752,7 +752,7 @@ class GrafanaCharm(CharmBase):
         can be set in ENV variables, but leave for expansion later so we can
         hide auth secrets
         """
-        configs = [self._generate_tracing_config()]
+        configs = [self._generate_tracing_config(), self._generate_analytics_config()]
         if self.has_db:
             configs.append(self._generate_database_config())
         else:
@@ -794,6 +794,27 @@ class GrafanaCharm(CharmBase):
 
         # This is silly, but a ConfigParser() handles this nicer than
         # raw string manipulation
+        data = StringIO()
+        config_ini.write(data)
+        ret = data.getvalue()
+        return ret
+
+    def _generate_analytics_config(self) -> str:
+        """Generate analytics configuration.
+
+        Returns:
+            A string containing the analytics config to be stubbed into the config file.
+        """
+        if self.config["phone_home"]:
+            return ""
+        config_ini = configparser.ConfigParser()
+        # Ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#analytics
+        config_ini["analytics"] = {
+            "reporting_enabled": "false",
+            "check_for_updates": "false",
+            "check_for_plugin_updates": "false",
+        }
+
         data = StringIO()
         config_ini.write(data)
         ret = data.getvalue()
