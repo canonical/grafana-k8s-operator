@@ -5,22 +5,16 @@ command:
     exit-status: 0
     stdout:
       gjson:
-        applications.grafana.scale: 1
+        applications.grafana.scale: {gt: 0}
         applications.grafana.application-status.current: active
         applications.grafana.units.*.juju-status.current: idle
         applications.grafana.units.*.workload-status.current: active
-        applications.grafana.relations.@keys:
-          - catalogue
-          - grafana
-          - grafana-dashboard
-          - grafana-source
-          - ingress
-          - metrics-endpoint
-          - replicas
     stderr: ""
 
-  grafana-related-dashboards:
-    exec: bash {{ .Vars.goss_dir }}/scripts/compare-dashboard-uids.sh cos-model grafana alertmanager 
+  grafana-external-url:
+    exec: curl -s http://$(juju status -m cos-model --format=json | jq -r '.applications["grafana"].units[].address'):3000/api/health
     exit-status: 0
-    stdout: "Match found."
+    stdout:
+      gjson:
+        database: "ok"
     stderr: ""

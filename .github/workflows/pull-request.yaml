@@ -4,11 +4,23 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - feature/goss  # TODO - remove once merged to main
 
 jobs:
   pull-request:
     name: PR
-    uses: canonical/observability/.github/workflows/charm-pull-request.yaml@main
-    secrets: inherit
-    with:
-      ip-range: 10.64.140.43/30
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Goss
+        run: |
+          curl -L https://github.com/goss-org/goss/releases/download/v0.4.8/goss-linux-amd64 -o /usr/local/bin/goss
+          chmod +x /usr/local/bin/goss
+
+      - name: Inherited PR Workflow
+        uses: canonical/observability/.github/workflows/charm-pull-request.yaml@main
+        # TODO: The below option was removed because syntax does not allow it and should be inherited. Verify this!
+        # secrets: inherit
+        with:
+          ip-range: 10.64.140.43/30
