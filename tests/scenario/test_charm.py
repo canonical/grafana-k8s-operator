@@ -36,6 +36,7 @@ def test_reporting_disabled(ctx):
 
     config = ConfigParser()
     config.read(grafana_config_path)
+    assert "analytics" in config
     assert dict(config["analytics"]) == {
         'reporting_enabled': 'false',
         'check_for_updates': 'false',
