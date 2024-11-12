@@ -4,8 +4,11 @@ from configparser import ConfigParser
 
 def test_reporting_enabled(ctx):
     # GIVEN the "reporting_enabled" config option is set to True
-    state = State(leader=True, config={"reporting_enabled": True})
-    # WHEN config-changed fires
+    state = State(
+        leader=True,
+        config={"reporting_enabled": True},
+        containers=[Container(name="grafana"), Container(name="litestream")]
+    )    # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
 
     # THEN the config file is written WITHOUT the [analytics] section being rendered
@@ -22,7 +25,7 @@ def test_reporting_disabled(ctx):
     state = State(
         leader=True,
         config={"reporting_enabled": False},
-        containers=[Container(name="grafana")]
+        containers=[Container(name="grafana"), Container(name="litestream")]
     )
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
