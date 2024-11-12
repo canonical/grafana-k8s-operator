@@ -212,7 +212,7 @@ config:
         automatically deduced from it).
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
       type: string
-    phone_home:
+    reporting_enabled:
       description: |
         When disabled, Grafana will be configured to not send anonymous usage statistics to stats.grafana.org, nor
         periodically check for updates.

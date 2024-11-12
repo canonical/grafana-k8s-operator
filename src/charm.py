@@ -805,7 +805,7 @@ class GrafanaCharm(CharmBase):
         Returns:
             A string containing the analytics config to be stubbed into the config file.
         """
-        if self.config["phone_home"]:
+        if self.config["reporting_enabled"]:
             return ""
         config_ini = configparser.ConfigParser()
         # Ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#analytics
