@@ -2,16 +2,17 @@ from ops.testing import State, Container
 from configparser import ConfigParser
 
 
-containers = [Container(name="grafana", can_connect=True), Container(name="litestream", can_connect=True)]
+containers = [
+    Container(name="grafana", can_connect=True),
+    Container(name="litestream", can_connect=True),
+]
 
 
 def test_reporting_enabled(ctx):
     # GIVEN the "reporting_enabled" config option is set to True
     state = State(
-        leader=True,
-        config={"reporting_enabled": True},
-        containers=containers
-    )    # WHEN config-changed fires
+        leader=True, config={"reporting_enabled": True}, containers=containers
+    )  # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
 
     # THEN the config file is written WITHOUT the [analytics] section being rendered
@@ -25,11 +26,7 @@ def test_reporting_enabled(ctx):
 
 def test_reporting_disabled(ctx):
     # GIVEN the "reporting_enabled" config option is set to False
-    state = State(
-        leader=True,
-        config={"reporting_enabled": False},
-        containers=containers
-    )
+    state = State(leader=True, config={"reporting_enabled": False}, containers=containers)
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
 
@@ -41,9 +38,9 @@ def test_reporting_disabled(ctx):
     config.read(grafana_config_path)
     assert "analytics" in config
     assert dict(config["analytics"]) == {
-        'reporting_enabled': 'false',
-        'check_for_updates': 'false',
-        'check_for_plugin_updates': 'false',
+        "reporting_enabled": "false",
+        "check_for_updates": "false",
+        "check_for_plugin_updates": "false",
     }
 
     # AND the "grafana" service is restarted
