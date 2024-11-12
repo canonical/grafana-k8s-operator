@@ -85,7 +85,12 @@ async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_goss_validate(ops_test: OpsTest):
     # Run the goss validate with json format
+    goss_version = sh.goss("-v")
+    jst_output = sh.juju.status("--format=short")
     goss_output = sh.goss("-g", "goss/goss.yaml", "--vars-inline", '{"goss_dir": "goss"}', "v", "-f", "json")
+    logger.info(f"Goss failures:\n\n{goss_version}")
+    logger.info(f"Goss failures:\n\n{jst_output}")
+    logger.info(f"Goss failures:\n\n{goss_output}")
     # Parse the JSON output to extract the failed checks count
     goss_json = json.loads(goss_output)
     no_errors = goss_json["summary"]["failed-count"] == 0
