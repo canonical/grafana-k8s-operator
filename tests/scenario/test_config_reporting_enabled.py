@@ -10,9 +10,7 @@ containers = [
 
 def test_reporting_enabled(ctx):
     # GIVEN the "reporting_enabled" config option is set to True
-    state = State(
-        leader=True, config={"reporting_enabled": True}, containers=containers
-    )
+    state = State(leader=True, config={"reporting_enabled": True}, containers=containers)
 
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
