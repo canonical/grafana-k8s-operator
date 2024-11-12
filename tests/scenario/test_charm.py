@@ -1,4 +1,4 @@
-from ops.testing import State
+from ops.testing import State, Container
 from configparser import ConfigParser
 
 
@@ -18,8 +18,12 @@ def test_reporting_enabled(ctx):
 
 
 def test_reporting_disabled(ctx):
-    # GIVEN the "reporting_enabled" config option is set to True
-    state = State(leader=True, config={"reporting_enabled": False})
+    # GIVEN the "reporting_enabled" config option is set to False
+    state = State(
+        leader=True,
+        config={"reporting_enabled": False},
+        containers=[Container(name="grafana")]
+    )
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
 
