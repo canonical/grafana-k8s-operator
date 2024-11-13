@@ -1,7 +1,7 @@
 # Import other goss.yaml files
 command:
   grafana-application-configuration:
-    exec: juju status -m cos-model grafana --format=json
+    exec: juju status -m {{ .Vars.model_name }} grafana --format=json
     exit-status: 0
     stdout:
       gjson:
@@ -12,7 +12,7 @@ command:
     stderr: ""
 
   grafana-external-url:
-    exec: curl -s http://$(juju status -m cos-model --format=json | jq -r '.applications["grafana"].units[].address'):3000/api/health
+    exec: curl -s http://$(juju status -m {{ .Vars.model_name }} --format=json | jq -r '.applications["grafana"].units[].address'):3000/api/health
     exit-status: 0
     stdout:
       gjson:

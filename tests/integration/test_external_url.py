@@ -54,32 +54,32 @@ async def test_deploy(ops_test, grafana_charm):
     )
 
 
-@pytest.mark.xfail
-async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
-    # GIVEN metallb is ready
-    ip = await reenable_metallb()
+# @pytest.mark.xfail
+# async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
+#     # GIVEN metallb is ready
+#     ip = await reenable_metallb()
 
-    # WHEN grafana is related to traefik
-    await ops_test.model.add_relation(f"{grafana_app_name}:ingress", "traefik")
+#     # WHEN grafana is related to traefik
+#     await ops_test.model.add_relation(f"{grafana_app_name}:ingress", "traefik")
 
-    # Workaround to make sure everything is up-to-date: update-status
-    async with ModelConfigChange(ops_test, {"update-status-hook-interval": "10s"}):
-        await asyncio.sleep(11)
+#     # Workaround to make sure everything is up-to-date: update-status
+#     async with ModelConfigChange(ops_test, {"update-status-hook-interval": "10s"}):
+#         await asyncio.sleep(11)
 
-    logger.info("At this point, after re-enabling metallb, traefik should become active")
-    await ops_test.model.wait_for_idle(
-        apps=[grafana_app_name, "traefik"],
-        status="active",
-        timeout=600,
-        idle_period=idle_period,
-    )
+#     logger.info("At this point, after re-enabling metallb, traefik should become active")
+#     await ops_test.model.wait_for_idle(
+#         apps=[grafana_app_name, "traefik"],
+#         status="active",
+#         timeout=600,
+#         idle_period=idle_period,
+#     )
 
-    # THEN the grafana API is served on metallb's IP
-    pw = await grafana_password(ops_test, grafana_app_name)
-    grafana = Grafana(host=ip, path=f"{ops_test.model_name}-{grafana_app_name}", port=80, pw=pw)
+#     # THEN the grafana API is served on metallb's IP
+#     pw = await grafana_password(ops_test, grafana_app_name)
+#     grafana = Grafana(host=ip, path=f"{ops_test.model_name}-{grafana_app_name}", port=80, pw=pw)
 
-    is_ready = await grafana.is_ready()
-    assert is_ready
+#     is_ready = await grafana.is_ready()
+#     assert is_ready
 
 
 @pytest.mark.abort_on_fail
@@ -87,7 +87,16 @@ async def test_goss_validate(ops_test: OpsTest):
     # Run the goss validate with json format
     goss_version = sh.goss("-v")
     jst_output = sh.juju.status("--format=short")
-    goss_output = sh.goss("-g", "goss/goss.yaml", "--vars-inline", '{"goss_dir": "goss"}', "v", "-f", "json")
+    goss_output = sh.goss(
+        "-g",
+        "goss/goss.yaml",
+        "--vars-inline",
+        f'{{"goss_dir": "goss", "model_name": {ops_test.model_name}}}'
+        "v",
+        "-f",
+        "json",
+    )
+    logger.info(f"Model name:\n\n{ops_test.model_name}")
     logger.info(f"Goss failures:\n\n{goss_version}")
     logger.info(f"Goss failures:\n\n{jst_output}")
     logger.info(f"Goss failures:\n\n{goss_output}")

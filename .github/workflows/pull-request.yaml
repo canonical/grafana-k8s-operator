@@ -6,7 +6,7 @@ on:
       - main
   push:
     branches:
-      - feature/goss  # TODO - remove once merged to main
+      - goss-integration-tests  # TODO - remove once merged to main
 
 jobs:
   pull-request:
