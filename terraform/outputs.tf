@@ -15,7 +15,6 @@ output "endpoints" {
     oauth             = "oauth",
     receive_ca_cert   = "receive-ca-cert",
     tracing           = "tracing",
-    
     # Provides
     metrics_endpoint = "metrics-endpoint",
   }
