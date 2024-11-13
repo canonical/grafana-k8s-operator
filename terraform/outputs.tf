@@ -4,6 +4,7 @@ output "app_name" {
 
 output "endpoints" {
   value = {
+    # Requires
     catalogue         = "catalogue",
     certificates      = "certificates",
     database          = "database",
@@ -11,9 +12,11 @@ output "endpoints" {
     grafana_dashboard = "grafana-dashboard",
     grafana_source    = "grafana-source",
     ingress           = "ingress",
-    metrics_endpoint  = "metrics-endpoint",
     oauth             = "oauth",
     receive_ca_cert   = "receive-ca-cert",
     tracing           = "tracing",
+    
+    # Provides
+    metrics_endpoint = "metrics-endpoint",
   }
 }
