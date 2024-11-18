@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 import pytest
-from scenario import Context
+from ops.testing import Context
 
 from charm import GrafanaCharm
 
