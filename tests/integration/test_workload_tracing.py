@@ -51,5 +51,3 @@ async def test_workload_tracing_is_present(ops_test, grafana_charm):
         service_name=f"{app_name}",
         tls=False,
     )
-
-

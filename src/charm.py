@@ -767,7 +767,7 @@ class GrafanaCharm(CharmBase):
         self._configure()
 
     def _on_workload_tracing_endpoint_removed(self, event: RelationBrokenEvent) -> None:
-        """Removes workload tracing information from grafana's config"""
+        """Removes workload tracing information from grafana's config."""
         self._configure()
 
     def _generate_grafana_config(self) -> str:
