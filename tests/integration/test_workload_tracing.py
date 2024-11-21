@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 from helpers import oci_image, check_grafana_is_ready
-from test_helpers import deploy_cluster, get_traces_patiently, get_application_ip
+from test_helpers import deploy_tempo_cluster, get_traces_patiently, get_application_ip
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ async def test_setup_env(ops_test):
 @pytest.mark.abort_on_fail
 async def test_workload_tracing_is_present(ops_test, grafana_charm):
     logger.info("deploying tempo cluster")
-    await deploy_cluster(ops_test, TEMPO_APP_NAME)
+    await deploy_tempo_cluster(ops_test, TEMPO_APP_NAME)
 
     logger.info("deploying local charm")
     await ops_test.model.deploy(
