@@ -27,6 +27,7 @@ import secrets
 import socket
 import string
 import time
+from cosl import JujuTopology
 from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict, cast
@@ -159,6 +160,7 @@ class GrafanaCharm(CharmBase):
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
         self._stored.set_default(admin_password="")
+        self._topology = JujuTopology.from_charm(self)
 
         # -- cert_handler
         self.cert_handler = CertHandler(
@@ -1076,6 +1078,15 @@ class GrafanaCharm(CharmBase):
                     "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
                     # TODO: This toggle will be removed on grafana v10.3, remove it
                     "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
+                }
+            )
+
+        if self.workload_tracing.is_ready():
+            topology = self._topology
+            extra_info.update(
+                {
+                    "OTEL_RESOURCE_ATTRIBUTES": f"juju_application={topology.application},juju_model={topology.model}"
+                    + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
                 }
             )
 
