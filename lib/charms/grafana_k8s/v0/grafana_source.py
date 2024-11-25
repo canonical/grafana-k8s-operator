@@ -429,13 +429,13 @@ class GrafanaSourceProvider(Object):
                 continue
             self._set_sources(rel)
 
-    def get_source_uids(self) -> Dict[Relation, str]:
+    def get_source_uids(self) -> Dict[Relation, Dict[str, str]]:
         """Get the datasource UID(s) assigned by the remote end(s) to this datasource."""
         uids = {}
         for rel in self._charm.model.relations.get(self._relation_name, []):
             if not rel:
                 continue
-            uids[rel] = rel.data[rel.app]["datasource_uid"]
+            uids[rel] = json.loads(rel.data[rel.app]["datasource_uids"])
         return uids
 
     def _set_sources_from_event(self, event: RelationJoinedEvent) -> None:
