@@ -43,6 +43,7 @@ def test_datasource_sharing(ctx):
         "remote_host/1": "juju_foo_bar_baz_1",
     }
 
+
 def test_datasource_get():
     # GIVEN a datasource relation with two remote units
     local_ds_uids = {
@@ -58,28 +59,25 @@ def test_datasource_get():
                 {"model": "foo", "model_uuid": "bar", "application": "baz", "type": "tempo"}
             )
         },
-        remote_app_data={
-            "datasource_uids": json.dumps(local_ds_uids)
-        }
+        remote_app_data={"datasource_uids": json.dumps(local_ds_uids)},
     )
-    state = State(
-        leader=True, relations={datasource}
-    )
+    state = State(leader=True, relations={datasource})
 
     # WHEN relation-changed fires for a datasource relation
     class MyProviderCharm(CharmBase):
-        META={"name":"edgar",
-              "provides":{"grafana-source": {"interface": "grafana_datasource"}}}
+        META = {
+            "name": "edgar",
+            "provides": {"grafana-source": {"interface": "grafana_datasource"}},
+        }
 
         def __init__(self, framework: Framework):
             super().__init__(framework)
-            self.source_provider = GrafanaSourceProvider(self, "tempo",
-                                                         source_url="somehost",
-                                                         source_port="80")
+            self.source_provider = GrafanaSourceProvider(
+                self, "tempo", source_url="somehost", source_port="80"
+            )
 
     ctx = Context(MyProviderCharm, MyProviderCharm.META)
     with ctx(ctx.on.relation_changed(datasource), state) as mgr:
         charm = mgr.charm
         # THEN we can see our datasource uids via the provider
         assert list(charm.source_provider.get_source_uids().values())[0] == local_ds_uids
-
