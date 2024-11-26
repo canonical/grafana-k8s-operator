@@ -383,18 +383,6 @@ async def curl(ops_test: OpsTest, *, cert_dir: str, cert_path: str, ip_addr: str
     return stdout
 
 
-async def get_unit_address(ops_test: OpsTest, app_name, unit_no) -> str:
-    """Get address of the unit."""
-    status = await ops_test.model.get_status()
-    app = status["applications"][app_name]
-    if app is None:
-        assert False, f"no app exists with name {app_name}"
-    unit = app["units"].get(f"{app_name}/{unit_no}")
-    if unit is None:
-        assert False, f"no unit exists in app {app_name} with index {unit_no}"
-    return unit["address"]
-
-
 async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
     """Deploy and set up minio and s3-integrator needed for s3-like storage backend in the HA charms."""
     config = {
@@ -403,7 +391,7 @@ async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
     }
     await ops_test.model.deploy("minio", channel="edge", trust=True, config=config)
     await ops_test.model.wait_for_idle(apps=["minio"], status="active", timeout=2000)
-    minio_addr = await get_unit_address(ops_test, "minio", "0")
+    minio_addr = await unit_address(ops_test, "minio", 0)
 
     mc_client = Minio(
         f"{minio_addr}:9000",
