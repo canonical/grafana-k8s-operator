@@ -14,7 +14,7 @@ output "endpoints" {
     ingress           = "ingress",
     oauth             = "oauth",
     receive_ca_cert   = "receive-ca-cert",
-    tracing           = "tracing",
+    charm_tracing     = "charm_tracing",
     # Provides
     metrics_endpoint = "metrics-endpoint",
   }
