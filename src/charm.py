@@ -27,9 +27,10 @@ import secrets
 import socket
 import string
 import time
+from cosl import JujuTopology
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, cast, Optional
+from typing import Any, Callable, Dict, cast
 from urllib.parse import urlparse
 import subprocess
 
@@ -72,7 +73,7 @@ from ops.charm import (
     UpgradeCharmEvent,
 )
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, OpenedPort
@@ -124,8 +125,8 @@ OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 
 
 @trace_charm(
-    tracing_endpoint="tracing_endpoint",
-    server_cert="server_ca_cert_path",
+    tracing_endpoint="charm_tracing_endpoint",
+    server_cert="server_cert",
     extra_types=[
         AuthRequirer,
         CertHandler,
@@ -159,6 +160,7 @@ class GrafanaCharm(CharmBase):
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
         self._stored.set_default(admin_password="")
+        self._topology = JujuTopology.from_charm(self)
 
         # -- cert_handler
         self.cert_handler = CertHandler(
@@ -193,7 +195,15 @@ class GrafanaCharm(CharmBase):
                 self.cert_handler.on.cert_changed,  # pyright: ignore
             ],
         )
-        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http", "otlp_grpc"])
+        self.charm_tracing = TracingEndpointRequirer(
+            self, relation_name="charm-tracing", protocols=["otlp_http"]
+        )
+        self.workload_tracing = TracingEndpointRequirer(
+            self, relation_name="workload-tracing", protocols=["otlp_grpc"]
+        )
+        self.charm_tracing_endpoint, self.server_cert = charm_tracing_config(
+            self.charm_tracing, CA_CERT_PATH
+        )
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
@@ -264,6 +274,15 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(
             self.grafana_auth_requirer.on.auth_conf_available,  # pyright: ignore
             self._on_grafana_auth_conf_available,
+        )
+        # -- workload tracing observations
+        self.framework.observe(
+            self.workload_tracing.on.endpoint_changed,  # type: ignore
+            self._on_workload_tracing_endpoint_changed,
+        )
+        self.framework.observe(
+            self.workload_tracing.on.endpoint_removed,  # type: ignore
+            self._on_workload_tracing_endpoint_removed,
         )
 
         # -- cert_handler observations
@@ -745,6 +764,14 @@ class GrafanaCharm(CharmBase):
         # Cleanup the config file
         self._configure()
 
+    def _on_workload_tracing_endpoint_changed(self, event: RelationChangedEvent) -> None:
+        """Adds workload tracing information to grafana's config."""
+        self._configure()
+
+    def _on_workload_tracing_endpoint_removed(self, event: RelationBrokenEvent) -> None:
+        """Removes workload tracing information from grafana's config."""
+        self._configure()
+
     def _generate_grafana_config(self) -> str:
         """Generate a database configuration for Grafana.
 
@@ -775,7 +802,7 @@ class GrafanaCharm(CharmBase):
             A string containing the required tracing information to be stubbed into the config
             file.
         """
-        tracing = self.tracing
+        tracing = self.workload_tracing
         if not tracing.is_ready():
             return ""
         endpoint = tracing.get_endpoint("otlp_grpc")
@@ -1051,6 +1078,15 @@ class GrafanaCharm(CharmBase):
                     "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
                     # TODO: This toggle will be removed on grafana v10.3, remove it
                     "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
+                }
+            )
+
+        if self.workload_tracing.is_ready():
+            topology = self._topology
+            extra_info.update(
+                {
+                    "OTEL_RESOURCE_ATTRIBUTES": f"juju_application={topology.application},juju_model={topology.model}"
+                    + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
                 }
             )
 
@@ -1545,18 +1581,6 @@ class GrafanaCharm(CharmBase):
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
         """Event handler for the oauth_info_changed event."""
         self._configure()
-
-    @property
-    def tracing_endpoint(self) -> Optional[str]:
-        """Tempo endpoint for charm tracing."""
-        if self.tracing.is_ready():
-            return self.tracing.get_endpoint("otlp_http")
-        return None
-
-    @property
-    def server_ca_cert_path(self) -> Optional[str]:
-        """Server CA certificate path for TLS tracing."""
-        return str(CA_CERT_PATH) if self.cert_handler.enabled else None
 
 
 if __name__ == "__main__":

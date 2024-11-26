@@ -71,9 +71,16 @@ requires:
     description: |
       Receive oauth server's info and a set of client credentials.
       This relation can be used to integrate grafana with an oAuth2/OIDC Provider.
-  tracing:
-    interface: tracing
+  charm-tracing:
+    description: |
+      Enables sending charm traces to a distributed tracing backend such as Tempo.
     limit: 1
+    interface: tracing
+  workload-tracing:
+    description: |
+      Enables sending workload traces to a distributed tracing backend such as Tempo.
+    limit: 1
+    interface: tracing
 
 provides:
   metrics-endpoint:
