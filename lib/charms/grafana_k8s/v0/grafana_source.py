@@ -676,6 +676,12 @@ class GrafanaSourceConsumer(Object):
                     self._remove_source(host["source_name"])
 
             self.set_peer_data("sources", stored_sources)
+
+            # remove this datasource name from the published datasource names shared with the datasource units
+            self._publish_source_uids(
+                event.relation, {ds["unit"]: ds["source_name"] for ds in stored_sources[rel_id]}
+            )
+
             return True
         return False
 
