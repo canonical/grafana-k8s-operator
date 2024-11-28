@@ -679,7 +679,7 @@ class GrafanaSourceConsumer(Object):
 
             # remove this datasource name from the published datasource names shared with the datasource units
             self._publish_source_uids(
-                event.relation, {ds["unit"]: ds["source_name"] for ds in stored_sources[rel_id]}
+                event.relation, {ds["unit"]: ds["source_name"] for ds in removed_source}
             )
 
             return True
