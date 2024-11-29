@@ -76,7 +76,7 @@ from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, OpenedPort
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port
 
 from ops.pebble import (
     APIError,
@@ -669,7 +669,7 @@ class GrafanaCharm(CharmBase):
 
     def set_ports(self):
         """Open necessary (and close no longer needed) workload ports."""
-        planned_ports = {OpenedPort("tcp", PORT)} if self.unit.is_leader() else set()
+        planned_ports = {Port(protocol="tcp", port=PORT)} if self.unit.is_leader() else set()
         actual_ports = self.unit.opened_ports()
 
         # Ports may change across an upgrade, so need to sync
@@ -957,12 +957,7 @@ class GrafanaCharm(CharmBase):
 
             if self._poll_container(self.containers["workload"].can_connect):
                 # We should also make sure sqlite is in WAL mode for replication
-                self.containers["workload"].push(
-                    "/usr/local/bin/sqlite3",
-                    Path("sqlite-static").read_bytes(),
-                    permissions=0o755,
-                    make_dirs=True,
-                )
+                self._push_sqlite_static()
 
                 pragma = self.containers["workload"].exec(
                     [
@@ -1321,7 +1316,9 @@ class GrafanaCharm(CharmBase):
 
         return self._stored.admin_password  # type: ignore
 
-    def _poll_container(self, func: Callable, timeout: float = 2.0, delay: float = 0.1) -> bool:
+    def _poll_container(
+        self, func: Callable[[], bool], timeout: float = 2.0, delay: float = 0.1
+    ) -> bool:
         """Try to poll the container to work around Container.is_connect() being point-in-time.
 
         Args:
@@ -1581,6 +1578,15 @@ class GrafanaCharm(CharmBase):
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
         """Event handler for the oauth_info_changed event."""
         self._configure()
+
+    def _push_sqlite_static(self):
+        # for ease of mocking in unittests, this is a standalone function
+        self.containers["workload"].push(
+            "/usr/local/bin/sqlite3",
+            Path("sqlite-static").read_bytes(),
+            permissions=0o755,
+            make_dirs=True,
+        )
 
 
 if __name__ == "__main__":

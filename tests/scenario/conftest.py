@@ -13,6 +13,7 @@ def tautology(*_, **__) -> bool:
 @pytest.fixture
 def ctx():
     patches = (
+        patch("charm.GrafanaCharm._push_sqlite_static", new=lambda _: None),
         patch("lightkube.core.client.GenericSyncClient"),
         patch("socket.getfqdn", new=lambda *args: "grafana-k8s-0.testmodel.svc.cluster.local"),
         patch("socket.gethostbyname", new=lambda *args: "1.2.3.4"),
