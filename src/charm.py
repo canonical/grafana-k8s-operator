@@ -27,9 +27,10 @@ import secrets
 import socket
 import string
 import time
+from cosl import JujuTopology
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, cast, Optional
+from typing import Any, Callable, Dict, cast
 from urllib.parse import urlparse
 import subprocess
 
@@ -60,7 +61,7 @@ from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferRequires,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
+from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.charm import (
     ActionEvent,
     CharmBase,
@@ -71,11 +72,11 @@ from ops.charm import (
     RelationJoinedEvent,
     UpgradeCharmEvent,
 )
-from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
+from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, OpenedPort
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port
 
 from ops.pebble import (
     APIError,
@@ -124,8 +125,8 @@ OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 
 
 @trace_charm(
-    tracing_endpoint="tracing_endpoint",
-    server_cert="server_ca_cert_path",
+    tracing_endpoint="charm_tracing_endpoint",
+    server_cert="server_cert",
     extra_types=[
         AuthRequirer,
         CertHandler,
@@ -159,6 +160,7 @@ class GrafanaCharm(CharmBase):
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
         self._stored.set_default(admin_password="")
+        self._topology = JujuTopology.from_charm(self)
 
         # -- cert_handler
         self.cert_handler = CertHandler(
@@ -193,7 +195,15 @@ class GrafanaCharm(CharmBase):
                 self.cert_handler.on.cert_changed,  # pyright: ignore
             ],
         )
-        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http", "otlp_grpc"])
+        self.charm_tracing = TracingEndpointRequirer(
+            self, relation_name="charm-tracing", protocols=["otlp_http"]
+        )
+        self.workload_tracing = TracingEndpointRequirer(
+            self, relation_name="workload-tracing", protocols=["otlp_grpc"]
+        )
+        self.charm_tracing_endpoint, self.server_cert = charm_tracing_config(
+            self.charm_tracing, CA_CERT_PATH
+        )
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
@@ -264,6 +274,15 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(
             self.grafana_auth_requirer.on.auth_conf_available,  # pyright: ignore
             self._on_grafana_auth_conf_available,
+        )
+        # -- workload tracing observations
+        self.framework.observe(
+            self.workload_tracing.on.endpoint_changed,  # type: ignore
+            self._on_workload_tracing_endpoint_changed,
+        )
+        self.framework.observe(
+            self.workload_tracing.on.endpoint_removed,  # type: ignore
+            self._on_workload_tracing_endpoint_removed,
         )
 
         # -- cert_handler observations
@@ -650,7 +669,7 @@ class GrafanaCharm(CharmBase):
 
     def set_ports(self):
         """Open necessary (and close no longer needed) workload ports."""
-        planned_ports = {OpenedPort("tcp", PORT)} if self.unit.is_leader() else set()
+        planned_ports = {Port(protocol="tcp", port=PORT)} if self.unit.is_leader() else set()
         actual_ports = self.unit.opened_ports()
 
         # Ports may change across an upgrade, so need to sync
@@ -745,6 +764,14 @@ class GrafanaCharm(CharmBase):
         # Cleanup the config file
         self._configure()
 
+    def _on_workload_tracing_endpoint_changed(self, event: RelationChangedEvent) -> None:
+        """Adds workload tracing information to grafana's config."""
+        self._configure()
+
+    def _on_workload_tracing_endpoint_removed(self, event: RelationBrokenEvent) -> None:
+        """Removes workload tracing information from grafana's config."""
+        self._configure()
+
     def _generate_grafana_config(self) -> str:
         """Generate a database configuration for Grafana.
 
@@ -752,7 +779,7 @@ class GrafanaCharm(CharmBase):
         can be set in ENV variables, but leave for expansion later so we can
         hide auth secrets
         """
-        configs = [self._generate_tracing_config()]
+        configs = [self._generate_tracing_config(), self._generate_analytics_config()]
         if self.has_db:
             configs.append(self._generate_database_config())
         else:
@@ -775,7 +802,7 @@ class GrafanaCharm(CharmBase):
             A string containing the required tracing information to be stubbed into the config
             file.
         """
-        tracing = self.tracing
+        tracing = self.workload_tracing
         if not tracing.is_ready():
             return ""
         endpoint = tracing.get_endpoint("otlp_grpc")
@@ -794,6 +821,27 @@ class GrafanaCharm(CharmBase):
 
         # This is silly, but a ConfigParser() handles this nicer than
         # raw string manipulation
+        data = StringIO()
+        config_ini.write(data)
+        ret = data.getvalue()
+        return ret
+
+    def _generate_analytics_config(self) -> str:
+        """Generate analytics configuration.
+
+        Returns:
+            A string containing the analytics config to be stubbed into the config file.
+        """
+        if self.config["reporting_enabled"]:
+            return ""
+        config_ini = configparser.ConfigParser()
+        # Ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#analytics
+        config_ini["analytics"] = {
+            "reporting_enabled": "false",
+            "check_for_updates": "false",
+            "check_for_plugin_updates": "false",
+        }
+
         data = StringIO()
         config_ini.write(data)
         ret = data.getvalue()
@@ -909,12 +957,7 @@ class GrafanaCharm(CharmBase):
 
             if self._poll_container(self.containers["workload"].can_connect):
                 # We should also make sure sqlite is in WAL mode for replication
-                self.containers["workload"].push(
-                    "/usr/local/bin/sqlite3",
-                    Path("sqlite-static").read_bytes(),
-                    permissions=0o755,
-                    make_dirs=True,
-                )
+                self._push_sqlite_static()
 
                 pragma = self.containers["workload"].exec(
                     [
@@ -1030,6 +1073,15 @@ class GrafanaCharm(CharmBase):
                     "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
                     # TODO: This toggle will be removed on grafana v10.3, remove it
                     "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
+                }
+            )
+
+        if self.workload_tracing.is_ready():
+            topology = self._topology
+            extra_info.update(
+                {
+                    "OTEL_RESOURCE_ATTRIBUTES": f"juju_application={topology.application},juju_model={topology.model}"
+                    + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
                 }
             )
 
@@ -1264,7 +1316,9 @@ class GrafanaCharm(CharmBase):
 
         return self._stored.admin_password  # type: ignore
 
-    def _poll_container(self, func: Callable, timeout: float = 2.0, delay: float = 0.1) -> bool:
+    def _poll_container(
+        self, func: Callable[[], bool], timeout: float = 2.0, delay: float = 0.1
+    ) -> bool:
         """Try to poll the container to work around Container.is_connect() being point-in-time.
 
         Args:
@@ -1525,17 +1579,14 @@ class GrafanaCharm(CharmBase):
         """Event handler for the oauth_info_changed event."""
         self._configure()
 
-    @property
-    def tracing_endpoint(self) -> Optional[str]:
-        """Tempo endpoint for charm tracing."""
-        if self.tracing.is_ready():
-            return self.tracing.get_endpoint("otlp_http")
-        return None
-
-    @property
-    def server_ca_cert_path(self) -> Optional[str]:
-        """Server CA certificate path for TLS tracing."""
-        return str(CA_CERT_PATH) if self.cert_handler.enabled else None
+    def _push_sqlite_static(self):
+        # for ease of mocking in unittests, this is a standalone function
+        self.containers["workload"].push(
+            "/usr/local/bin/sqlite3",
+            Path("sqlite-static").read_bytes(),
+            permissions=0o755,
+            make_dirs=True,
+        )
 
 
 if __name__ == "__main__":

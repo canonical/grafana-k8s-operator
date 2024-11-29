@@ -1,7 +1,7 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
-from scenario import Context
+from ops.testing import Context
 
 from charm import GrafanaCharm
 
@@ -13,6 +13,7 @@ def tautology(*_, **__) -> bool:
 @pytest.fixture
 def ctx():
     patches = (
+        patch("charm.GrafanaCharm._push_sqlite_static", new=lambda _: None),
         patch("lightkube.core.client.GenericSyncClient"),
         patch("socket.getfqdn", new=lambda *args: "grafana-k8s-0.testmodel.svc.cluster.local"),
         patch("socket.gethostbyname", new=lambda *args: "1.2.3.4"),
@@ -23,8 +24,6 @@ def ctx():
             is_ready=tautology,
         ),
         patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
-        patch("ops.testing._TestingModelBackend.network_get"),
-        patch("ops.testing._TestingPebbleClient.exec", MagicMock()),
     )
     for p in patches:
         p.__enter__()

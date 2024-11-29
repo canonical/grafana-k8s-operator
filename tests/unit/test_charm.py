@@ -117,6 +117,7 @@ k8s_resource_multipatch = patch.multiple(
 class BaseTestCharm(unittest.TestCase):
     def setUp(self, *unused):
         self.harness = Harness(GrafanaCharm)
+        self.harness.handle_exec("grafana", [], result=0)
         self.addCleanup(self.harness.cleanup)
 
         for p in [
@@ -125,8 +126,6 @@ class BaseTestCharm(unittest.TestCase):
             patch("socket.gethostbyname", new=lambda *args: "1.2.3.4"),
             k8s_resource_multipatch,
             patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
-            patch("ops.testing._TestingModelBackend.network_get"),
-            patch("ops.testing._TestingPebbleClient.exec", MagicMock()),
         ]:
             p.start()
             self.addCleanup(p.stop)
@@ -379,13 +378,13 @@ class TestCharm(BaseTestCharm):
 class TestCharmReplication(unittest.TestCase):
     def setUp(self, *unused):
         self.harness = Harness(GrafanaCharm)
+        self.harness.handle_exec("grafana", [], result=0)
         self.addCleanup(self.harness.cleanup)
 
         for p in [
             patch("lightkube.core.client.GenericSyncClient"),
             k8s_resource_multipatch,
             patch.object(GrafanaCharm, "grafana_version", "0.1.0"),
-            patch("ops.testing._TestingPebbleClient.exec", MagicMock()),
         ]:
             p.start()
             self.addCleanup(p.stop)
@@ -399,17 +398,7 @@ class TestCharmReplication(unittest.TestCase):
         ).hexdigest()
 
     @patch("socket.getfqdn", lambda: "1.2.3.4")
-    @patch("ops.testing._TestingModelBackend.network_get")
-    def test_primary_sets_correct_peer_data(self, mock_unit_ip):
-        fake_network = {
-            "bind-addresses": [
-                {
-                    "interface-name": "eth0",
-                    "addresses": [{"hostname": "grafana-0", "value": "1.2.3.4"}],
-                }
-            ]
-        }
-        mock_unit_ip.return_value = fake_network
+    def test_primary_sets_correct_peer_data(self):
 
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("grafana")
@@ -419,23 +408,14 @@ class TestCharmReplication(unittest.TestCase):
         rel = self.harness.model.get_relation("grafana")
         self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
 
+        self.harness.add_network("1.2.3.4", endpoint="grafana")
         unit_ip = str(self.harness.charm.model.get_binding("grafana").network.bind_address)
         replica_address = self.harness.charm.get_peer_data("replica_primary")
 
         self.assertEqual(unit_ip, replica_address)
 
     @patch("socket.getfqdn", lambda: "2.3.4.5")
-    @patch("ops.testing._TestingModelBackend.network_get")
-    def test_replicas_get_correct_environment_variables(self, mock_unit_ip):
-        fake_network = {
-            "bind-addresses": [
-                {
-                    "interface-name": "eth0",
-                    "addresses": [{"hostname": "grafana-0", "value": "2.3.4.5"}],
-                }
-            ]
-        }
-        mock_unit_ip.return_value = fake_network
+    def test_replicas_get_correct_environment_variables(self):
 
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("grafana")

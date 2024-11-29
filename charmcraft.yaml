@@ -71,9 +71,16 @@ requires:
     description: |
       Receive oauth server's info and a set of client credentials.
       This relation can be used to integrate grafana with an oAuth2/OIDC Provider.
-  tracing:
-    interface: tracing
+  charm-tracing:
+    description: |
+      Enables sending charm traces to a distributed tracing backend such as Tempo.
     limit: 1
+    interface: tracing
+  workload-tracing:
+    description: |
+      Enables sending workload traces to a distributed tracing backend such as Tempo.
+    limit: 1
+    interface: tracing
 
 provides:
   metrics-endpoint:
@@ -110,7 +117,7 @@ parts:
   charm:
     # This is currently necessary because it cuts on packing times.
     # It can be removed when we have at least multithreading on charmcraft pack.
-    charm-binary-python-packages: [cryptography, jsonschema]
+    charm-binary-python-packages: [cryptography, jsonschema, pydantic, maturin]
     build-packages:
       - git
   static-sqlite3:
@@ -212,3 +219,14 @@ config:
         automatically deduced from it).
         See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
       type: string
+    reporting_enabled:
+      description: |
+        When disabled, Grafana will be configured to not send anonymous usage statistics to stats.grafana.org, nor
+        periodically check for updates.
+        It is very helpful to the Grafana project, so please leave this enabled.
+        
+        When enabled, Grafana will use its default values for analytics.
+        
+        Ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#analytics
+      type: boolean
+      default: true
