@@ -438,7 +438,7 @@ class GrafanaSourceProvider(Object):
         for rel in self._charm.model.relations.get(self._relation_name, []):
             if not rel:
                 continue
-            uids[rel.app.name] = json.loads(rel.data[rel.app].get("datasource_uids","{}"))
+            uids[rel.app.name] = json.loads(rel.data[rel.app].get("datasource_uids", "{}"))
         return uids
 
     def _set_sources_from_event(self, event: RelationJoinedEvent) -> None:

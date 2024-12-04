@@ -82,6 +82,7 @@ def test_datasource_get():
         # THEN we can see our datasource uids via the provider
         assert list(charm.source_provider.get_source_uids().values())[0] == local_ds_uids
 
+
 def test_datasource_get_nodata():
     # GIVEN a datasource relation with two remote units, but which hasn't shared any datasource uids
     datasource = Relation(
