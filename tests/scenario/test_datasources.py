@@ -81,3 +81,38 @@ def test_datasource_get():
         charm = mgr.charm
         # THEN we can see our datasource uids via the provider
         assert list(charm.source_provider.get_source_uids().values())[0] == local_ds_uids
+
+def test_datasource_get_nodata():
+    # GIVEN a datasource relation with two remote units, but which hasn't shared any datasource uids
+    datasource = Relation(
+        "grafana-source",
+        remote_app_name="remote_host",
+        local_unit_data={"grafana_source_host": "somehost:80"},
+        local_app_data={
+            "grafana_source_data": json.dumps(
+                {"model": "foo", "model_uuid": "bar", "application": "baz", "type": "tempo"}
+            )
+        },
+        # no remote app data:
+        # {"datasource_uids": json.dumps(local_ds_uids)},
+    )
+    state = State(leader=True, relations={datasource})
+
+    # WHEN relation-changed fires for a datasource relation
+    class MyProviderCharm(CharmBase):
+        META = {
+            "name": "edgar",
+            "provides": {"grafana-source": {"interface": "grafana_datasource"}},
+        }
+
+        def __init__(self, framework: Framework):
+            super().__init__(framework)
+            self.source_provider = GrafanaSourceProvider(
+                self, "tempo", source_url="somehost", source_port="80"
+            )
+
+    ctx = Context(MyProviderCharm, MyProviderCharm.META)
+    with ctx(ctx.on.relation_changed(datasource), state) as mgr:
+        charm = mgr.charm
+        # THEN we can see our datasource uids via the provider
+        assert list(charm.source_provider.get_source_uids().values())[0] == {}
