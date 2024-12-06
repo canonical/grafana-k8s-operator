@@ -1061,7 +1061,7 @@ class GrafanaDashboardProvider(Object):
             self._on_grafana_dashboard_relation_changed,
         )
 
-    def add_dashboard(self, content: str, inject_dropdowns: bool = True) -> None:
+    def add_dashboard(self, content: str, inject_dropdowns: bool = True, key: Optional[str] = None) -> None:
         """Add a dashboard to the relation managed by this :class:`GrafanaDashboardProvider`.
 
         Args:
@@ -1070,6 +1070,8 @@ class GrafanaDashboardProvider(Object):
                 context.
             inject_dropdowns: a :boolean: indicating whether topology dropdowns should be
                 added to the dashboard
+            key: An optional specifier used to render the dashboard's UID. If given, will be used together with the
+                charm name to generate a UID. Otherwise, will use part of the dashboard json to generate a UID.
         """
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
@@ -1084,7 +1086,7 @@ class GrafanaDashboardProvider(Object):
         stored_dashboard_templates[id] = self._content_to_dashboard_object(
             encoded_dashboard, inject_dropdowns
         )
-        stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
+        stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(key or id)
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -1138,7 +1140,7 @@ class GrafanaDashboardProvider(Object):
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes()), inject_dropdowns
                 )
-                stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
+                stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(path)
 
             self._stored.dashboard_templates = stored_dashboard_templates
 
@@ -1154,8 +1156,10 @@ class GrafanaDashboardProvider(Object):
 
         Returns: A hash string.
         """
-        raw_dashboard_alt_uid = "{}-{}".format(self._charm.meta.name, key)
-        return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
+        raw_dashboard_alt_uid = f"{self._charm.meta.name}-{key}"
+        # The max length grafana allows for a dashboard uid is 40, let's use it.
+        # https://grafana.com/docs/grafana/latest/developers/http_api/dashboard/#identifier-id-vs-unique-identifier-uid
+        return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(40)
 
     def _reinitialize_dashboard_data(self, inject_dropdowns: bool = True) -> None:
         """Triggers a reload of dashboard outside of an eventing workflow.
@@ -1515,9 +1519,19 @@ class GrafanaDashboardConsumer(Object):
         """Add an uid to the dashboard if it is not present."""
         dashboard_dict = json.loads(dashboard)
 
-        if not dashboard_dict.get("uid", None) and "dashboard_alt_uid" in template:
-            dashboard_dict["uid"] = template["dashboard_alt_uid"]
+        # In 2024/12 we switched to always using the dashboard_alt_uid.
+        # https://github.com/canonical/observability/blob/main/decision-records/2024-08-29--dashboard-uid-collision.md
+        # For backwards compatibility, we'll use the dashboard's uid if the alt-uid key is not present.
+        if "dashboard_alt_uid" in template:
+            uid = template["dashboard_alt_uid"]
+        elif "uid" in dashboard_dict:
+            uid = dashboard_dict["uid"]
+        else:
+            # If both alt-uid and dashboard json uid are missing, we do not set a uid key at all.
+            uid = None
 
+        if uid:
+            dashboard_dict["uid"] = uid
         return json.dumps(dashboard_dict)
 
     def _remove_all_dashboards_for_relation(self, relation: Relation) -> None:
