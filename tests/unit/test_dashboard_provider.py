@@ -157,7 +157,7 @@ class TestDashboardProvider(unittest.TestCase):
             "charm": "provider-tester",
             "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAEdGhpcmQAAAAAtr5hbOrisy0AAR0FuC2Arx+2830BAAAAAARZWg==",
             "inject_dropdowns": True,
-            "dashboard_alt_uid": "9f3746a8f16304dd",
+            "dashboard_alt_uid": generate_dashboard_uid("prog:uC2Arx+2"),
             "juju_topology": {
                 "model": "testing",
                 "model_uuid": "abcdefgh-1234",
