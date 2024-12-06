@@ -15,6 +15,8 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
 
+from lib.charms.grafana_k8s.v0.grafana_dashboard import generate_dashboard_uid
+
 if "unittest.util" in __import__("sys").modules:
     # Show full diff in self.assertEqual.
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
@@ -24,7 +26,7 @@ RELATION_TEMPLATES_DATA = {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAKdGVzdF9maXJzdAoAAIC4BxCQe2GHAAEjC8Ib/QkftvN9AQAAAAAEWVo=",
         "inject_dropdowns": True,
-        "dashboard_alt_uid": "6291687b37603a46",
+        "dashboard_alt_uid": generate_dashboard_uid("provider-tester", "first.tmpl"),
         "juju_topology": {
             "model": "testing",
             "model_uuid": "abcdefgh-1234",
@@ -36,7 +38,7 @@ RELATION_TEMPLATES_DATA = {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9zZWNvbmQKAEby/qNFFKmEAAEkDKYY2NgftvN9AQAAAAAEWVo=",
         "inject_dropdowns": True,
-        "dashboard_alt_uid": "a44939b79a5ba1d4",
+        "dashboard_alt_uid": generate_dashboard_uid("provider-tester", "other.json"),
         "juju_topology": {
             "model": "testing",
             "model_uuid": "abcdefgh-1234",
@@ -51,7 +53,7 @@ MANUAL_TEMPLATE_DATA = {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
         "inject_dropdowns": True,
-        "dashboard_alt_uid": "0b73d01f7b214e98",
+        "dashboard_alt_uid": generate_dashboard_uid("provider-tester", "prog:uC2Arx+2"),
         "juju_topology": {
             "application": "provider-tester",
             "model": "testing",

@@ -964,6 +964,19 @@ class GrafanaProviderEvents(ObjectEvents):
     dashboard_status_changed = EventSource(GrafanaDashboardEvent)
 
 
+def generate_dashboard_uid(*args: str) -> str:
+    """Generate a dashboard uid from a collection of strings.
+
+    Args:
+        args: A collection of strings used to calculate the uid.
+
+    Returns: A uid based on the input args.
+    """
+    # The max length grafana allows for a dashboard uid is 40, let's use it.
+    # https://grafana.com/docs/grafana/latest/developers/http_api/dashboard/#identifier-id-vs-unique-identifier-uid
+    return hashlib.shake_256("-".join(args).encode("utf-8")).hexdigest(40)
+
+
 class GrafanaDashboardProvider(Object):
     """An API to provide Grafana dashboards to a Grafana charm."""
 
@@ -1160,10 +1173,7 @@ class GrafanaDashboardProvider(Object):
 
         Returns: A hash string.
         """
-        raw_dashboard_alt_uid = f"{self._charm.meta.name}-{key}"
-        # The max length grafana allows for a dashboard uid is 40, let's use it.
-        # https://grafana.com/docs/grafana/latest/developers/http_api/dashboard/#identifier-id-vs-unique-identifier-uid
-        return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(40)
+        return generate_dashboard_uid(self._charm.meta.name, key)
 
     def _reinitialize_dashboard_data(self, inject_dropdowns: bool = True) -> None:
         """Triggers a reload of dashboard outside of an eventing workflow.
