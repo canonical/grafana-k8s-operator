@@ -1142,7 +1142,9 @@ class GrafanaDashboardProvider(Object):
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes()), inject_dropdowns
                 )
-                stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(str(path))
+                stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(
+                    str(path)
+                )
 
             self._stored.dashboard_templates = stored_dashboard_templates
 
