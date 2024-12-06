@@ -1061,7 +1061,9 @@ class GrafanaDashboardProvider(Object):
             self._on_grafana_dashboard_relation_changed,
         )
 
-    def add_dashboard(self, content: str, inject_dropdowns: bool = True, key: Optional[str] = None) -> None:
+    def add_dashboard(
+        self, content: str, inject_dropdowns: bool = True, key: Optional[str] = None
+    ) -> None:
         """Add a dashboard to the relation managed by this :class:`GrafanaDashboardProvider`.
 
         Args:
