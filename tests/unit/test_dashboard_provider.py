@@ -53,7 +53,7 @@ MANUAL_TEMPLATE_DATA = {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
         "inject_dropdowns": True,
-        "dashboard_alt_uid": generate_dashboard_uid("provider-tester", "tests/unit/dashboard_templates/manual.tmpl"),
+        "dashboard_alt_uid": generate_dashboard_uid("provider-tester", "tests/unit/manual_dashboards/manual.tmpl"),
         "juju_topology": {
             "application": "provider-tester",
             "model": "testing",
@@ -69,7 +69,7 @@ MANUAL_TEMPLATE_DATA_NO_DROPDOWNS = {
         "charm": "provider-tester",
         "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
         "inject_dropdowns": False,
-        "dashboard_alt_uid": generate_dashboard_uid("provider-tester", "manual.tmpl"),
+        "dashboard_alt_uid": generate_dashboard_uid("provider-tester", "tests/unit/manual_dashboards/manual.tmpl"),
         "juju_topology": {},
     }
 }
@@ -157,7 +157,7 @@ class TestDashboardProvider(unittest.TestCase):
             "charm": "provider-tester",
             "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAEdGhpcmQAAAAAtr5hbOrisy0AAR0FuC2Arx+2830BAAAAAARZWg==",
             "inject_dropdowns": True,
-            "dashboard_alt_uid": generate_dashboard_uid("prog:uC2Arx+2"),
+            "dashboard_alt_uid": generate_dashboard_uid('provider-tester', 'prog:uC2Arx+2'),
             "juju_topology": {
                 "model": "testing",
                 "model_uuid": "abcdefgh-1234",
