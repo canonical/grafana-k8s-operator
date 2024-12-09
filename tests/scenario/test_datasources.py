@@ -42,6 +42,7 @@ def test_datasource_sharing(ctx):
         "remote_host/0": "juju_foo_bar_baz_0",
         "remote_host/1": "juju_foo_bar_baz_1",
     }
+    assert local_app_data["grafana_uid"]
 
 
 def test_datasource_get():
@@ -59,7 +60,10 @@ def test_datasource_get():
                 {"model": "foo", "model_uuid": "bar", "application": "baz", "type": "tempo"}
             )
         },
-        remote_app_data={"datasource_uids": json.dumps(local_ds_uids)},
+        remote_app_data={
+            "grafana_uid": "foo-grafana-1",
+            "datasource_uids": json.dumps(local_ds_uids),
+        },
     )
     state = State(leader=True, relations={datasource})
 
@@ -85,6 +89,7 @@ def test_datasource_get():
 
 def test_datasource_get_nodata():
     # GIVEN a datasource relation with two remote units, but which hasn't shared any datasource uids
+    #  for example because the remote end is using an older charm lib
     datasource = Relation(
         "grafana-source",
         remote_app_name="remote_host",
@@ -115,5 +120,5 @@ def test_datasource_get_nodata():
     ctx = Context(MyProviderCharm, MyProviderCharm.META)
     with ctx(ctx.on.relation_changed(datasource), state) as mgr:
         charm = mgr.charm
-        # THEN we can see our datasource uids via the provider
-        assert list(charm.source_provider.get_source_uids().values())[0] == {}
+        # THEN we can see no datasource uids via the provider
+        assert not charm.source_provider.get_source_uids()
