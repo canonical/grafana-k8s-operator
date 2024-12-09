@@ -2,9 +2,18 @@ from contextlib import ExitStack
 from unittest.mock import patch
 
 import pytest
-from ops.testing import Context
+from scenario import State, Container
 
 from charm import GrafanaCharm
+
+
+@pytest.fixture
+def containers():
+    """Mocks for standard containers grafana needs to work."""
+    return [
+        Container(name="grafana", can_connect=True),
+        Container(name="litestream", can_connect=True),
+    ]
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -29,5 +38,12 @@ def apply_all_patches():
 
 
 @pytest.fixture
-def ctx():
-    yield Context(GrafanaCharm)
+def grafana_source_tester(interface_tester, containers):
+    interface_tester.configure(
+        charm_type=GrafanaCharm,
+        state_template=State(
+            leader=True,
+            containers=containers,
+        ),
+    )
+    yield interface_tester
