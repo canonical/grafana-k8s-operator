@@ -57,6 +57,7 @@ def copy_grafana_libraries_into_tester_charm(ops_test: OpsTest) -> None:
     libs = [
         Path("lib/charms/", lib)
         for lib in [
+            "observability_libs/v0/juju_topology.py",
             "grafana_k8s/v0/grafana_dashboard.py",
             "grafana_k8s/v0/grafana_source.py",
             "grafana_k8s/v0/grafana_auth.py",
