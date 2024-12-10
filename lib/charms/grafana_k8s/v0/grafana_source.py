@@ -164,7 +164,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 23
+LIBPATCH = 24
 
 logger = logging.getLogger(__name__)
 
@@ -584,7 +584,8 @@ class GrafanaSourceConsumer(Object):
             juju_topology.model,
             juju_topology.model_uuid,
             juju_topology.application,
-            juju_topology.unit.split("/")[1],
+            # we inited it from_charm(), so .unit is guaranteed to be set.
+            juju_topology.unit.split("/")[1],  # type: ignore
         )
 
         rel.data[self._charm.app]["grafana_uid"] = unique_grafana_name
