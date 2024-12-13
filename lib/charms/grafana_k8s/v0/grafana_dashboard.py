@@ -972,9 +972,11 @@ def generate_dashboard_uid(*args: str) -> str:
 
     Returns: A uid based on the input args.
     """
-    # The max length grafana allows for a dashboard uid is 40, let's use it.
+    # The max length grafana allows for a dashboard uid is 40.
+    # Since the digest is bytes, we need to convert it to a charset that grafana accepts.
+    # Let's use hexdigest, which means 2 chars per byte, reducing our effective digest size to 20.
     # https://grafana.com/docs/grafana/latest/developers/http_api/dashboard/#identifier-id-vs-unique-identifier-uid
-    return hashlib.shake_256("-".join(args).encode("utf-8")).hexdigest(40)
+    return hashlib.shake_256("-".join(args).encode("utf-8")).hexdigest(20)
 
 
 class GrafanaDashboardProvider(Object):

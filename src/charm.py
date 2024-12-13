@@ -75,7 +75,7 @@ from ops.charm import (
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from ops.framework import StoredState
-from ops.main import main
+from ops import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port
 
 from ops.pebble import (
