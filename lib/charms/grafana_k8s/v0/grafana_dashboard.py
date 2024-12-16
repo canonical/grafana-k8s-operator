@@ -862,7 +862,7 @@ def _modify_panel(panel: dict, topology: dict, transformer: "CosTool") -> dict:
         replacement = transformer.inject_label_matchers(expr, topology, querytype)
 
         if replacement == target["expr"]:
-            # promql-tranform caught an error. Move on
+            # promql-transform caught an error. Move on
             continue
 
         # Go back and substitute values in [] which were pulled out
@@ -1330,7 +1330,7 @@ class GrafanaDashboardConsumer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self._tranformer = CosTool(self._charm)
+        self._transformer = CosTool(self._charm)
 
         self._stored.set_default(dashboards={})  # type: ignore
 
@@ -1466,7 +1466,7 @@ class GrafanaDashboardConsumer(Object):
                 content = _convert_dashboard_fields(content, inject_dropdowns)
 
                 if topology:
-                    content = _inject_labels(content, topology, self._tranformer)
+                    content = _inject_labels(content, topology, self._transformer)
 
                 content = _encode_dashboard_content(content)
             except lzma.LZMAError as e:
