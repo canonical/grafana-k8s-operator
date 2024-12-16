@@ -1158,7 +1158,11 @@ class GrafanaDashboardProvider(Object):
                     _encode_dashboard_content(path.read_bytes()), inject_dropdowns
                 )
                 stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(
-                    str(path)
+                    # We want the relative path to charm dir, to avoid hashing parts of the unit name, e.g.
+                    # /var/lib/juju/agents/unit-ga-9/charm/grafana_dashboards/node-exporter-full.json
+                    # With a relative path, the same dashboard coming from multiple instances of the same app would have
+                    # the same UID, which is what we want.
+                    str(path.relative_to(self._charm.charm_dir))
                 )
 
             self._stored.dashboard_templates = stored_dashboard_templates
