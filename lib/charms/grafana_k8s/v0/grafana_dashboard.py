@@ -176,7 +176,6 @@ The consuming charm should decompress the dashboard.
 """
 
 import base64
-import hashlib
 import json
 import logging
 import lzma
@@ -209,6 +208,8 @@ from ops.framework import (
     StoredState,
 )
 from ops.model import Relation
+from cosl import generate_dashboard_uid
+
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -220,6 +221,8 @@ LIBAPI = 0
 # to 0 if you are raising the major API version
 
 LIBPATCH = 37
+
+# PYDEPS = ["cosl"] # TODO: uncomment when https://github.com/canonical/cos-lib/pull/114 is merged
 
 logger = logging.getLogger(__name__)
 
@@ -962,21 +965,6 @@ class GrafanaProviderEvents(ObjectEvents):
     """Events raised by :class:`GrafanaSourceEvents`."""
 
     dashboard_status_changed = EventSource(GrafanaDashboardEvent)
-
-
-def generate_dashboard_uid(*args: str) -> str:
-    """Generate a dashboard uid from a collection of strings.
-
-    Args:
-        args: A collection of strings used to calculate the uid.
-
-    Returns: A uid based on the input args.
-    """
-    # The max length grafana allows for a dashboard uid is 40.
-    # Since the digest is bytes, we need to convert it to a charset that grafana accepts.
-    # Let's use hexdigest, which means 2 chars per byte, reducing our effective digest size to 20.
-    # https://grafana.com/docs/grafana/latest/developers/http_api/dashboard/#identifier-id-vs-unique-identifier-uid
-    return hashlib.shake_256("-".join(args).encode("utf-8")).hexdigest(20)
 
 
 class GrafanaDashboardProvider(Object):

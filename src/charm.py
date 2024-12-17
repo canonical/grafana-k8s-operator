@@ -648,7 +648,9 @@ class GrafanaCharm(CharmBase):
             for dashboard in self.dashboard_consumer.dashboards:
                 dashboard_content = dashboard["content"]
                 dashboard_content_bytes = dashboard_content.encode("utf-8")
+                # TODO: use a consistent hashing/filename schema from provider, throughout aggregators, and in grafana
                 dashboard_content_digest = hashlib.sha256(dashboard_content_bytes).hexdigest()
+                # TODO: add dashboard title to filename schema?
                 dashboard_filename = "juju_{}_{}.json".format(
                     dashboard["charm"], dashboard_content_digest[0:7]
                 )
