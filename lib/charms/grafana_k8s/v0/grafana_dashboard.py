@@ -176,7 +176,6 @@ The consuming charm should decompress the dashboard.
 """
 
 import base64
-import hashlib
 import json
 import logging
 import lzma
@@ -209,6 +208,8 @@ from ops.framework import (
     StoredState,
 )
 from ops.model import Relation
+from cosl import generate_dashboard_uid
+
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -219,7 +220,9 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 36
+LIBPATCH = 37
+
+# PYDEPS = ["cosl"] # TODO: uncomment when https://github.com/canonical/cos-lib/pull/114 is merged
 
 logger = logging.getLogger(__name__)
 
@@ -862,7 +865,7 @@ def _modify_panel(panel: dict, topology: dict, transformer: "CosTool") -> dict:
         replacement = transformer.inject_label_matchers(expr, topology, querytype)
 
         if replacement == target["expr"]:
-            # promql-tranform caught an error. Move on
+            # promql-transform caught an error. Move on
             continue
 
         # Go back and substitute values in [] which were pulled out
@@ -1061,7 +1064,9 @@ class GrafanaDashboardProvider(Object):
             self._on_grafana_dashboard_relation_changed,
         )
 
-    def add_dashboard(self, content: str, inject_dropdowns: bool = True) -> None:
+    def add_dashboard(
+        self, content: str, inject_dropdowns: bool = True, key: Optional[str] = None
+    ) -> None:
         """Add a dashboard to the relation managed by this :class:`GrafanaDashboardProvider`.
 
         Args:
@@ -1070,6 +1075,8 @@ class GrafanaDashboardProvider(Object):
                 context.
             inject_dropdowns: a :boolean: indicating whether topology dropdowns should be
                 added to the dashboard
+            key: An optional specifier used to render the dashboard's UID. If given, will be used together with the
+                charm name to generate a UID. Otherwise, will use part of the dashboard json to generate a UID.
         """
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
@@ -1084,7 +1091,7 @@ class GrafanaDashboardProvider(Object):
         stored_dashboard_templates[id] = self._content_to_dashboard_object(
             encoded_dashboard, inject_dropdowns
         )
-        stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
+        stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(key or id)
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -1138,7 +1145,13 @@ class GrafanaDashboardProvider(Object):
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
                     _encode_dashboard_content(path.read_bytes()), inject_dropdowns
                 )
-                stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
+                stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(
+                    # We want the relative path to charm dir, to avoid hashing parts of the unit name, e.g.
+                    # /var/lib/juju/agents/unit-ga-9/charm/grafana_dashboards/node-exporter-full.json
+                    # With a relative path, the same dashboard coming from multiple instances of the same app would have
+                    # the same UID, which is what we want.
+                    str(path.relative_to(self._charm.charm_dir))
+                )
 
             self._stored.dashboard_templates = stored_dashboard_templates
 
@@ -1154,8 +1167,7 @@ class GrafanaDashboardProvider(Object):
 
         Returns: A hash string.
         """
-        raw_dashboard_alt_uid = "{}-{}".format(self._charm.meta.name, key)
-        return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
+        return generate_dashboard_uid(self._charm.meta.name, key)
 
     def _reinitialize_dashboard_data(self, inject_dropdowns: bool = True) -> None:
         """Triggers a reload of dashboard outside of an eventing workflow.
@@ -1306,7 +1318,7 @@ class GrafanaDashboardConsumer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self._tranformer = CosTool(self._charm)
+        self._transformer = CosTool(self._charm)
 
         self._stored.set_default(dashboards={})  # type: ignore
 
@@ -1442,7 +1454,7 @@ class GrafanaDashboardConsumer(Object):
                 content = _convert_dashboard_fields(content, inject_dropdowns)
 
                 if topology:
-                    content = _inject_labels(content, topology, self._tranformer)
+                    content = _inject_labels(content, topology, self._transformer)
 
                 content = _encode_dashboard_content(content)
             except lzma.LZMAError as e:
@@ -1515,9 +1527,19 @@ class GrafanaDashboardConsumer(Object):
         """Add an uid to the dashboard if it is not present."""
         dashboard_dict = json.loads(dashboard)
 
-        if not dashboard_dict.get("uid", None) and "dashboard_alt_uid" in template:
-            dashboard_dict["uid"] = template["dashboard_alt_uid"]
+        # In 2024/12 we switched to always using the dashboard_alt_uid.
+        # https://github.com/canonical/observability/blob/main/decision-records/2024-08-29--dashboard-uid-collision.md
+        # For backwards compatibility, we'll use the dashboard's uid if the alt-uid key is not present.
+        if "dashboard_alt_uid" in template:
+            uid = template["dashboard_alt_uid"]
+        elif "uid" in dashboard_dict:
+            uid = dashboard_dict["uid"]
+        else:
+            # If both alt-uid and dashboard json uid are missing, we do not set a uid key at all.
+            uid = None
 
+        if uid:
+            dashboard_dict["uid"] = uid
         return json.dumps(dashboard_dict)
 
     def _remove_all_dashboards_for_relation(self, relation: Relation) -> None:
