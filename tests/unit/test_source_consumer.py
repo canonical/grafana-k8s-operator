@@ -321,7 +321,8 @@ class TestSourceConsumer(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
         )
 
-        self.harness.charm.on["grafana-source"].relation_broken.emit(rel_id)
+        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
+        self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 0)
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources_to_delete), 0)
 
