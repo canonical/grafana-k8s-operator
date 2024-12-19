@@ -187,7 +187,7 @@ import subprocess
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from ops.charm import (
@@ -545,11 +545,7 @@ def _validate_relation_by_interface_and_direction(
         raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
 
 
-class Dashboard:
-    pass
-
-
-class CharmedDashboard(Dashboard):
+class CharmedDashboard:
     """A helper class for handling dashboards on the requirer (Grafana) side."""
 
     def __init__(
@@ -574,6 +570,7 @@ class CharmedDashboard(Dashboard):
             self._dashboard = self._inject_labels(self._dashboard, topology, transformer)
 
     def serialize(self):
+        """Dumps as json, lzma compress and base64 encode."""
         raw_json = json.dumps(self._dashboard).encode("utf-8")
         return base64.b64encode(lzma.compress(raw_json)).decode("utf-8")
 
