@@ -75,7 +75,7 @@ from ops.charm import (
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from ops.framework import StoredState
-from ops.main import main
+from ops import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port
 
 from ops.pebble import (
@@ -648,7 +648,9 @@ class GrafanaCharm(CharmBase):
             for dashboard in self.dashboard_consumer.dashboards:
                 dashboard_content = dashboard["content"]
                 dashboard_content_bytes = dashboard_content.encode("utf-8")
+                # TODO: use a consistent hashing/filename schema from provider, throughout aggregators, and in grafana
                 dashboard_content_digest = hashlib.sha256(dashboard_content_bytes).hexdigest()
+                # TODO: add dashboard title to filename schema?
                 dashboard_filename = "juju_{}_{}.json".format(
                     dashboard["charm"], dashboard_content_digest[0:7]
                 )
