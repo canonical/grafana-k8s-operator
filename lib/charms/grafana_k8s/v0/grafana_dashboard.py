@@ -220,7 +220,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 36
+LIBPATCH = 37
 
 logger = logging.getLogger(__name__)
 
@@ -549,13 +549,13 @@ class CharmedDashboard:
     """A helper class for handling dashboards on the requirer (Grafana) side."""
 
     def __init__(
-            self,
-            dashboard: dict,
-            *,
-            inject_dropdowns: bool,
-            fallback_uid: Optional[str] = None,
-            topology: Optional[dict] = None,
-            transformer: Optional["CosTool"] = None,
+        self,
+        dashboard: dict,
+        *,
+        inject_dropdowns: bool,
+        fallback_uid: Optional[str] = None,
+        topology: Optional[dict] = None,
+        transformer: Optional["CosTool"] = None,
     ):
         self._dashboard = dashboard.copy()
 
@@ -1455,8 +1455,8 @@ class GrafanaDashboardConsumer(Object):
             try:
                 content = CharmedDashboard(
                     json.loads(LZMABase64.decompress(template["content"])),
-                    inject_dropdowns = template.get("inject_dropdowns", True),
-                    fallback_uid=template["dashboard_alt_uid"],
+                    inject_dropdowns=template.get("inject_dropdowns", True),
+                    fallback_uid=template.get("dashboard_alt_uid"),
                     topology=template.get("juju_topology", {}),
                     transformer=self._tranformer,
                 ).serialize()
