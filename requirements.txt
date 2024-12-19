@@ -6,7 +6,10 @@ urllib3
 jsonschema
 cryptography
 
+# lib/charms/grafana_k8s/v0/grafana_dashboard.py
+# lib/charms/tempo_k8s/v1/charm_tracing.py
+cosl@git+https://github.com/canonical/cos-lib.git@feature/dashboard_module
+
 # lib/charms/tempo_k8s/v1/charm_tracing.py
 opentelemetry-exporter-otlp-proto-http
 pydantic
-cosl
