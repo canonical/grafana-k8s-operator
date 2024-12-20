@@ -1171,13 +1171,16 @@ class GrafanaDashboardProvider(Object):
                         "Invalid dashboard '%s': expected dict, got %s", path, type(dashboard_dict)
                     )
 
-                if not DashboardPath40UID.is_valid(dashboard_dict.get("uid")):
+                if not DashboardPath40UID.is_valid(original_uid := dashboard_dict.get("uid")):
                     rel_path = str(
                         path.relative_to(self._charm.charm_dir) if path.is_absolute() else path
                     )
                     dashboard_dict["uid"] = DashboardPath40UID.generate(
                         self._charm.meta.name, rel_path
                     )
+                    logger.debug("Processed dashboard '%s': replaced original uid '%s' with '%s'", path, original_uid, dashboard_dict["uid"])
+                else:
+                    logger.debug("Processed dashboard '%s': kept original uid '%s'", path, original_uid)
 
                 stored_dashboard_templates[id] = _content_to_dashboard_object(
                     charm_name=self._charm.meta.name,
