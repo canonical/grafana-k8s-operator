@@ -22,7 +22,7 @@ if "unittest.util" in __import__("sys").modules:
 RELATION_TEMPLATES_DATA = {
     "file:first": {
         "charm": "provider-tester",
-        'content': '/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQBDeyJ0ZXN0IjogImZpcnN0IiwgInVpZCI6ICI0Zjg0NGIxNTc1NWUyZjQ1MmFkOWY5YTRhOTA2ZTVjNjEwODFhMmExIn0ASLsFcbMcmxMAAVxE+iI5Rx+2830BAAAAAARZWg==',
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQBDeyJ0ZXN0IjogImZpcnN0IiwgInVpZCI6ICI0Zjg0NGIxNTc1NWUyZjQ1MmFkOWY5YTRhOTA2ZTVjNjEwODFhMmExIn0ASLsFcbMcmxMAAVxE+iI5Rx+2830BAAAAAARZWg==",
         "inject_dropdowns": True,
         "dashboard_alt_uid": "6291687b37603a46",
         "juju_topology": {
@@ -34,7 +34,7 @@ RELATION_TEMPLATES_DATA = {
     },
     "file:other": {
         "charm": "provider-tester",
-        'content': '/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQBEeyJ0ZXN0IjogInNlY29uZCIsICJ1aWQiOiAiYzcxN2M3YzdjYjA5NjZiYjI0MTUwMmFhZTIzYzg2M2ZkNzI2NzhhYiJ9AAAAANxfFUoYy0r1AAFdRS0jJSkftvN9AQAAAAAEWVo=',
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQBEeyJ0ZXN0IjogInNlY29uZCIsICJ1aWQiOiAiYzcxN2M3YzdjYjA5NjZiYjI0MTUwMmFhZTIzYzg2M2ZkNzI2NzhhYiJ9AAAAANxfFUoYy0r1AAFdRS0jJSkftvN9AQAAAAAEWVo=",
         "inject_dropdowns": True,
         "dashboard_alt_uid": "a44939b79a5ba1d4",
         "juju_topology": {
@@ -49,7 +49,7 @@ RELATION_TEMPLATES_DATA = {
 MANUAL_TEMPLATE_DATA = {
     "file:manual": {
         "charm": "provider-tester",
-        'content': '/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQBEeyJ0ZXN0IjogIm1hbnVhbCIsICJ1aWQiOiAiM2NjODI5ODY5MDI3YmQ1MzJiMmZiY2FkM2Y0ZDQ2ODk1M2Y2NzQxYyJ9AAAAAIUFL1o/OGdNAAFdRS0jJSkftvN9AQAAAAAEWVo=',
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQBEeyJ0ZXN0IjogIm1hbnVhbCIsICJ1aWQiOiAiM2NjODI5ODY5MDI3YmQ1MzJiMmZiY2FkM2Y0ZDQ2ODk1M2Y2NzQxYyJ9AAAAAIUFL1o/OGdNAAFdRS0jJSkftvN9AQAAAAAEWVo=",
         "inject_dropdowns": True,
         "dashboard_alt_uid": "0b73d01f7b214e98",
         "juju_topology": {
@@ -65,7 +65,7 @@ MANUAL_TEMPLATE_DATA = {
 MANUAL_TEMPLATE_DATA_NO_DROPDOWNS = {
     "file:manual": {
         "charm": "provider-tester",
-        'content': '/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQBEeyJ0ZXN0IjogIm1hbnVhbCIsICJ1aWQiOiAiM2NjODI5ODY5MDI3YmQ1MzJiMmZiY2FkM2Y0ZDQ2ODk1M2Y2NzQxYyJ9AAAAAIUFL1o/OGdNAAFdRS0jJSkftvN9AQAAAAAEWVo=',
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQBEeyJ0ZXN0IjogIm1hbnVhbCIsICJ1aWQiOiAiM2NjODI5ODY5MDI3YmQ1MzJiMmZiY2FkM2Y0ZDQ2ODk1M2Y2NzQxYyJ9AAAAAIUFL1o/OGdNAAFdRS0jJSkftvN9AQAAAAAEWVo=",
         "inject_dropdowns": False,
         "dashboard_alt_uid": "0b73d01f7b214e98",
         "juju_topology": {},
