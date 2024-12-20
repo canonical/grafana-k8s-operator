@@ -880,7 +880,7 @@ class CharmedDashboard:
             replacement = transformer.inject_label_matchers(expr, topology, querytype)
 
             if replacement == target["expr"]:
-                # promql-tranform caught an error. Move on
+                # promql-transform caught an error. Move on
                 continue
 
             # Go back and substitute values in [] which were pulled out
@@ -1337,7 +1337,7 @@ class GrafanaDashboardConsumer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self._tranformer = CosTool(self._charm)
+        self._transformer = CosTool(self._charm)
 
         self._stored.set_default(dashboards={})  # type: ignore
 
@@ -1471,7 +1471,7 @@ class GrafanaDashboardConsumer(Object):
                     inject_dropdowns=template.get("inject_dropdowns", True),
                     fallback_uid=template.get("dashboard_alt_uid"),
                     topology=template.get("juju_topology", {}),
-                    transformer=self._tranformer,
+                    transformer=self._transformer,
                 ).serialize()
             except lzma.LZMAError as e:
                 error = str(e)
