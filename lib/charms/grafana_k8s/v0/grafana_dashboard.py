@@ -209,7 +209,7 @@ from ops.framework import (
     StoredState,
 )
 from ops.model import Relation
-from cosl import LZMABase64
+from cosl import LZMABase64, DashboardPath40UID
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -1157,9 +1157,18 @@ class GrafanaDashboardProvider(Object):
             for path in filter(_is_dashboard, Path(self._dashboards_path).glob("*")):
                 # path = Path(path)
                 id = "file:{}".format(path.stem)
+
+                # If we're running this class from within an aggregator (such as grafana agent), then the uid was
+                # already rendered there, so we do not want to overwrite it with a uid generated from aggregator's info.
+                # We overwrite the uid only if it's not a valid "Path40" uid.
+                dashboard_dict = json.loads(path.read_bytes())
+                if not DashboardPath40UID.is_valid(dashboard_dict.get("uid")):
+                    rel_path = str(path.relative_to(self._charm.charm_dir) if path.is_absolute() else path)
+                    dashboard_dict["uid"] = DashboardPath40UID.generate(self._charm.meta.name, rel_path)
+
                 stored_dashboard_templates[id] = _content_to_dashboard_object(
                     charm_name=self._charm.meta.name,
-                    content=LZMABase64.compress(path.read_bytes()),
+                    content=LZMABase64.compress(json.dumps(dashboard_dict)),
                     inject_dropdowns=inject_dropdowns,
                     juju_topology=self._juju_topology,
                 )
@@ -1894,7 +1903,7 @@ class GrafanaDashboardAggregator(Object):
 
 
 def _content_to_dashboard_object(*, charm_name, content: str, inject_dropdowns: bool = True, juju_topology: Optional[dict] = None) -> Dict:
-    if not juju_topology is None:
+    if not juju_topology:
         juju_topology = {}
 
     return {
