@@ -1171,7 +1171,7 @@ class GrafanaDashboardProvider(Object):
                         "Invalid dashboard '%s': expected dict, got %s", path, type(dashboard_dict)
                     )
 
-                if not DashboardPath40UID.is_valid(original_uid := dashboard_dict.get("uid")):
+                if not DashboardPath40UID.is_valid(original_uid := dashboard_dict.get("uid", "")):
                     rel_path = str(
                         path.relative_to(self._charm.charm_dir) if path.is_absolute() else path
                     )
