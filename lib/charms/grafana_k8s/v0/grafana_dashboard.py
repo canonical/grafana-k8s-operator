@@ -1178,9 +1178,16 @@ class GrafanaDashboardProvider(Object):
                     dashboard_dict["uid"] = DashboardPath40UID.generate(
                         self._charm.meta.name, rel_path
                     )
-                    logger.debug("Processed dashboard '%s': replaced original uid '%s' with '%s'", path, original_uid, dashboard_dict["uid"])
+                    logger.debug(
+                        "Processed dashboard '%s': replaced original uid '%s' with '%s'",
+                        path,
+                        original_uid,
+                        dashboard_dict["uid"],
+                    )
                 else:
-                    logger.debug("Processed dashboard '%s': kept original uid '%s'", path, original_uid)
+                    logger.debug(
+                        "Processed dashboard '%s': kept original uid '%s'", path, original_uid
+                    )
 
                 stored_dashboard_templates[id] = _content_to_dashboard_object(
                     charm_name=self._charm.meta.name,
