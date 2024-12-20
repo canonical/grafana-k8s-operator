@@ -1163,8 +1163,12 @@ class GrafanaDashboardProvider(Object):
                 # We overwrite the uid only if it's not a valid "Path40" uid.
                 dashboard_dict = json.loads(path.read_bytes())
                 if not DashboardPath40UID.is_valid(dashboard_dict.get("uid")):
-                    rel_path = str(path.relative_to(self._charm.charm_dir) if path.is_absolute() else path)
-                    dashboard_dict["uid"] = DashboardPath40UID.generate(self._charm.meta.name, rel_path)
+                    rel_path = str(
+                        path.relative_to(self._charm.charm_dir) if path.is_absolute() else path
+                    )
+                    dashboard_dict["uid"] = DashboardPath40UID.generate(
+                        self._charm.meta.name, rel_path
+                    )
 
                 stored_dashboard_templates[id] = _content_to_dashboard_object(
                     charm_name=self._charm.meta.name,
@@ -1902,7 +1906,13 @@ class GrafanaDashboardAggregator(Object):
         }
 
 
-def _content_to_dashboard_object(*, charm_name, content: str, inject_dropdowns: bool = True, juju_topology: Optional[dict] = None) -> Dict:
+def _content_to_dashboard_object(
+    *,
+    charm_name,
+    content: str,
+    inject_dropdowns: bool = True,
+    juju_topology: Optional[dict] = None,
+) -> Dict:
     if not juju_topology:
         juju_topology = {}
 
