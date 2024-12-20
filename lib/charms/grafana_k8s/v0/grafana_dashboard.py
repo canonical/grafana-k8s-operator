@@ -1099,9 +1099,13 @@ class GrafanaDashboardProvider(Object):
         # it is predictable across units.
         id = "prog:{}".format(encoded_dashboard[-24:-16])
 
-        stored_dashboard_templates[id] = self._content_to_dashboard_object(
-            encoded_dashboard, inject_dropdowns
+        stored_dashboard_templates[id] = _content_to_dashboard_object(
+            charm_name=self._charm.meta.name,
+            content=encoded_dashboard,
+            inject_dropdowns=inject_dropdowns,
+            juju_topology=self._juju_topology,
         )
+
         stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
         if self._charm.unit.is_leader():
@@ -1153,9 +1157,13 @@ class GrafanaDashboardProvider(Object):
             for path in filter(_is_dashboard, Path(self._dashboards_path).glob("*")):
                 # path = Path(path)
                 id = "file:{}".format(path.stem)
-                stored_dashboard_templates[id] = self._content_to_dashboard_object(
-                    LZMABase64.compress(path.read_bytes()), inject_dropdowns
+                stored_dashboard_templates[id] = _content_to_dashboard_object(
+                    charm_name=self._charm.meta.name,
+                    content=LZMABase64.compress(path.read_bytes()),
+                    inject_dropdowns=inject_dropdowns,
+                    juju_topology=self._juju_topology,
                 )
+
                 stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
             self._stored.dashboard_templates = stored_dashboard_templates
@@ -1248,14 +1256,6 @@ class GrafanaDashboardProvider(Object):
         }
 
         relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
-
-    def _content_to_dashboard_object(self, content: str, inject_dropdowns: bool = True) -> Dict:
-        return {
-            "charm": self._charm.meta.name,
-            "content": content,
-            "juju_topology": self._juju_topology if inject_dropdowns else {},
-            "inject_dropdowns": inject_dropdowns,
-        }
 
     # This is not actually used in the dashboards, but is present to provide a secondary
     # salt to ensure uniqueness in the dict keys in case individual charm units provide
@@ -1668,8 +1668,11 @@ class GrafanaDashboardAggregator(Object):
             return
 
         for id in dashboards:
-            self._stored.dashboard_templates[id] = self._content_to_dashboard_object(  # type: ignore
-                dashboards[id], event
+            self._stored.dashboard_templates[id] = _content_to_dashboard_object(
+                charm_name=event.app.name,
+                content=dashboards[id],
+                juju_topology=self._juju_topology(event),
+                inject_dropdowns=True,
             )
 
         self._stored.id_mappings[event.app.name] = dashboards  # type: ignore
@@ -1869,19 +1872,14 @@ class GrafanaDashboardAggregator(Object):
                 # path = Path(path)
                 if event.app.name in path.name:  # type: ignore
                     id = "file:{}".format(path.stem)
-                    builtins[id] = self._content_to_dashboard_object(
-                        LZMABase64.compress(path.read_bytes()), event
+                    builtins[id] = _content_to_dashboard_object(
+                        charm_name=event.app.name,
+                        content=LZMABase64.compress(path.read_bytes()),
+                        juju_topology=self._juju_topology(event),
+                        inject_dropdowns=True,
                     )
 
         return builtins
-
-    def _content_to_dashboard_object(self, content: str, event: RelationEvent) -> Dict:
-        return {
-            "charm": event.app.name,  # type: ignore
-            "content": content,
-            "juju_topology": self._juju_topology(event),
-            "inject_dropdowns": True,
-        }
 
     # This is not actually used in the dashboards, but is present to provide a secondary
     # salt to ensure uniqueness in the dict keys in case individual charm units provide
@@ -1893,6 +1891,18 @@ class GrafanaDashboardAggregator(Object):
             "application": event.app.name,  # type: ignore
             "unit": event.unit.name,  # type: ignore
         }
+
+
+def _content_to_dashboard_object(*, charm_name, content: str, inject_dropdowns: bool = True, juju_topology: Optional[dict] = None) -> Dict:
+    if not juju_topology is None:
+        juju_topology = {}
+
+    return {
+        "charm": charm_name,
+        "content": content,
+        "juju_topology": juju_topology if inject_dropdowns else {},
+        "inject_dropdowns": inject_dropdowns,
+    }
 
 
 class CosTool:
