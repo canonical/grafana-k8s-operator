@@ -1161,7 +1161,16 @@ class GrafanaDashboardProvider(Object):
                 # If we're running this class from within an aggregator (such as grafana agent), then the uid was
                 # already rendered there, so we do not want to overwrite it with a uid generated from aggregator's info.
                 # We overwrite the uid only if it's not a valid "Path40" uid.
-                dashboard_dict = json.loads(path.read_bytes())
+                try:
+                    dashboard_dict = json.loads(path.read_bytes())
+                except json.JSONDecodeError as e:
+                    logger.error("Failed to load dashboard '%s': %s", path, e)
+                    continue
+                if type(dashboard_dict) is not dict:
+                    logger.error(
+                        "Invalid dashboard '%s': expected dict, got %s", path, type(dashboard_dict)
+                    )
+
                 if not DashboardPath40UID.is_valid(dashboard_dict.get("uid")):
                     rel_path = str(
                         path.relative_to(self._charm.charm_dir) if path.is_absolute() else path
