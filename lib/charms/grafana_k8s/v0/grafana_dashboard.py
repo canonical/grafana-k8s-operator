@@ -175,7 +175,6 @@ It will be returned in the format of:
 The consuming charm should decompress the dashboard.
 """
 
-import base64
 import hashlib
 import json
 import logging
@@ -187,7 +186,7 @@ import subprocess
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from ops.charm import (
@@ -209,6 +208,7 @@ from ops.framework import (
     StoredState,
 )
 from ops.model import Relation
+from cosl import LZMABase64
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -542,17 +542,6 @@ def _validate_relation_by_interface_and_direction(
             )
     else:
         raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
-
-
-def _encode_dashboard_content(content: Union[str, bytes]) -> str:
-    if isinstance(content, str):
-        content = bytes(content, "utf-8")
-
-    return base64.b64encode(lzma.compress(content)).decode("utf-8")
-
-
-def _decode_dashboard_content(encoded_content: str) -> str:
-    return lzma.decompress(base64.b64decode(encoded_content.encode("utf-8"))).decode()
 
 
 class CharmedDashboard:
@@ -1080,7 +1069,7 @@ class GrafanaDashboardProvider(Object):
         # that the stored state is there when this unit becomes leader.
         stored_dashboard_templates: Any = self._stored.dashboard_templates  # pyright: ignore
 
-        encoded_dashboard = _encode_dashboard_content(content)
+        encoded_dashboard = LZMABase64.compress(content)
 
         # Use as id the first chars of the encoded dashboard, so that
         # it is predictable across units.
@@ -1141,7 +1130,7 @@ class GrafanaDashboardProvider(Object):
                 # path = Path(path)
                 id = "file:{}".format(path.stem)
                 stored_dashboard_templates[id] = self._content_to_dashboard_object(
-                    _encode_dashboard_content(path.read_bytes()), inject_dropdowns
+                    LZMABase64.compress(path.read_bytes()), inject_dropdowns
                 )
                 stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
@@ -1441,7 +1430,7 @@ class GrafanaDashboardConsumer(Object):
             error = None
             topology = template.get("juju_topology", {})
             try:
-                content = _decode_dashboard_content(template["content"])
+                content = LZMABase64.decompress(template["content"])
                 inject_dropdowns = template.get("inject_dropdowns", True)
                 content = self._manage_dashboard_uid(content, template)
                 content = CharmedDashboard._convert_dashboard_fields(content, inject_dropdowns)
@@ -1449,7 +1438,7 @@ class GrafanaDashboardConsumer(Object):
                 if topology:
                     content = CharmedDashboard._inject_labels(content, topology, self._tranformer)
 
-                content = _encode_dashboard_content(content)
+                content = LZMABase64.compress(content)
             except lzma.LZMAError as e:
                 error = str(e)
                 relation_has_invalid_dashboards = True
@@ -1538,7 +1527,7 @@ class GrafanaDashboardConsumer(Object):
             "id": dashboard["original_id"],
             "relation_id": relation_id,
             "charm": dashboard["template"]["charm"],
-            "content": _decode_dashboard_content(dashboard["content"]),
+            "content": LZMABase64.decompress(dashboard["content"]),
         }
 
     @property
@@ -1829,7 +1818,7 @@ class GrafanaDashboardAggregator(Object):
 
             from jinja2 import DebugUndefined, Template
 
-            content = _encode_dashboard_content(
+            content = LZMABase64.compress(
                 Template(dash, undefined=DebugUndefined).render(datasource=r"${prometheusds}")  # type: ignore
             )
             id = "prog:{}".format(content[-24:-16])
@@ -1869,7 +1858,7 @@ class GrafanaDashboardAggregator(Object):
                 if event.app.name in path.name:  # type: ignore
                     id = "file:{}".format(path.stem)
                     builtins[id] = self._content_to_dashboard_object(
-                        _encode_dashboard_content(path.read_bytes()), event
+                        LZMABase64.compress(path.read_bytes()), event
                     )
 
         return builtins
