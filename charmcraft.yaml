@@ -83,6 +83,11 @@ requires:
     interface: tracing
 
 provides:
+  profiling-endpoint:
+    interface: parca_scrape
+    description: |
+      Links to grafana's pprof endpoint. Can be used to integrate with parca to 
+      profile the grafana server process.
   metrics-endpoint:
     interface: prometheus_scrape
     description: Links to grafana's own `/metrics` endpoint.
