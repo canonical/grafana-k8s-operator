@@ -219,7 +219,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 37
+LIBPATCH = 38
 
 logger = logging.getLogger(__name__)
 
@@ -1994,7 +1994,7 @@ class CosTool:
         res = "cos-tool-{}".format(arch)
         try:
             path = Path(res).resolve()
-            path.chmod(0o777)
+            path.chmod(0o775)
             return path
         except NotImplementedError:
             logger.debug("System lacks support for chmod")
