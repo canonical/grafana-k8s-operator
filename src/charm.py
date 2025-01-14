@@ -60,6 +60,7 @@ from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateRemovedEvent,
     CertificateTransferRequires,
 )
+from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.charm import (
@@ -113,6 +114,7 @@ CA_CERT_PATH = Path("/usr/local/share/ca-certificates/cos-ca.crt")
 DATABASE = "database"
 PEER = "grafana"
 PORT = 3000
+PROFILING_PORT = 8080
 DATABASE_PATH = "/var/lib/grafana/grafana.db"
 
 # Template for storing trusted certificate in a file.
@@ -188,7 +190,7 @@ class GrafanaCharm(CharmBase):
 
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
-            jobs=self._scrape_jobs,
+            jobs=self._metrics_scrape_jobs,
             refresh_event=[
                 self.on.grafana_pebble_ready,  # pyright: ignore
                 self.on.update_status,
@@ -204,6 +206,7 @@ class GrafanaCharm(CharmBase):
         self.charm_tracing_endpoint, self.server_cert = charm_tracing_config(
             self.charm_tracing, CA_CERT_PATH
         )
+        self.profiling = ProfilingEndpointProvider(self, jobs=self._profiling_scrape_jobs)
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
@@ -274,6 +277,15 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(
             self.grafana_auth_requirer.on.auth_conf_available,  # pyright: ignore
             self._on_grafana_auth_conf_available,
+        )
+        # -- profiling observations
+        self.framework.observe(
+            self.on.profiling_endpoint_relation_created,  # type: ignore
+            self._on_profiling_endpoint_created,
+        )
+        self.framework.observe(
+            self.on.profiling_endpoint_relation_broken,  # type: ignore
+            self._on_profiling_endpoint_broken,
         )
         # -- workload tracing observations
         self.framework.observe(
@@ -772,6 +784,14 @@ class GrafanaCharm(CharmBase):
         """Removes workload tracing information from grafana's config."""
         self._configure()
 
+    def _on_profiling_endpoint_created(self, _) -> None:
+        """Turn on grafana server profiling."""
+        self._configure()
+
+    def _on_profiling_endpoint_broken(self, _) -> None:
+        """Turn off grafana server profiling (if no other profiling relations exist)."""
+        self._configure()
+
     def _generate_grafana_config(self) -> str:
         """Generate a database configuration for Grafana.
 
@@ -1082,6 +1102,17 @@ class GrafanaCharm(CharmBase):
                 {
                     "OTEL_RESOURCE_ATTRIBUTES": f"juju_application={topology.application},juju_model={topology.model}"
                     + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
+                }
+            )
+
+        # if we have any profiling relations, switch on profiling
+        if self.model.relations.get("profiling-endpoint"):
+            # https://grafana.com/docs/grafana/v9.5/setup-grafana/configure-grafana/configure-tracing/#turn-on-profiling
+            extra_info.update(
+                {
+                    "GF_DIAGNOSTICS_PROFILING_ENABLED": "true",
+                    "GF_DIAGNOSTICS_PROFILING_ADDR": "0.0.0.0",
+                    "GF_DIAGNOSTICS_PROFILING_PORT": str(PROFILING_PORT),
                 }
             )
 
@@ -1475,10 +1506,14 @@ class GrafanaCharm(CharmBase):
         return env_vars
 
     @property
-    def _scrape_jobs(self) -> list:
+    def _metrics_scrape_jobs(self) -> list:
         parts = urlparse(self.internal_url)
         job = {"static_configs": [{"targets": [parts.netloc]}], "scheme": self._scheme}
+        return [job]
 
+    @property
+    def _profiling_scrape_jobs(self) -> list:
+        job = {"static_configs": [{"targets": [f"*:{PROFILING_PORT}"]}], "scheme": self._scheme}
         return [job]
 
     def _on_server_cert_changed(self, _):
