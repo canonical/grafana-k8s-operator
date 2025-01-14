@@ -1111,7 +1111,6 @@ class GrafanaCharm(CharmBase):
             extra_info.update(
                 {
                     "GF_DIAGNOSTICS_PROFILING_ENABLED": "true",
-                    # defaulted values that could be overridden:
                     "GF_DIAGNOSTICS_PROFILING_ADDR": "0.0.0.0",
                     "GF_DIAGNOSTICS_PROFILING_PORT": str(PROFILING_PORT),
                 }
