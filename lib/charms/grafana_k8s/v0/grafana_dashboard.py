@@ -415,8 +415,7 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            "The '{}' relation has '{}' as "
-            "interface rather than the expected '{}'".format(
+            "The '{}' relation has '{}' as " "interface rather than the expected '{}'".format(
                 relation_name, actual_relation_interface, expected_relation_interface
             )
         )
@@ -1993,9 +1992,9 @@ class CosTool:
         arch = "amd64" if arch == "x86_64" else arch
         res = "cos-tool-{}".format(arch)
         try:
-            path = Path(res).resolve()
+            path = Path(res).resolve(strict=True)
             return path
-        except FileNotFoundError:
+        except (FileNotFoundError, OSError):
             logger.debug('Could not locate cos-tool at: "{}"'.format(res))
         return None
 
