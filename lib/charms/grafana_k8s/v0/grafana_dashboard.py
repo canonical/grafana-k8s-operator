@@ -415,8 +415,7 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            "The '{}' relation has '{}' as "
-            "interface rather than the expected '{}'".format(
+            "The '{}' relation has '{}' as " "interface rather than the expected '{}'".format(
                 relation_name, actual_relation_interface, expected_relation_interface
             )
         )
@@ -1994,10 +1993,7 @@ class CosTool:
         res = "cos-tool-{}".format(arch)
         try:
             path = Path(res).resolve()
-            path.chmod(0o775)
             return path
-        except NotImplementedError:
-            logger.debug("System lacks support for chmod")
         except FileNotFoundError:
             logger.debug('Could not locate cos-tool at: "{}"'.format(res))
         return None
