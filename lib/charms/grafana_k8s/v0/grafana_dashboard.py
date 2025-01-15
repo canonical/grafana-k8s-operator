@@ -1329,7 +1329,7 @@ class GrafanaDashboardConsumer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self._tranformer = CosTool(self._charm)
+        self._transformer = CosTool(self._charm)
 
         self._stored.set_default(dashboards={})  # type: ignore
 
@@ -1465,7 +1465,7 @@ class GrafanaDashboardConsumer(Object):
                 content = CharmedDashboard._convert_dashboard_fields(content, inject_dropdowns)
 
                 if topology:
-                    content = CharmedDashboard._inject_labels(content, topology, self._tranformer)
+                    content = CharmedDashboard._inject_labels(content, topology, self._transformer)
 
                 content = LZMABase64.compress(content)
             except lzma.LZMAError as e:
