@@ -890,6 +890,51 @@ class CharmedDashboard:
         panel["targets"] = targets
         return panel
 
+    @classmethod
+    def _content_to_dashboard_object(
+        cls,
+        *,
+        charm_name,
+        content: str,
+        juju_topology: dict,
+        inject_dropdowns: bool = True,
+        dashboard_alt_uid: Optional[str] = None,
+    ) -> Dict:
+        """Helper method for keeping a consistent stored state schema for the dashboard and some metadata.
+
+        Args:
+            charm_name: Charm name (although the aggregator passes the app name).
+            content: The compressed dashboard.
+            juju_topology: This is not actually used in the dashboards, but is present to provide a secondary
+              salt to ensure uniqueness in the dict keys in case individual charm units provide dashboards.
+            inject_dropdowns: Whether to auto-render topology dropdowns.
+            dashboard_alt_uid: Alternative uid used for dashboards added programmatically.
+        """
+        ret = {
+            "charm": charm_name,
+            "content": content,
+            "juju_topology": juju_topology if inject_dropdowns else {},
+            "inject_dropdowns": inject_dropdowns,
+        }
+
+        if dashboard_alt_uid is not None:
+            ret["dashboard_alt_uid"] = dashboard_alt_uid
+
+        return ret
+
+    @classmethod
+    def _generate_alt_uid(cls, charm_name: str, key: str) -> str:
+        """Generate alternative uid for dashboards.
+
+        Args:
+            charm_name: The name of the charm (not app; from metadata).
+            key: A string used (along with charm.meta.name) to build the hash uid.
+
+        Returns: A hash string.
+        """
+        raw_dashboard_alt_uid = "{}-{}".format(charm_name, key)
+        return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
+
 
 def _type_convert_stored(obj):
     """Convert Stored* to their appropriate types, recursively."""
@@ -1075,10 +1120,13 @@ class GrafanaDashboardProvider(Object):
         # it is predictable across units.
         id = "prog:{}".format(encoded_dashboard[-24:-16])
 
-        stored_dashboard_templates[id] = self._content_to_dashboard_object(
-            encoded_dashboard, inject_dropdowns
+        stored_dashboard_templates[id] = CharmedDashboard._content_to_dashboard_object(
+            charm_name=self._charm.meta.name,
+            content=encoded_dashboard,
+            dashboard_alt_uid=CharmedDashboard._generate_alt_uid(self._charm.meta.name, id),
+            inject_dropdowns=inject_dropdowns,
+            juju_topology=self._juju_topology,
         )
-        stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -1129,30 +1177,22 @@ class GrafanaDashboardProvider(Object):
             for path in filter(_is_dashboard, Path(self._dashboards_path).glob("*")):
                 # path = Path(path)
                 id = "file:{}".format(path.stem)
-                stored_dashboard_templates[id] = self._content_to_dashboard_object(
-                    LZMABase64.compress(path.read_bytes()), inject_dropdowns
+                stored_dashboard_templates[id] = CharmedDashboard._content_to_dashboard_object(
+                    charm_name=self._charm.meta.name,
+                    content=LZMABase64.compress(path.read_bytes()),
+                    dashboard_alt_uid=CharmedDashboard._generate_alt_uid(
+                        self._charm.meta.name, id
+                    ),
+                    inject_dropdowns=inject_dropdowns,
+                    juju_topology=self._juju_topology,
                 )
-                stored_dashboard_templates[id]["dashboard_alt_uid"] = self._generate_alt_uid(id)
-
-            self._stored.dashboard_templates = stored_dashboard_templates
 
             if self._charm.unit.is_leader():
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
                     self._upset_dashboards_on_relation(dashboard_relation)
 
-    def _generate_alt_uid(self, key: str) -> str:
-        """Generate alternative uid for dashboards.
-
-        Args:
-            key: A string used (along with charm.meta.name) to build the hash uid.
-
-        Returns: A hash string.
-        """
-        raw_dashboard_alt_uid = "{}-{}".format(self._charm.meta.name, key)
-        return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
-
     def _reinitialize_dashboard_data(self, inject_dropdowns: bool = True) -> None:
-        """Triggers a reload of dashboard outside of an eventing workflow.
+        """Triggers a reload of dashboard outside an eventing workflow.
 
         Args:
             inject_dropdowns: a :bool: used to indicate whether topology dropdowns should be added
@@ -1225,17 +1265,6 @@ class GrafanaDashboardProvider(Object):
 
         relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
-    def _content_to_dashboard_object(self, content: str, inject_dropdowns: bool = True) -> Dict:
-        return {
-            "charm": self._charm.meta.name,
-            "content": content,
-            "juju_topology": self._juju_topology if inject_dropdowns else {},
-            "inject_dropdowns": inject_dropdowns,
-        }
-
-    # This is not actually used in the dashboards, but is present to provide a secondary
-    # salt to ensure uniqueness in the dict keys in case individual charm units provide
-    # dashboards
     @property
     def _juju_topology(self) -> Dict:
         return {
@@ -1656,8 +1685,11 @@ class GrafanaDashboardAggregator(Object):
             return
 
         for id in dashboards:
-            self._stored.dashboard_templates[id] = self._content_to_dashboard_object(  # type: ignore
-                dashboards[id], event
+            self._stored.dashboard_templates[id] = CharmedDashboard._content_to_dashboard_object(  # type: ignore
+                charm_name=event.app.name,
+                content=dashboards[id],
+                inject_dropdowns=True,
+                juju_topology=self._hybrid_topology(event),
             )
 
         self._stored.id_mappings[event.app.name] = dashboards  # type: ignore
@@ -1857,24 +1889,16 @@ class GrafanaDashboardAggregator(Object):
                 # path = Path(path)
                 if event.app.name in path.name:  # type: ignore
                     id = "file:{}".format(path.stem)
-                    builtins[id] = self._content_to_dashboard_object(
-                        LZMABase64.compress(path.read_bytes()), event
+                    builtins[id] = CharmedDashboard._content_to_dashboard_object(  # type: ignore
+                        charm_name=event.app.name,
+                        content=LZMABase64.compress(path.read_bytes()),
+                        inject_dropdowns=True,
+                        juju_topology=self._hybrid_topology(event),
                     )
 
         return builtins
 
-    def _content_to_dashboard_object(self, content: str, event: RelationEvent) -> Dict:
-        return {
-            "charm": event.app.name,  # type: ignore
-            "content": content,
-            "juju_topology": self._juju_topology(event),
-            "inject_dropdowns": True,
-        }
-
-    # This is not actually used in the dashboards, but is present to provide a secondary
-    # salt to ensure uniqueness in the dict keys in case individual charm units provide
-    # dashboards
-    def _juju_topology(self, event: RelationEvent) -> Dict:
+    def _hybrid_topology(self, event: RelationEvent) -> Dict:
         return {
             "model": self._charm.model.name,
             "model_uuid": self._charm.model.uuid,
