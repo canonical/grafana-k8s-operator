@@ -208,7 +208,7 @@ from ops.framework import (
     StoredState,
 )
 from ops.model import Relation
-from cosl import LZMABase64
+from cosl import LZMABase64, DashboardPath40UID
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -219,7 +219,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 40
+LIBPATCH = 41
 
 logger = logging.getLogger(__name__)
 
@@ -936,11 +936,37 @@ class CharmedDashboard:
         return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
 
     @classmethod
+    def _replace_uid(
+        cls, *, dashboard_dict: dict, dashboard_path: Path, charm_dir: Path, charm_name: str
+    ):
+        # If we're running this from within an aggregator (such as grafana agent), then the uid was
+        # already rendered there, so we do not want to overwrite it with a uid generated from aggregator's info.
+        # We overwrite the uid only if it's not a valid "Path40" uid.
+        if not DashboardPath40UID.is_valid(original_uid := dashboard_dict.get("uid", "")):
+            rel_path = str(
+                dashboard_path.relative_to(charm_dir)
+                if dashboard_path.is_absolute()
+                else dashboard_path
+            )
+            dashboard_dict["uid"] = DashboardPath40UID.generate(charm_name, rel_path)
+            logger.debug(
+                "Processed dashboard '%s': replaced original uid '%s' with '%s'",
+                dashboard_path,
+                original_uid,
+                dashboard_dict["uid"],
+            )
+        else:
+            logger.debug(
+                "Processed dashboard '%s': kept original uid '%s'", dashboard_path, original_uid
+            )
+
+    @classmethod
     def load_dashboards_from_dir(
         cls,
         *,
         dashboards_path: Path,
         charm_name: str,
+        charm_dir: Path,
         inject_dropdowns: bool,
         juju_topology: dict,
         path_filter: Callable[[Path], bool] = lambda p: True,
@@ -959,10 +985,27 @@ class CharmedDashboard:
         dashboard_templates = {}
 
         for path in filter(_is_dashboard, Path(dashboards_path).glob("*")):
+            try:
+                dashboard_dict = json.loads(path.read_bytes())
+            except json.JSONDecodeError as e:
+                logger.error("Failed to load dashboard '%s': %s", path, e)
+                continue
+            if type(dashboard_dict) is not dict:
+                logger.error(
+                    "Invalid dashboard '%s': expected dict, got %s", path, type(dashboard_dict)
+                )
+
+            cls._replace_uid(
+                dashboard_dict=dashboard_dict,
+                dashboard_path=path,
+                charm_dir=charm_dir,
+                charm_name=charm_name,
+            )
+
             id = "file:{}".format(path.stem)
             dashboard_templates[id] = cls._content_to_dashboard_object(
                 charm_name=charm_name,
-                content=LZMABase64.compress(path.read_bytes()),
+                content=LZMABase64.compress(json.dumps(dashboard_dict)),
                 dashboard_alt_uid=cls._generate_alt_uid(charm_name, id),
                 inject_dropdowns=inject_dropdowns,
                 juju_topology=juju_topology,
@@ -1208,6 +1251,7 @@ class GrafanaDashboardProvider(Object):
                 CharmedDashboard.load_dashboards_from_dir(
                     dashboards_path=Path(self._dashboards_path),
                     charm_name=self._charm.meta.name,
+                    charm_dir=self._charm.charm_dir,
                     inject_dropdowns=inject_dropdowns,
                     juju_topology=self._juju_topology,
                 )
@@ -1911,6 +1955,7 @@ class GrafanaDashboardAggregator(Object):
                 CharmedDashboard.load_dashboards_from_dir(
                     dashboards_path=Path(dashboards_path),
                     charm_name=event.app.name,
+                    charm_dir=self._charm.charm_dir,
                     inject_dropdowns=True,
                     juju_topology=self._hybrid_topology(event),
                     path_filter=lambda path: event.app.name in path.name,
