@@ -950,7 +950,11 @@ class CharmedDashboard:
         # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
         # custom function for the filter
         def _is_dashboard(p: Path) -> bool:
-            return p.is_file() and p.name.endswith((".json", ".json.tmpl", ".tmpl")) and path_filter(p)
+            return (
+                p.is_file()
+                and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+                and path_filter(p)
+            )
 
         dashboard_templates = {}
 
@@ -965,6 +969,7 @@ class CharmedDashboard:
             )
 
         return dashboard_templates
+
 
 def _type_convert_stored(obj):
     """Convert Stored* to their appropriate types, recursively."""
