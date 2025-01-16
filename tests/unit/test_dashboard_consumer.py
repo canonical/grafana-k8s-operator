@@ -590,8 +590,7 @@ class TestDashboardConsumer(unittest.TestCase):
                     "dashboards": json.dumps(bad_data),
                 },
             )
-            self.assertTrue(
-                any("Invalid JSON in Grafana dashboard: file:tester" in msg for msg in cm.output)
+            self.assertIn("Invalid JSON in Grafana dashboard 'file:tester'", "\n".join(cm.output)
             )
 
     def test_consumer_templates_datasource(self):
