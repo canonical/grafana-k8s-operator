@@ -186,7 +186,7 @@ import subprocess
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 from ops.charm import (
@@ -219,7 +219,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 39
+LIBPATCH = 40
 
 logger = logging.getLogger(__name__)
 
@@ -935,6 +935,41 @@ class CharmedDashboard:
         raw_dashboard_alt_uid = "{}-{}".format(charm_name, key)
         return hashlib.shake_256(raw_dashboard_alt_uid.encode("utf-8")).hexdigest(8)
 
+    @classmethod
+    def load_dashboards_from_dir(
+        cls,
+        *,
+        dashboards_path: Path,
+        charm_name: str,
+        inject_dropdowns: bool,
+        juju_topology: dict,
+        path_filter: Callable[[Path], bool] = lambda p: True,
+    ) -> dict:
+        """Load dashboards files from directory into a mapping from "dashboard id" to a so-called "dashboard object"."""
+
+        # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
+        # custom function for the filter
+        def _is_dashboard(p: Path) -> bool:
+            return (
+                p.is_file()
+                and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
+                and path_filter(p)
+            )
+
+        dashboard_templates = {}
+
+        for path in filter(_is_dashboard, Path(dashboards_path).glob("*")):
+            id = "file:{}".format(path.stem)
+            dashboard_templates[id] = cls._content_to_dashboard_object(
+                charm_name=charm_name,
+                content=LZMABase64.compress(path.read_bytes()),
+                dashboard_alt_uid=cls._generate_alt_uid(charm_name, id),
+                inject_dropdowns=inject_dropdowns,
+                juju_topology=juju_topology,
+            )
+
+        return dashboard_templates
+
 
 def _type_convert_stored(obj):
     """Convert Stored* to their appropriate types, recursively."""
@@ -1169,23 +1204,14 @@ class GrafanaDashboardProvider(Object):
                 if dashboard_id.startswith("file:"):
                     del stored_dashboard_templates[dashboard_id]
 
-            # Path.glob uses fnmatch on the backend, which is pretty limited, so use a
-            # custom function for the filter
-            def _is_dashboard(p: Path) -> bool:
-                return p.is_file() and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
-
-            for path in filter(_is_dashboard, Path(self._dashboards_path).glob("*")):
-                # path = Path(path)
-                id = "file:{}".format(path.stem)
-                stored_dashboard_templates[id] = CharmedDashboard._content_to_dashboard_object(
+            stored_dashboard_templates.update(
+                CharmedDashboard.load_dashboards_from_dir(
+                    dashboards_path=Path(self._dashboards_path),
                     charm_name=self._charm.meta.name,
-                    content=LZMABase64.compress(path.read_bytes()),
-                    dashboard_alt_uid=CharmedDashboard._generate_alt_uid(
-                        self._charm.meta.name, id
-                    ),
                     inject_dropdowns=inject_dropdowns,
                     juju_topology=self._juju_topology,
                 )
+            )
 
             if self._charm.unit.is_leader():
                 for dashboard_relation in self._charm.model.relations[self._relation_name]:
@@ -1329,7 +1355,7 @@ class GrafanaDashboardConsumer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self._tranformer = CosTool(self._charm)
+        self._transformer = CosTool(self._charm)
 
         self._stored.set_default(dashboards={})  # type: ignore
 
@@ -1465,7 +1491,7 @@ class GrafanaDashboardConsumer(Object):
                 content = CharmedDashboard._convert_dashboard_fields(content, inject_dropdowns)
 
                 if topology:
-                    content = CharmedDashboard._inject_labels(content, topology, self._tranformer)
+                    content = CharmedDashboard._inject_labels(content, topology, self._transformer)
 
                 content = LZMABase64.compress(content)
             except lzma.LZMAError as e:
@@ -1473,7 +1499,7 @@ class GrafanaDashboardConsumer(Object):
                 relation_has_invalid_dashboards = True
             except json.JSONDecodeError as e:
                 error = str(e.msg)
-                logger.warning("Invalid JSON in Grafana dashboard: {}".format(fname))
+                logger.warning("Invalid JSON in Grafana dashboard '{}': {}".format(fname, error))
                 continue
 
             # Prepend the relation name and ID to the dashboard ID to avoid clashes with
@@ -1881,20 +1907,15 @@ class GrafanaDashboardAggregator(Object):
             )
 
         if dashboards_path:
-
-            def is_dashboard(p: Path) -> bool:
-                return p.is_file() and p.name.endswith((".json", ".json.tmpl", ".tmpl"))
-
-            for path in filter(is_dashboard, Path(dashboards_path).glob("*")):
-                # path = Path(path)
-                if event.app.name in path.name:  # type: ignore
-                    id = "file:{}".format(path.stem)
-                    builtins[id] = CharmedDashboard._content_to_dashboard_object(  # type: ignore
-                        charm_name=event.app.name,
-                        content=LZMABase64.compress(path.read_bytes()),
-                        inject_dropdowns=True,
-                        juju_topology=self._hybrid_topology(event),
-                    )
+            builtins.update(
+                CharmedDashboard.load_dashboards_from_dir(
+                    dashboards_path=Path(dashboards_path),
+                    charm_name=event.app.name,
+                    inject_dropdowns=True,
+                    juju_topology=self._hybrid_topology(event),
+                    path_filter=lambda path: event.app.name in path.name,
+                )
+            )
 
         return builtins
 
