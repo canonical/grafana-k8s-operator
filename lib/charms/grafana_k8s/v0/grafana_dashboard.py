@@ -221,6 +221,8 @@ LIBAPI = 0
 
 LIBPATCH = 41
 
+PYDEPS = ["cosl >= 0.0.50"]
+
 logger = logging.getLogger(__name__)
 
 
