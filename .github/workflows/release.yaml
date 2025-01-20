@@ -4,10 +4,9 @@ on:
   push:
     branches:
       - main
+      - track/1
 
 jobs:
   release:
-    uses: canonical/observability/.github/workflows/charm-release.yaml@main
+    uses: canonical/observability/.github/workflows/charm-release.yaml@feature/v1
     secrets: inherit
-    with:
-      ip-range: 10.64.140.43/30
