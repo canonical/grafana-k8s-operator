@@ -120,11 +120,13 @@ bases:
 
 parts:
   charm:
-    # This is currently necessary because it cuts on packing times.
-    # It can be removed when we have at least multithreading on charmcraft pack.
-    charm-binary-python-packages: [cryptography, jsonschema, pydantic, pydantic-core, maturin]
-    build-packages:
-      - git
+    build-packages: [git]
+    build-snaps: [astral-uv]
+    override-build: |
+      uvx tox -e requirements
+      git describe --tags --always > version
+      craftctl default
+    charm-requirements: [requirements.txt]
   static-sqlite3:
     plugin: dump
     source: .

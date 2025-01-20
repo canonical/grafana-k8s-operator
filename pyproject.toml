@@ -1,5 +1,44 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
+[project]
+name = "grafana-k8s"
+version = "0.0"
+requires-python = "==3.8.*" # TODO: what do we put here?
+
+dependencies = [
+  "ops",
+  "pyyaml",
+  "urllib3",
+  "jsonschema",
+  "cryptography",
+  "jinja2 < 3",
+  "lightkube >= 0.11",
+  # lib/charms/grafana_k8s/v0/grafana_dashboard.py
+  # lib/charms/temo_k8s/v1/charm_tracing.py
+  "cosl", 
+  # lib/charms/tempo_k8s/v1/charm_tracing.py
+  "opentelemetry-exporter-otlp-proto-http",
+  "pydantic",
+]
+
+[project.optional-dependencies]
+dev = [
+  # Linting
+  "ruff",
+  "codespell",
+  # Static
+  "pyright < 8.2.0", # https://github.com/pytest-dev/pytest/issues/12263
+  # Unit
+  "pytest",
+  "coverage[toml]",
+  "responses",
+  "cosl",
+  "pydantic",
+  # Integration
+  "juju",
+  "pytest-operator",
+  "ops[testing]",
+]
 
 # Testing tools configuration
 [tool.coverage.run]
