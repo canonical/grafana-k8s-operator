@@ -120,7 +120,8 @@ bases:
 
 parts:
   charm:
-    build-packages: [git, rustc, cargo]
+    charm-binary-python-packages: [cryptography, jsonschema, pydantic, pydantic-core, maturin]
+    build-packages: [git]
     build-snaps: [astral-uv]
     override-build: |
       uvx tox -e requirements
