@@ -41,12 +41,11 @@ dev = [
   "oauth_tools@git+https://github.com/canonical/iam-bundle@671a33419869fab1fe63d81873b41f6b181498e3#egg=oauth_tools",
   "lightkube",
   "minio",
-  "pytest-operator",
+  "pytest-operator>=0.39",
   "ops[testing]",
   "pytest-asyncio",
   "aiohttp",
   "asyncstdlib",
-  "sh",
 ]
 
 # Testing tools configuration
