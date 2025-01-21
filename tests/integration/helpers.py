@@ -318,6 +318,7 @@ async def reenable_metallb() -> str:
     ]
     result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     ip = result.stdout.decode("utf-8").strip()
+    return ip  # TODO: check if this works
 
     logger.info("First, disable metallb, just in case")
     try:
