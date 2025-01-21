@@ -4,7 +4,6 @@
 import functools
 import logging
 import os
-import sh
 import shutil
 from collections import defaultdict
 from datetime import datetime
