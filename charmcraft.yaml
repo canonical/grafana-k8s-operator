@@ -121,7 +121,7 @@ parts:
     build-packages: [git]
     build-snaps: [astral-uv]
     override-build: |
-      uvx tox -e requirements
+      uv export --frozen --no-hashes --format=requirements-txt -o requirements.txt
       git describe --tags --always > version
       craftctl default
     charm-requirements: [requirements.txt]

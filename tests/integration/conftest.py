@@ -86,8 +86,6 @@ async def grafana_charm(ops_test: OpsTest) -> Path:
 async def grafana_tester_charm(ops_test: OpsTest) -> Path:
     """A charm to integration test the Grafana charm."""
     charm_path = "tests/integration/grafana-tester"
-    # sh.charmcraft.pack(project_dir=charm_path)
-    # return Path("grafana-tester_ubuntu-20.04-amd64.charm")
     charm = await ops_test.build_charm(charm_path)
     return charm
 
