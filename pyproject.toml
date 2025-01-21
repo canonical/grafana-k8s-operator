@@ -11,8 +11,9 @@ dependencies = [
   "urllib3",
   "jsonschema",
   "cryptography",
-  "jinja2 < 3",
-  "lightkube >= 0.11",
+  "jinja2<3",
+  "markupsafe==2.0.1", # https://github.com/pallets/markupsafe/issues/371
+  "lightkube>=0.11",
   # lib/charms/grafana_k8s/v0/grafana_dashboard.py
   # lib/charms/temo_k8s/v1/charm_tracing.py
   "cosl", 
@@ -27,7 +28,7 @@ dev = [
   "ruff",
   "codespell",
   # Static
-  "pyright < 8.2.0", # https://github.com/pytest-dev/pytest/issues/12263
+  "pyright",
   # Unit
   "pytest",
   "coverage[toml]",
@@ -38,6 +39,7 @@ dev = [
   "juju",
   "pytest-operator",
   "ops[testing]",
+  "pytest-asyncio",
 ]
 
 # Testing tools configuration
@@ -75,6 +77,7 @@ pythonPlatform = "All"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 
 [tool.codespell]
 skip = ".git,.tox,build,venv*"
