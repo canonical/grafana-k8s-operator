@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
-import asyncio
 import grp
 import json
 import logging
-import subprocess
 from pathlib import Path
 from typing import Tuple
 
