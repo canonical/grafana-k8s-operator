@@ -5,6 +5,7 @@ import functools
 import logging
 import os
 import shutil
+import subprocess
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -86,8 +87,14 @@ async def grafana_charm(ops_test: OpsTest) -> Path:
 async def grafana_tester_charm(ops_test: OpsTest) -> Path:
     """A charm to integration test the Grafana charm."""
     charm_path = "tests/integration/grafana-tester"
-    charm = await ops_test.build_charm(charm_path)
-    return charm
+    result = subprocess.run(
+        ["charmcraft", "pack", "-p", charm_path], capture_output=True, text=True
+    )
+    if "Packed grafana-tester_ubuntu-20.04-amd64.charm" in result.stdout:
+        return Path("grafana-tester_ubuntu-20.04-amd64.charm")
+    raise Exception(result.stderr)
+    # charm = await ops_test.build_charm(charm_path)
+    # return charm
 
 
 @pytest.fixture(scope="module")
