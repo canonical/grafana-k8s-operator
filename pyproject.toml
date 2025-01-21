@@ -36,10 +36,17 @@ dev = [
   "cosl",
   "pydantic",
   # Integration
-  "juju",
+  "juju<=3.3.0,>=3.0",
+  "websockets<14.0",
+  "pytest-playwright",
+  "git+https://github.com/canonical/iam-bundle@671a33419869fab1fe63d81873b41f6b181498e3#egg=oauth_tools",
+  "lightkube",
+  "minio",
   "pytest-operator",
   "ops[testing]",
   "pytest-asyncio",
+  "aiohttp",
+  "asyncstdlib"
 ]
 
 # Testing tools configuration
