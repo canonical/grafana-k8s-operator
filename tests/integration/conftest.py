@@ -6,7 +6,6 @@ import logging
 import os
 import sh
 import shutil
-import subprocess
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
