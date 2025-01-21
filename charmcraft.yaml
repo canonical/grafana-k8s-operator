@@ -120,7 +120,7 @@ bases:
 
 parts:
   charm:
-    build-packages: [git]
+    build-packages: [git, rustc, cargo]
     build-snaps: [astral-uv]
     override-build: |
       uvx tox -e requirements
