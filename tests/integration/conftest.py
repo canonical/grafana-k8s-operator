@@ -78,7 +78,9 @@ async def grafana_charm(ops_test: OpsTest) -> Path:
     if charm_file := os.environ.get("CHARM_PATH"):
         return Path(charm_file)
 
-    charm = await ops_test.build_charm(".")
+    sh.charmcraft.pack()
+    packed_charms = sh.find(".", "-name", "grafana-k8s*.charm").strip()
+    charm = packed_charms.split("\n")
     return charm
 
 
