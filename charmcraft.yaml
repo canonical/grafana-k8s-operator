@@ -122,7 +122,7 @@ parts:
     build-snaps: [astral-uv]
     override-build: |
       uv export --frozen --no-hashes --format=requirements-txt -o requirements.txt
-      git describe --tags --always > version
+      git describe --always > version
       craftctl default
     charm-requirements: [requirements.txt]
   static-sqlite3:
