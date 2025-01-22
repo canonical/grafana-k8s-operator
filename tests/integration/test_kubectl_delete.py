@@ -106,7 +106,8 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
 
     # retcode, stdout, stderr = await ops_test.run(*cmd)
     kubectl = subprocess.run(cmd)
-    assert kubectl.returncode == 0, f"kubectl failed: {(kubectl.stderr or kubectl.stdout).strip()}"
+    # assert kubectl.returncode == 0, f"kubectl failed: {(kubectl.stderr or kubectl.stdout)}"
+    assert kubectl.returncode == 0, f"kubectl failed"
     # logger.debug(stdout)
 
     await ops_test.model.wait_for_idle(
