@@ -4,6 +4,7 @@
 
 import asyncio
 import logging
+import subprocess
 
 import pytest
 from helpers import (
@@ -37,8 +38,6 @@ grafana_resources = {
 @pytest.mark.abort_on_fail
 async def test_deploy_from_local_path(ops_test, grafana_charm, grafana_tester_charm):
     """Deploy the charm-under-test."""
-    logger.debug("deploy local charm")
-
     await asyncio.gather(
         ops_test.model.deploy(
             grafana_charm,
@@ -105,9 +104,10 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
         "Removing pod '%s' from model '%s' with cmd: %s", pod_name, ops_test.model_name, cmd
     )
 
-    retcode, stdout, stderr = await ops_test.run(*cmd)
-    assert retcode == 0, f"kubectl failed: {(stderr or stdout).strip()}"
-    logger.debug(stdout)
+    # retcode, stdout, stderr = await ops_test.run(*cmd)
+    kubectl = subprocess.run(cmd)
+    assert kubectl.returncode == 0, f"kubectl failed: {(kubectl.stderr or kubectl.stdout).strip()}"
+    # logger.debug(stdout)
 
     await ops_test.model.wait_for_idle(
         apps=[grafana_app_name], status="active", wait_for_at_least_units=1, timeout=1000
