@@ -34,7 +34,7 @@ def validate_dashboard_uid(show_unit: dict):
     """The top-level UID for each dashboard in relation data is not empty and has a valid format.
 
     Args:
-        show_unit: A dict containing the output of 'juju show-unit grafana/0'
+        show_unit: A dict containing the contents of 'juju show-unit grafana/0'
     """
     unit_name = next(iter(show_unit))
     # 1. Extract the relation-info
