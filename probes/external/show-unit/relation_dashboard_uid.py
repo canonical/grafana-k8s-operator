@@ -54,7 +54,9 @@ def validate_dashboard_uid(show_unit: dict):
                 decoded_uid = _uid_from_encoded_dashboard(meta["content"])
                 # 5. Check if the top-level UID exist and is not empty
                 if not _is_valid_format(decoded_uid):
-                    print(f"Invalid dashboard UID ({id}) for relation-id ({relation_id})")
+                    print(f"Invalid dashboard UID ({id}) for relation-id ({relation_id})", file=sys.stderr)
+
+    print("Probe finished!")
 
 
 if __name__ == "__main__":
