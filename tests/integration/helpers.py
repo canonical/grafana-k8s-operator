@@ -306,40 +306,6 @@ def uk8s_group() -> str:
     return uk8s_group
 
 
-async def reenable_metallb() -> str:
-    # Set up microk8s metallb addon, needed by traefik
-    # logger.info("(Re)-enabling metallb")
-    # cmd = [
-    #     "sh",
-    #     "-c",
-    #     "ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc'",
-    # ]
-    # result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    # ip = result.stdout.decode("utf-8").strip()
-    return "10.64.140.43"  # TODO: check if this works
-    #
-    # logger.info("First, disable metallb, just in case")
-    # try:
-    #     cmd = ["sg", uk8s_group(), "-c", "microk8s disable metallb"]
-    #     subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    # except Exception as e:
-    #     print(e)
-    #     raise
-    #
-    # await asyncio.sleep(30)  # why? just because, for now
-    #
-    # logger.info("Now enable metallb")
-    # try:
-    #     cmd = ["sg", uk8s_group(), "-c", f"microk8s enable metallb:{ip}-{ip}"]
-    #     subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    # except Exception as e:
-    #     print(e)
-    #     raise
-    #
-    # await asyncio.sleep(30)  # why? just because, for now
-    # return ip
-
-
 async def deploy_literal_bundle(ops_test: OpsTest, bundle: str):
     run_args = [
         "juju",

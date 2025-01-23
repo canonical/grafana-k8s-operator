@@ -5,6 +5,7 @@
 import asyncio
 import logging
 
+import sh
 import pytest
 from helpers import (
     check_grafana_is_ready,
@@ -15,7 +16,7 @@ from helpers import (
     get_grafana_datasources,
     get_org,
     oci_image,
-    uk8s_group,
+    # uk8s_group,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,27 +90,29 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
 
     pod_name = f"{grafana_app_name}-0"
 
-    cmd = [
-        "sg",
-        uk8s_group(),
-        "-c",
-        " ".join(["kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]),
-    ]
+    # cmd = [
+    #     "sg",
+    #     uk8s_group(),
+    #     "-c",
+    #     " ".join(["kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]),
+    # ]
 
     # # TODO: remove this re-assignment after checking if it works or not
     # cmd = ["kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]
     #
-    logger.info(
-        "Removing pod '%s' from model '%s' with cmd: %s", pod_name, ops_test.model_name, cmd
-    )
+    # logger.info(
+    #     "Removing pod '%s' from model '%s' with cmd: %s", pod_name, ops_test.model_name, cmd
+    # )
 
-    retcode, stdout, stderr = await ops_test.run(*cmd)
-    logger.info(f"+++ RETCODE:{retcode}  STDOUT:{stdout},  STDERR:{stderr}")
-    cmd = ["kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]
-    retcode, stdout, stderr = await ops_test.run(*cmd)
-    logger.info(f"+++ RETCODE:{retcode}  STDOUT:{stdout},  STDERR:{stderr}")
+    # retcode, stdout, stderr = await ops_test.run(*cmd)
+    # logger.info(f"+++ RETCODE:{retcode}  STDOUT:{stdout},  STDERR:{stderr}")
+    # cmd = ["kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]
+    # retcode, stdout, stderr = await ops_test.run(*cmd)
+    # logger.info(f"+++ RETCODE:{retcode}  STDOUT:{stdout},  STDERR:{stderr}")
+    with sh.contrib.sudo:
+        sh.kubectl.delete.pod(pod_name, namespace=ops_test.model_name)
     # kubectl = subprocess.run(cmd)
-    assert retcode == 0, f"kubectl failed: {(stderr or stdout)}"
+    # assert retcode == 0, f"kubectl failed: {(stderr or stdout)}"
     # assert kubectl.returncode == 0, "kubectl failed"
     # logger.debug(stdout)
 

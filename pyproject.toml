@@ -46,6 +46,8 @@ dev = [
   "pytest-asyncio",
   "aiohttp",
   "asyncstdlib",
+  "sh",
+  "tenacity",
 ]
 
 # Testing tools configuration
