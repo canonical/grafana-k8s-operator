@@ -109,8 +109,7 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
     # cmd = ["kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]
     # retcode, stdout, stderr = await ops_test.run(*cmd)
     # logger.info(f"+++ RETCODE:{retcode}  STDOUT:{stdout},  STDERR:{stderr}")
-    with sh.contrib.sudo:
-        sh.kubectl.delete.pod(pod_name, namespace=ops_test.model_name)
+    sh.kubectl.delete.pod(pod_name, namespace=ops_test.model_name)
     # kubectl = subprocess.run(cmd)
     # assert retcode == 0, f"kubectl failed: {(stderr or stdout)}"
     # assert kubectl.returncode == 0, "kubectl failed"
