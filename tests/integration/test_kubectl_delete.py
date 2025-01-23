@@ -4,7 +4,6 @@
 
 import asyncio
 import logging
-import subprocess
 
 import pytest
 from helpers import (
