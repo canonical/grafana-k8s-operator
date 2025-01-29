@@ -110,10 +110,8 @@ resources:
     description: upstream image for sqlite streaming
     upstream-source: docker.io/litestream/litestream:0.4.0-beta.2
 
-base: ubuntu@20.04
-
 platforms:
-  amd64:
+  ubuntu@20.04:amd64:
 
 parts:
   charm:
