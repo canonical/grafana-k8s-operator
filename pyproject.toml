@@ -6,7 +6,7 @@ version = "0.0"
 requires-python = "==3.8.*" # TODO: what do we put here?
 
 dependencies = [
-  "ops",
+  "ops>=2.17",
   "pyyaml",
   "urllib3",
   "jsonschema",

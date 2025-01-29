@@ -54,6 +54,7 @@ async def test_deploy(ops_test, grafana_charm):
 
 @pytest.mark.xfail
 async def test_grafana_is_reachable_via_traefik(ops_test: OpsTest):
+    assert ops_test.model
     # GIVEN metallb is ready
     ip = "10.64.140.43"  # default in concierge: https://github.com/jnsgruk/concierge/blob/1fbe3c55cc8b53eadfa5782f57d1f60e8fb5504b/README.md?plain=1#L313
 

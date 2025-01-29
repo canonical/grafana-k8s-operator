@@ -11,10 +11,10 @@ import ops
 import yaml
 from ops.testing import Harness
 
-import grafana_client
-from charm import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH, GrafanaCharm
+import src.grafana_client as grafana_client
+from src.charm import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH, GrafanaCharm
 
-ops.testing.SIMULATE_CAN_CONNECT = True
+ops.testing.SIMULATE_CAN_CONNECT = True  # pyright: ignore
 
 MINIMAL_CONFIG = {"grafana-image-path": "grafana/grafana", "port": 3000}
 
@@ -245,7 +245,7 @@ class TestCharm(BaseTestCharm):
         # set relation data with timeout value larger than default
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
         source_data = SOURCE_DATA.copy()
-        source_data["extra_fields"] = {"timeout": 600}
+        source_data["extra_fields"] = {"timeout": 600}  # type: ignore
         self.harness.update_relation_data(
             rel_id, "prometheus", {"grafana_source_data": json.dumps(source_data)}
         )
@@ -265,7 +265,7 @@ class TestCharm(BaseTestCharm):
         # set relation data with timeout value smaller than default
         rel_id = self.harness.add_relation("grafana-source", "prometheus")
         source_data = SOURCE_DATA.copy()
-        source_data["extra_fields"] = {"timeout": 200}
+        source_data["extra_fields"] = {"timeout": 200}  # type: ignore
         self.harness.update_relation_data(
             rel_id, "prometheus", {"grafana_source_data": json.dumps(source_data)}
         )
@@ -288,7 +288,7 @@ class TestCharm(BaseTestCharm):
         self.harness.set_leader(True)
         layer = self.harness.charm._build_layer()
         self.assertEqual(
-            layer.to_dict()["services"]["grafana"]["environment"]["GF_SERVER_ROOT_URL"],
+            layer.to_dict()["services"]["grafana"]["environment"]["GF_SERVER_ROOT_URL"],  # type: ignore
             "http://grafana-k8s-0.testmodel.svc.cluster.local:3000",
         )
 
@@ -303,8 +303,8 @@ class TestCharm(BaseTestCharm):
         services = (
             self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
         )
-        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())
-        self.assertIn("GF_SERVER_ROOT_URL", services["environment"].keys())
+        self.assertIn("GF_SERVER_SERVE_FROM_SUB_PATH", services["environment"].keys())  # type: ignore
+        self.assertIn("GF_SERVER_ROOT_URL", services["environment"].keys())  # type: ignore
 
         expected_rel_data = {
             "http": {
@@ -371,8 +371,8 @@ class TestCharm(BaseTestCharm):
         services = (
             self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
         )
-        self.assertIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())
-        self.assertEqual(services["environment"]["GF_AUTH_PROXY_ENABLED"], "True")
+        self.assertIn("GF_AUTH_PROXY_ENABLED", services["environment"].keys())  # type: ignore
+        self.assertEqual(services["environment"]["GF_AUTH_PROXY_ENABLED"], "True")  # type: ignore
 
 
 class TestCharmReplication(unittest.TestCase):
@@ -399,34 +399,36 @@ class TestCharmReplication(unittest.TestCase):
 
     @patch("socket.getfqdn", lambda: "1.2.3.4")
     def test_primary_sets_correct_peer_data(self):
-
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("grafana")
         self.harness.container_pebble_ready("litestream")
 
         self.harness.charm.on.config_changed.emit()
         rel = self.harness.model.get_relation("grafana")
+        assert rel
         self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
 
         self.harness.add_network("1.2.3.4", endpoint="grafana")
-        unit_ip = str(self.harness.charm.model.get_binding("grafana").network.bind_address)
+        unit_binding = self.harness.charm.model.get_binding("grafana")
+        assert unit_binding
+        unit_ip = str(unit_binding.network.bind_address)
         replica_address = self.harness.charm.get_peer_data("replica_primary")
 
         self.assertEqual(unit_ip, replica_address)
 
     @patch("socket.getfqdn", lambda: "2.3.4.5")
     def test_replicas_get_correct_environment_variables(self):
-
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("grafana")
         self.harness.container_pebble_ready("litestream")
 
         rel = self.harness.model.get_relation("grafana")
+        assert rel
         self.harness.add_relation_unit(rel.id, "grafana-k8s/1")
         self.harness.update_relation_data(
             rel.id, "grafana-k8s", {"replica_primary": json.dumps("1.2.3.4")}
         )
-        primary = self.harness.charm._build_replication(False).to_dict()["services"]["litestream"][
+        primary = self.harness.charm._build_replication(False).to_dict()["services"]["litestream"][  # type: ignore
             "environment"
         ]["LITESTREAM_UPSTREAM_URL"]
 
