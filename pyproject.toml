@@ -3,7 +3,7 @@
 [project]
 name = "grafana-k8s"
 version = "0.0"
-requires-python = "==3.8.*" # TODO: what do we put here?
+requires-python = ">=3.8"
 
 dependencies = [
   "ops>=2.17",
