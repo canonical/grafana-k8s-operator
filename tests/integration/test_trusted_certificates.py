@@ -91,7 +91,8 @@ async def test_certs_created(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_certs_available_after_refresh(ops_test: OpsTest, grafana_charm):
     """Make sure trusted certs are available after update."""
-    await ops_test.model.applications["grafana"].refresh(path=grafana_charm)
+    assert ops_test.model
+    await ops_test.model.applications["grafana"].refresh(path=grafana_charm)  # type: ignore
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=600, idle_period=30
     )

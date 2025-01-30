@@ -157,7 +157,7 @@ class TestSourceProviderWithIngress(unittest.TestCase):
         self.harness.begin()
 
     def test_provider_unit_sets_source_uri_if_provided(self):
-        self.harness.charm.provider = GrafanaSourceProvider(
+        self.harness.charm.provider = GrafanaSourceProvider(  # type: ignore
             self.harness.charm,
             source_type="foobar",
             source_url="http://1.2.3.4/v1",
@@ -170,7 +170,7 @@ class TestSourceProviderWithIngress(unittest.TestCase):
         self.assertEqual(data["grafana_source_host"], "http://1.2.3.4/v1")
 
     def test_provider_unit_sets_scheme_if_not_provided(self):
-        self.harness.charm.provider = GrafanaSourceProvider(
+        self.harness.charm.provider = GrafanaSourceProvider(  # type: ignore
             self.harness.charm,
             source_type="foobar",
             source_url="1.2.3.4/v1",

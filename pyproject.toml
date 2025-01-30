@@ -1,5 +1,54 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
+[project]
+name = "grafana-k8s"
+version = "0.0"
+requires-python = "~=3.8"
+
+dependencies = [
+  "ops>=2.17",
+  "pyyaml",
+  "urllib3",
+  "jsonschema",
+  "cryptography",
+  "jinja2<3",
+  "markupsafe==2.0.1", # https://github.com/pallets/markupsafe/issues/371
+  "lightkube>=0.11",
+  # lib/charms/grafana_k8s/v0/grafana_dashboard.py
+  # lib/charms/temo_k8s/v1/charm_tracing.py
+  "cosl", 
+  # lib/charms/tempo_k8s/v1/charm_tracing.py
+  "opentelemetry-exporter-otlp-proto-http",
+  "pydantic",
+]
+
+[project.optional-dependencies]
+dev = [
+  # Linting
+  "ruff",
+  "codespell",
+  # Static
+  "pyright",
+  # Unit
+  "pytest",
+  "coverage[toml]",
+  "responses",
+  "cosl",
+  "pydantic",
+  # Integration
+  "juju<=3.3.0,>=3.0",
+  "websockets<14.0",
+  "oauth_tools@git+https://github.com/canonical/iam-bundle@671a33419869fab1fe63d81873b41f6b181498e3#egg=oauth_tools",
+  "lightkube",
+  "minio",
+  "pytest-operator>=0.39",
+  "ops[testing]",
+  "pytest-asyncio",
+  "aiohttp",
+  "asyncstdlib",
+  "sh",
+  "tenacity",
+]
 
 # Testing tools configuration
 [tool.coverage.run]
@@ -36,6 +85,7 @@ pythonPlatform = "All"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 
 [tool.codespell]
 skip = ".git,.tox,build,venv*"

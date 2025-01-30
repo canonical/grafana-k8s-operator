@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
-import asyncio
-import grp
 import json
 import logging
-import subprocess
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import requests
 import yaml
@@ -34,13 +31,14 @@ async def grafana_password(ops_test: OpsTest, app_name: str) -> str:
     Returns:
         admin password as a string
     """
-    leader = None  # type: Unit
-    for unit in ops_test.model.applications[app_name].units:
+    leader: Optional[Unit] = None
+    for unit in ops_test.model.applications[app_name].units:  # type: ignore
         is_leader = await unit.is_leader_from_status()
         if is_leader:
             leader = unit
             break
 
+    assert leader
     action = await leader.run_action("get-admin-password")
     action = await action.wait()
     return action.results["admin-password"]
@@ -57,6 +55,7 @@ async def unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
     Returns:
         unit address as a string
     """
+    assert ops_test.model
     status = await ops_test.model.get_status()
     return status["applications"][app_name]["units"]["{}/{}".format(app_name, unit_num)]["address"]
 
@@ -295,50 +294,7 @@ async def get_grafana_environment_variable(
 
     # If we do find one, split it into parts around `foo=bar` and return the value
     value = next(iter([env for env in stdout.splitlines() if env_var in env])).split("=")[-1] or ""
-    return rc, value, stderr.strip
-
-
-def uk8s_group() -> str:
-    try:
-        # Classically confined microk8s
-        uk8s_group = grp.getgrnam("microk8s").gr_name
-    except KeyError:
-        # Strictly confined microk8s
-        uk8s_group = "snap_microk8s"
-    return uk8s_group
-
-
-async def reenable_metallb() -> str:
-    # Set up microk8s metallb addon, needed by traefik
-    logger.info("(Re)-enabling metallb")
-    cmd = [
-        "sh",
-        "-c",
-        "ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc'",
-    ]
-    result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    ip = result.stdout.decode("utf-8").strip()
-
-    logger.info("First, disable metallb, just in case")
-    try:
-        cmd = ["sg", uk8s_group(), "-c", "microk8s disable metallb"]
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    except Exception as e:
-        print(e)
-        raise
-
-    await asyncio.sleep(30)  # why? just because, for now
-
-    logger.info("Now enable metallb")
-    try:
-        cmd = ["sg", uk8s_group(), "-c", f"microk8s enable metallb:{ip}-{ip}"]
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    except Exception as e:
-        print(e)
-        raise
-
-    await asyncio.sleep(30)  # why? just because, for now
-    return ip
+    return str(rc), value, stderr.strip()
 
 
 async def deploy_literal_bundle(ops_test: OpsTest, bundle: str):
@@ -389,6 +345,7 @@ async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
         "access-key": "accesskey",
         "secret-key": "secretkey",
     }
+    assert ops_test.model
     await ops_test.model.deploy("minio", channel="edge", trust=True, config=config)
     await ops_test.model.wait_for_idle(apps=["minio"], status="active", timeout=2000)
     minio_addr = await unit_address(ops_test, "minio", 0)
@@ -406,7 +363,7 @@ async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
         mc_client.make_bucket("tempo")
 
     # configure s3-integrator
-    s3_integrator_app: Application = ops_test.model.applications["s3-integrator"]
+    s3_integrator_app: Application = ops_test.model.applications["s3-integrator"]  # type: ignore
     s3_integrator_leader: Unit = s3_integrator_app.units[0]
 
     await s3_integrator_app.set_config(
@@ -427,6 +384,7 @@ async def deploy_tempo_cluster(ops_test: OpsTest):
     worker_app = "tempo-worker"
     tempo_worker_charm_url, worker_channel = "tempo-worker-k8s", "edge"
     tempo_coordinator_charm_url, coordinator_channel = "tempo-coordinator-k8s", "edge"
+    assert ops_test.model
     await ops_test.model.deploy(
         tempo_worker_charm_url, application_name=worker_app, channel=worker_channel, trust=True
     )
@@ -477,6 +435,7 @@ async def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tl
 
 async def get_application_ip(ops_test: OpsTest, app_name: str) -> str:
     """Get the application IP address."""
+    assert ops_test.model
     status = await ops_test.model.get_status()
     app = status["applications"][app_name]
     return app.public_address
@@ -491,6 +450,7 @@ class ModelConfigChange:
 
     async def __aenter__(self):
         """On entry, the config is set to the user provided custom values."""
+        assert self.ops_test.model
         config = await self.ops_test.model.get_config()
         self.revert_to = {k: config[k] for k in self.change_to.keys()}
         await self.ops_test.model.set_config(self.change_to)
@@ -498,4 +458,5 @@ class ModelConfigChange:
 
     async def __aexit__(self, exc_type, exc_value, exc_traceback):
         """On exit, the modified config options are reverted to their original values."""
+        assert self.ops_test.model
         await self.ops_test.model.set_config(self.revert_to)

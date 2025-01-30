@@ -5,6 +5,7 @@
 import asyncio
 import logging
 
+import sh
 import pytest
 from helpers import (
     check_grafana_is_ready,
@@ -15,7 +16,6 @@ from helpers import (
     get_grafana_datasources,
     get_org,
     oci_image,
-    uk8s_group,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,8 +37,6 @@ grafana_resources = {
 @pytest.mark.abort_on_fail
 async def test_deploy_from_local_path(ops_test, grafana_charm, grafana_tester_charm):
     """Deploy the charm-under-test."""
-    logger.debug("deploy local charm")
-
     await asyncio.gather(
         ops_test.model.deploy(
             grafana_charm,
@@ -91,20 +89,7 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
 
     pod_name = f"{grafana_app_name}-0"
 
-    cmd = [
-        "sg",
-        uk8s_group(),
-        "-c",
-        " ".join(["microk8s.kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]),
-    ]
-
-    logger.debug(
-        "Removing pod '%s' from model '%s' with cmd: %s", pod_name, ops_test.model_name, cmd
-    )
-
-    retcode, stdout, stderr = await ops_test.run(*cmd)
-    assert retcode == 0, f"kubectl failed: {(stderr or stdout).strip()}"
-    logger.debug(stdout)
+    sh.kubectl.delete.pod(pod_name, namespace=ops_test.model_name)  # type: ignore
 
     await ops_test.model.wait_for_idle(
         apps=[grafana_app_name], status="active", wait_for_at_least_units=1, timeout=1000

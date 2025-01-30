@@ -110,21 +110,19 @@ resources:
     description: upstream image for sqlite streaming
     upstream-source: docker.io/litestream/litestream:0.4.0-beta.2
 
-bases:
-  - build-on:
-      - name: "ubuntu"
-        channel: "20.04"
-    run-on:
-      - name: "ubuntu"
-        channel: "20.04"
+platforms:
+  ubuntu@20.04:amd64:
 
 parts:
   charm:
-    # This is currently necessary because it cuts on packing times.
-    # It can be removed when we have at least multithreading on charmcraft pack.
     charm-binary-python-packages: [cryptography, jsonschema, pydantic, pydantic-core, maturin]
-    build-packages:
-      - git
+    build-packages: [git]
+    build-snaps: [astral-uv]
+    override-build: |
+      uv export --frozen --no-hashes --format=requirements-txt -o requirements.txt
+      git describe --always > version
+      craftctl default
+    charm-requirements: [requirements.txt]
   static-sqlite3:
     plugin: dump
     source: .

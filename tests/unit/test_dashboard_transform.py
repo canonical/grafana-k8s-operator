@@ -4,6 +4,7 @@
 import base64
 import json
 import lzma
+from typing import Dict, Optional
 import unittest
 import uuid
 from unittest.mock import patch
@@ -338,7 +339,9 @@ class TestDashboardLabelInjector(unittest.TestCase):
 
         return rel_ids
 
-    def setup_different_dashboard(self, template: str, alternative_data: dict = None) -> list:
+    def setup_different_dashboard(
+        self, template: str, alternative_data: Optional[Dict] = None
+    ) -> list:
         """Create relations used by test cases with alternate templates."""
         rel_ids = []
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
@@ -366,7 +369,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
 
         return rel_ids
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
+    @patch("platform.processor", lambda: "x86_64")
     def test_consumer_adds_labels(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
@@ -385,7 +388,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
             ],
         )
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
+    @patch("platform.processor", lambda: "x86_64")
     def test_consumer_does_not_add_labels_without_topology(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
@@ -404,7 +407,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
             ],
         )
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
+    @patch("platform.processor", lambda: "x86_64")
     def test_consumer_adds_labels_for_loki(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
@@ -423,7 +426,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
             ],
         )
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
+    @patch("platform.processor", lambda: "x86_64")
     def test_consumer_handles_negatives_and_multiple_targets(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
@@ -442,7 +445,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
             ],
         )
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
+    @patch("platform.processor", lambda: "x86_64")
     def test_consumer_handles_expressions_with_ranges(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
@@ -461,7 +464,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
             ],
         )
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
+    @patch("platform.processor", lambda: "x86_64")
     def test_consumer_handles_expressions_with_offsets(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)

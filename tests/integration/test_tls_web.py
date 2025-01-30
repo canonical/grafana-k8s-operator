@@ -90,6 +90,7 @@ async def test_server_cert(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_https_reachable(ops_test: OpsTest, temp_dir):
     """Make sure grafana's https endpoint is reachable using curl and ca cert."""
+    assert ops_test.model
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=1200, idle_period=30
     )
@@ -126,7 +127,8 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
 @pytest.mark.abort_on_fail
 async def test_https_still_reachable_after_refresh(ops_test: OpsTest, grafana_charm, temp_dir):
     """Make sure grafana's https endpoint is still reachable after an upgrade."""
-    await ops_test.model.applications[grafana.name].refresh(path=grafana_charm)
+    assert ops_test.model
+    await ops_test.model.applications[grafana.name].refresh(path=grafana_charm)  # type: ignore
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=600, idle_period=30
     )

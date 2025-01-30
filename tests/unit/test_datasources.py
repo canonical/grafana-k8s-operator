@@ -84,7 +84,8 @@ def test_datasource_get():
     with ctx(ctx.on.relation_changed(datasource), state) as mgr:
         charm = mgr.charm
         # THEN we can see our datasource uids via the provider
-        assert list(charm.source_provider.get_source_uids().values())[0] == local_ds_uids
+        ds_uids = list(charm.source_provider.get_source_uids().values())  # pyright: ignore
+        assert ds_uids[0] == local_ds_uids
 
 
 def test_datasource_get_nodata():
@@ -121,4 +122,4 @@ def test_datasource_get_nodata():
     with ctx(ctx.on.relation_changed(datasource), state) as mgr:
         charm = mgr.charm
         # THEN we can see no datasource uids via the provider
-        assert not charm.source_provider.get_source_uids()
+        assert not charm.source_provider.get_source_uids()  # type: ignore

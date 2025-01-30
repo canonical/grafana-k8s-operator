@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 import functools
 import logging
+import os
 import shutil
 from collections import defaultdict
 from datetime import datetime
@@ -73,6 +74,9 @@ def copy_grafana_libraries_into_tester_charm(ops_test: OpsTest) -> None:
 @timed_memoizer
 async def grafana_charm(ops_test: OpsTest) -> Path:
     """Grafana charm used for integration testing."""
+    if charm_file := os.environ.get("CHARM_PATH"):
+        return Path(charm_file)
+
     charm = await ops_test.build_charm(".")
     return charm
 

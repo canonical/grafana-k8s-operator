@@ -40,7 +40,7 @@ class TestOauth(BaseTestCharm):
         services = (
             self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
         )
-        env = services["environment"]
+        env = services["environment"]  # type: ignore
 
         expected_env = {
             "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
@@ -66,7 +66,7 @@ class TestOauth(BaseTestCharm):
         services = (
             self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
         )
-        env = services["environment"]
+        env = services["environment"]  # type: ignore
 
         oauth_env = {
             "GF_AUTH_GENERIC_OAUTH_ENABLED",
@@ -114,7 +114,7 @@ class TestOauth(BaseTestCharm):
         services = (
             self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
         )
-        env = services["environment"]
+        env = services["environment"]  # type: ignore
 
         oauth_env = {
             "GF_AUTH_GENERIC_OAUTH_ENABLED",
