@@ -1,4 +1,4 @@
-name: Release Charm to Edge and Publish Libraries
+name: Release Charm
 
 on:
   push:
