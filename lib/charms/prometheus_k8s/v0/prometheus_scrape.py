@@ -178,7 +178,7 @@ configure the following scrape-related settings, which behave as described by th
 - `scrape_timeout`
 - `proxy_url`
 - `relabel_configs`
-- `metrics_relabel_configs`
+- `metric_relabel_configs`
 - `sample_limit`
 - `label_limit`
 - `label_name_length_limit`
@@ -362,7 +362,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 46
+LIBPATCH = 48
 
 PYDEPS = ["cosl"]
 
@@ -377,7 +377,7 @@ ALLOWED_KEYS = {
     "scrape_timeout",
     "proxy_url",
     "relabel_configs",
-    "metrics_relabel_configs",
+    "metric_relabel_configs",
     "sample_limit",
     "label_limit",
     "label_name_length_limit",
@@ -2364,12 +2364,9 @@ class CosTool:
         arch = "amd64" if arch == "x86_64" else arch
         res = "cos-tool-{}".format(arch)
         try:
-            path = Path(res).resolve()
-            path.chmod(0o777)
+            path = Path(res).resolve(strict=True)
             return path
-        except NotImplementedError:
-            logger.debug("System lacks support for chmod")
-        except FileNotFoundError:
+        except (FileNotFoundError, OSError):
             logger.debug('Could not locate cos-tool at: "{}"'.format(res))
         return None
 
