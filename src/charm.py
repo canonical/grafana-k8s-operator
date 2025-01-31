@@ -26,16 +26,20 @@ import re
 import secrets
 import socket
 import string
+import subprocess
 import time
-from cosl import JujuTopology
 from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Dict, cast
 from urllib.parse import urlparse
-import subprocess
 
 import yaml
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateAvailableEvent,
+    CertificateRemovedEvent,
+    CertificateTransferRequires,
+)
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_source import (
@@ -54,15 +58,17 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     ResourceRequirements,
     adjust_resource_requirements,
 )
-from charms.observability_libs.v0.cert_handler import CertHandler
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
-    CertificateAvailableEvent,
-    CertificateRemovedEvent,
-    CertificateTransferRequires,
-)
 from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    CertificateRequestAttributes,
+    TLSCertificatesRequiresV4,
+)
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
+from cosl import JujuTopology
+from ops import main
 from ops.charm import (
     ActionEvent,
     CharmBase,
@@ -73,16 +79,12 @@ from ops.charm import (
     RelationJoinedEvent,
     UpgradeCharmEvent,
 )
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from ops.framework import StoredState
-from ops import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port
-
 from ops.pebble import (
     APIError,
-    ConnectionError,
     ChangeError,
+    ConnectionError,
     ExecError,
     Layer,
     PathError,
@@ -131,11 +133,11 @@ OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
     server_cert="server_cert",
     extra_types=[
         AuthRequirer,
-        CertHandler,
         GrafanaDashboardConsumer,
         GrafanaSourceConsumer,
         KubernetesComputeResourcesPatch,
         MetricsEndpointProvider,
+        TLSCertificatesRequiresV4,
     ],
 )
 class GrafanaCharm(CharmBase):
@@ -164,12 +166,17 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(admin_password="")
         self._topology = JujuTopology.from_charm(self)
 
-        # -- cert_handler
-        self.cert_handler = CertHandler(
+        # -- certificates
+        self.cert_subject = self.unit.name.replace("/", "-")
+        self.certificate_request = CertificateRequestAttributes(
+            common_name=self.cert_subject,
+            sans_dns=frozenset((socket.getfqdn(),)),
+        )
+        self.certificates = TLSCertificatesRequiresV4(
             charm=self,
-            key="grafana-server-cert",
-            peer_relation_name="replicas",
-            extra_sans_dns=[socket.getfqdn()],
+            relationship_name="certificates",
+            certificate_requests=[self.certificate_request],
+            refresh_events=[self.on.config_changed],
         )
 
         # -- trusted_cert_transfer
@@ -183,7 +190,7 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
-        self.framework.observe(self.cert_handler.on.cert_changed, self._configure_ingress)
+        self.framework.observe(self.certificates.on.certificate_available, self._configure_ingress)
 
         # Assuming FQDN is always part of the SANs DNS.
         self.grafana_service = Grafana(f"{self._scheme}://{socket.getfqdn()}:{PORT}")
@@ -194,7 +201,7 @@ class GrafanaCharm(CharmBase):
             refresh_event=[
                 self.on.grafana_pebble_ready,  # pyright: ignore
                 self.on.update_status,
-                self.cert_handler.on.cert_changed,  # pyright: ignore
+                self.certificates.on.certificate_available,  # pyright: ignore
             ],
         )
         self.charm_tracing = TracingEndpointRequirer(
@@ -299,7 +306,7 @@ class GrafanaCharm(CharmBase):
 
         # -- cert_handler observations
         self.framework.observe(
-            self.cert_handler.on.cert_changed, self._on_server_cert_changed  # pyright: ignore
+            self.certificates.on.certificate_available, self._on_server_cert_available  # pyright: ignore
         )
 
         # -- trusted_cert_transfer observations
@@ -933,15 +940,8 @@ class GrafanaCharm(CharmBase):
                 "Cannot set workload version at this time: could not get Alertmanager version."
             )
 
-    def _cert_ready(self):
-        # Verify that the certificate and key are correctly configured
-        workload = self.containers["workload"]
-        return (
-            self.cert_handler.cert
-            and self.cert_handler.key
-            and workload.exists(GRAFANA_CRT_PATH)
-            and workload.exists(GRAFANA_KEY_PATH)
-        )
+    def _certificates_relation_in_use(self) -> bool:
+        return len(self.model.relations["certificates"]) > 0
 
     def restart_grafana(self) -> None:
         """Restart the pebble container.
@@ -956,7 +956,7 @@ class GrafanaCharm(CharmBase):
         # This is needed here to circumvent a code ordering issue that results in:
         #   *api.HTTPServer run error: cert_file cannot be empty when using HTTPS
         #   ERROR cannot start service: exited quickly with code 1
-        if self.cert_handler.enabled:
+        if self._certificates_relation_in_use():
             logger.debug("TLS enabled: updating certs")
             self._update_cert()
             # now that this is done, build_layer should include cert and key into the config and we'll
@@ -1386,9 +1386,12 @@ class GrafanaCharm(CharmBase):
     def _on_resource_patch_failed(self, event: K8sResourcePatchFailedEvent):
         self.unit.status = BlockedStatus(str(event.message))
 
+    def _is_assigned_certificate(self) -> bool:
+        return bool(self.certificates.get_assigned_certificate(self.certificate_request)[0])
+
     @property
     def _scheme(self) -> str:
-        return "https" if self.cert_handler.cert else "http"
+        return "https" if self._is_assigned_certificate() else "http"
 
     @property
     def internal_url(self) -> str:
@@ -1516,46 +1519,46 @@ class GrafanaCharm(CharmBase):
         job = {"static_configs": [{"targets": [f"*:{PROFILING_PORT}"]}], "scheme": self._scheme}
         return [job]
 
-    def _on_server_cert_changed(self, _):
+    def _on_server_cert_available(self, _):
         # this triggers a restart, which triggers a cert update.
-        self._configure(force_restart=True)
+        assigned_cert, key = self.certificates.get_assigned_certificate(self.certificate_request)
+        if assigned_cert and key:
+            logger.info("Server cert changed. Restarting grafana-k8s. Cert: %s", assigned_cert.certificate)
+            self._configure(force_restart=True)
 
     def _update_cert(self):
         container = self.containers["workload"]
-        if self.cert_handler.cert:
+        assigned_cert, key = self.certificates.get_assigned_certificate(self.certificate_request)
+        if assigned_cert:
             # Save the workload certificates
             container.push(
                 GRAFANA_CRT_PATH,
-                self.cert_handler.cert,
+                str(assigned_cert.certificate),
                 make_dirs=True,
             )
-        else:
-            container.remove_path(GRAFANA_CRT_PATH, recursive=True)
-
-        if self.cert_handler.key:
-            container.push(
-                GRAFANA_KEY_PATH,
-                self.cert_handler.key,
-                make_dirs=True,
-            )
-        else:
-            container.remove_path(GRAFANA_KEY_PATH, recursive=True)
-
-        if self.cert_handler.ca:
-            # Save the CA among the trusted CAs and trust it
             container.push(
                 CA_CERT_PATH,
-                self.cert_handler.ca,
+                str(assigned_cert.ca),
                 make_dirs=True,
             )
 
             # Repeat for the charm container. We need it there for grafana client requests.
             CA_CERT_PATH.parent.mkdir(exist_ok=True, parents=True)
-            CA_CERT_PATH.write_text(self.cert_handler.ca)
+            CA_CERT_PATH.write_text(str(assigned_cert.ca))
         else:
+            container.remove_path(GRAFANA_CRT_PATH, recursive=True)
             container.remove_path(CA_CERT_PATH, recursive=True)
             # Repeat for the charm container.
             CA_CERT_PATH.unlink(missing_ok=True)
+
+        if key:
+            container.push(
+                GRAFANA_KEY_PATH,
+                str(key),
+                make_dirs=True,
+            )
+        else:
+            container.remove_path(GRAFANA_KEY_PATH, recursive=True)
 
         container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
