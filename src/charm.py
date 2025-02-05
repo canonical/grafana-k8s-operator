@@ -38,6 +38,7 @@ import yaml
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
+from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
     GrafanaSourceEvents,
@@ -330,6 +331,21 @@ class GrafanaCharm(CharmBase):
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
 
         self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
+
+        # -- grafana-metadata relation handling
+        self.grafana_metadata = GrafanaMetadataProvider(
+            charm=self,
+            grafana_uid=self.unique_name,
+            ingress_url=self.external_url,
+            internal_url=self.internal_url,
+            relation_name="grafana-metadata",
+            refresh_event=[
+                # Because if the ingress changes, our ingress_url will change
+                self.ingress.on.ready,
+                # Because if the cert handling is updated, the schema for the internal url may change
+                self.cert_handler.on.cert_changed
+            ]
+        )
 
     @property
     def _catalogue_item(self) -> CatalogueItem:

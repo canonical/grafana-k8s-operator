@@ -20,6 +20,9 @@ dependencies = [
   # lib/charms/tempo_k8s/v1/charm_tracing.py
   "opentelemetry-exporter-otlp-proto-http",
   "pydantic",
+  # lib/charms/grafana_k8s/v0/grafana_metadata.py
+  # TODO: Pin to a real versioned release once available
+  "charm-relation-building-blocks @ git+https://github.com/canonical/charm-relation-building-blocks@initial-files",
 ]
 
 [project.optional-dependencies]

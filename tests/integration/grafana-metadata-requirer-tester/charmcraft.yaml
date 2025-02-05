@@ -1,0 +1,29 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: metadata-tester
+description: tester charm that implements the requirer side of a generic one-way data relation
+summary: tester charm that implements the requirer side of a generic one-way data relation
+type: charm
+bases:
+  - build-on:
+      - name: "ubuntu"
+        channel: "20.04"
+    run-on:
+      - name: "ubuntu"
+        channel: "20.04"
+
+config:
+
+requires:
+  metadata:
+    limit: 1
+    interface: grafana_metadata
+
+parts:
+  charm:
+    charm-binary-python-packages:
+      - ops
+      - requests
+      - pydantic-core
+      - pydantic
+      - maturin
