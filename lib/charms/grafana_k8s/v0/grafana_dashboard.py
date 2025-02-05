@@ -219,7 +219,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 39
+LIBPATCH = 40
 
 PYDEPS = ["cosl >= 0.0.50"]
 
@@ -417,8 +417,7 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            "The '{}' relation has '{}' as "
-            "interface rather than the expected '{}'".format(
+            "The '{}' relation has '{}' as " "interface rather than the expected '{}'".format(
                 relation_name, actual_relation_interface, expected_relation_interface
             )
         )
@@ -1601,7 +1600,7 @@ class GrafanaDashboardConsumer(Object):
 
         if not coerced_data == stored_data:
             stored_dashboards = self.get_peer_data("dashboards")
-            stored_dashboards[relation.id] = stored_data
+            stored_dashboards[str(relation.id)] = stored_data
             self.set_peer_data("dashboards", stored_dashboards)
             return True
         return None  # type: ignore

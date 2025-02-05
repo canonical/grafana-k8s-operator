@@ -211,7 +211,8 @@ class GrafanaCharm(CharmBase):
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(
-            self.on.grafana_pebble_ready, self._on_pebble_ready  # pyright: ignore
+            self.on.grafana_pebble_ready,
+            self._on_pebble_ready,  # pyright: ignore
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
@@ -265,7 +266,8 @@ class GrafanaCharm(CharmBase):
             self, self.name, resource_reqs_func=self._resource_reqs_from_config
         )
         self.framework.observe(
-            self.resource_patch.on.patch_failed, self._on_resource_patch_failed  # pyright: ignore
+            self.resource_patch.on.patch_failed,
+            self._on_resource_patch_failed,  # pyright: ignore
         )
         # -- grafana_auth relation observations
         self.grafana_auth_requirer = AuthRequirer(
@@ -299,7 +301,8 @@ class GrafanaCharm(CharmBase):
 
         # -- cert_handler observations
         self.framework.observe(
-            self.cert_handler.on.cert_changed, self._on_server_cert_changed  # pyright: ignore
+            self.cert_handler.on.cert_changed,
+            self._on_server_cert_changed,  # pyright: ignore
         )
 
         # -- trusted_cert_transfer observations
@@ -316,10 +319,12 @@ class GrafanaCharm(CharmBase):
 
         # oauth relation observations
         self.framework.observe(
-            self.oauth.on.oauth_info_changed, self._on_oauth_info_changed  # pyright: ignore
+            self.oauth.on.oauth_info_changed,
+            self._on_oauth_info_changed,  # pyright: ignore
         )
         self.framework.observe(
-            self.oauth.on.oauth_info_removed, self._on_oauth_info_changed  # pyright: ignore
+            self.oauth.on.oauth_info_removed,
+            self._on_oauth_info_changed,  # pyright: ignore
         )
 
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
@@ -413,7 +418,9 @@ class GrafanaCharm(CharmBase):
         litestream_config = {"addr": ":9876", "dbs": [{"path": DATABASE_PATH}]}
 
         if not leader:
-            litestream_config["dbs"][0].update({"upstream": {"url": "http://${LITESTREAM_UPSTREAM_URL}"}})  # type: ignore
+            litestream_config["dbs"][0].update(
+                {"upstream": {"url": "http://${LITESTREAM_UPSTREAM_URL}"}}
+            )  # type: ignore
 
         container = self.containers["replication"]
         if container.can_connect():
@@ -629,7 +636,7 @@ class GrafanaCharm(CharmBase):
         default_config = os.path.join(dashboard_path, "default.yaml")
         default_config_string = yaml.dump(dashboard_config)
 
-        if not os.path.exists(dashboard_path):
+        if not container.exists(dashboard_path):
             try:
                 container.push(default_config, default_config_string, make_dirs=True)
                 self.restart_grafana()
@@ -738,7 +745,8 @@ class GrafanaCharm(CharmBase):
 
         # Get required information
         database_fields = {
-            field: event.relation.data[event.app].get(field) for field in REQUIRED_DATABASE_FIELDS  # type: ignore
+            field: event.relation.data[event.app].get(field)
+            for field in REQUIRED_DATABASE_FIELDS  # type: ignore
         }
 
         # if any required fields are missing, warn the user and return
@@ -1131,13 +1139,13 @@ class GrafanaCharm(CharmBase):
                             "GF_LOG_LEVEL": cast(str, self.model.config["log_level"]),
                             "GF_PLUGINS_ENABLE_ALPHA": "true",
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
-                            "GF_SECURITY_ALLOW_EMBEDDING": cast(
-                                str, self.model.config["allow_embedding"]
+                            "GF_SECURITY_ALLOW_EMBEDDING": str(
+                                self.model.config["allow_embedding"]
                             ),
                             "GF_SECURITY_ADMIN_USER": cast(str, self.model.config["admin_user"]),
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
-                            "GF_AUTH_ANONYMOUS_ENABLED": cast(
-                                str, self.model.config["allow_anonymous_access"]
+                            "GF_AUTH_ANONYMOUS_ENABLED": str(
+                                self.model.config["allow_anonymous_access"]
                             ),
                             "GF_USERS_AUTO_ASSIGN_ORG": str(
                                 self.model.config["enable_auto_assign_org"]
