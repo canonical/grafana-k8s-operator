@@ -1,4 +1,6 @@
 """Tests that assert GrafanaCharm is wired up correctly to be a grafana-metadata provider."""
+from typing import Optional, Tuple
+
 import pytest
 from ops.testing import Relation, State
 
@@ -18,7 +20,7 @@ SAMPLE_APP_DATA = {
 GRAFANA_URL = f"http://{GRAFANA_FQDN}:{PORT}"
 
 
-def local_app_data_relation_state(leader: bool, local_app_data: dict = None) -> (Relation, State):
+def local_app_data_relation_state(leader: bool, local_app_data: Optional[dict] = None) -> Tuple[Relation, State]:
     """Return a testing State that has a single relation with the given local_app_data."""
     if local_app_data is None:
         local_app_data = {}

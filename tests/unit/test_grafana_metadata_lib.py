@@ -1,7 +1,7 @@
 """Tests for the grafana-metadata lib requirer and provider classes, excluding their usage in GrafanaCharm."""
 
 from contextlib import nullcontext as does_not_raise
-from typing import Union
+from typing import Union, Optional, Tuple
 
 import pytest
 from ops import CharmBase
@@ -35,7 +35,7 @@ class GrafanaMetadataProviderCharm(CharmBase):
     def __init__(self, framework):
         super().__init__(framework)
         self.relation_provider = GrafanaMetadataProvider(
-            self, **SAMPLE_APP_DATA, relation_name=RELATION_NAME
+            self, **SAMPLE_APP_DATA, relation_name=RELATION_NAME, refresh_event=[]
         )
 
 
@@ -60,7 +60,7 @@ def grafana_metadata_requirer_context():
     return Context(charm_type=GrafanaMetadataRequirerCharm, meta=GrafanaMetadataRequirerCharm.META)
 
 
-def local_app_data_relation_state(leader: bool, local_app_data: dict = None) -> (Relation, State):
+def local_app_data_relation_state(leader: bool, local_app_data: Optional[dict] = None) -> Tuple[Relation, State]:
     """Return a testing State that has a single relation with the given local_app_data."""
     if local_app_data is None:
         local_app_data = {}

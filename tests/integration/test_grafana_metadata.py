@@ -5,7 +5,6 @@
 import json
 import logging
 
-from pytest_operator.plugin import OpsTest
 
 from helpers import (
     check_grafana_is_ready,
@@ -44,7 +43,7 @@ async def test_deploy_grafana(
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
 
 
-async def test_grafana_metadata_relation(ops_test: OpsTest, grafana_metadata_requirer_tester_charm):
+async def test_grafana_metadata_relation(ops_test, grafana_metadata_requirer_tester_charm):
     """Test the metadata relation works as expected in attachment."""
     tester_charm = grafana_metadata_requirer_tester_charm
 
@@ -66,7 +65,7 @@ async def test_grafana_metadata_relation(ops_test: OpsTest, grafana_metadata_req
     assert actual.get("internal_url", None)
 
 
-async def test_grafana_metadata_relation_removal(ops_test: OpsTest, grafana_metadata_requirer_tester_charm):
+async def test_grafana_metadata_relation_removal(ops_test, grafana_metadata_requirer_tester_charm):
     """Test the metadata relation works as expected in removal."""
     # Remove the relation and confirm the data is gone
     await ops_test.model.applications[APP_NAME].remove_relation(
