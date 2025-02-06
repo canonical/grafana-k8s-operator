@@ -382,15 +382,6 @@ wheels = [
 ]
 
 [[package]]
-name = "charm-relation-building-blocks"
-version = "0.0.0"
-source = { git = "https://github.com/canonical/charm-relation-building-blocks?rev=initial-files#815b0707df2fd8ba7b188565c5e6d7de52ff4eae" }
-dependencies = [
-    { name = "ops" },
-    { name = "pydantic" },
-]
-
-[[package]]
 name = "charset-normalizer"
 version = "3.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -811,7 +802,6 @@ name = "grafana-k8s"
 version = "0.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "charm-relation-building-blocks" },
     { name = "cosl" },
     { name = "cryptography" },
     { name = "jinja2" },
@@ -855,7 +845,6 @@ dev = [
 requires-dist = [
     { name = "aiohttp", marker = "extra == 'dev'" },
     { name = "asyncstdlib", marker = "extra == 'dev'" },
-    { name = "charm-relation-building-blocks", git = "https://github.com/canonical/charm-relation-building-blocks?rev=initial-files" },
     { name = "codespell", marker = "extra == 'dev'" },
     { name = "cosl" },
     { name = "cosl", marker = "extra == 'dev'" },
@@ -1446,15 +1435,15 @@ wheels = [
 
 [[package]]
 name = "ops"
-version = "2.18.1"
+version = "2.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
     { name = "websocket-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/65/ecc06a63d3c02c9de074628bc2470dfedde01bcfc6d6694cb7664bea8e20/ops-2.18.1.tar.gz", hash = "sha256:5619deb370c00ea851f9579b780a09b88b1a1d020e58e1ed81d31c8fb7b28c8a", size = 482573 }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/e7/86d1a22d0f2066deadbc6da3d73380e5e7e6da20b95108a7cdbe40f5c444/ops-2.17.1.tar.gz", hash = "sha256:de2d1dd382b4a5f3df3ba78a5266d59462644f3f8ea0f4e7479a248998862a3f", size = 477569 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/73/2de0b0bd387ab1d48e67b7cf579865c2819a2114d4d3b6636a6f3458ed9d/ops-2.18.1-py3-none-any.whl", hash = "sha256:ba0312366e25b3ae90cf4b8d0af6ea6b612d4951500f856bce609cdb25c9bdeb", size = 177869 },
+    { url = "https://files.pythonhosted.org/packages/34/db/3f9884051be5df318e3f1d9e67737295b34d045a135147de8a49afa88f9b/ops-2.17.1-py3-none-any.whl", hash = "sha256:0fabc45740d59619c3265328f51f71f99b06557e22493cdd32d10c2b25bcd553", size = 176831 },
 ]
 
 [package.optional-dependencies]
