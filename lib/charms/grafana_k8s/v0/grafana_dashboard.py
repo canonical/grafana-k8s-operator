@@ -1603,7 +1603,7 @@ class GrafanaDashboardConsumer(Object):
 
         if not coerced_data == stored_data:
             stored_dashboards = self.get_peer_data("dashboards")
-            stored_dashboards[relation.id] = stored_data
+            stored_dashboards[str(relation.id)] = stored_data
             self.set_peer_data("dashboards", stored_dashboards)
             return True
         return None  # type: ignore
