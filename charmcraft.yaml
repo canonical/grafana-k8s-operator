@@ -95,6 +95,9 @@ provides:
 peers:
   grafana:
     interface: grafana_peers
+  replicas:
+    # Peer relation used as storage for TLS data
+    interface: grafana_replicas
 
 resources:
   grafana-image:
