@@ -35,7 +35,7 @@ class GrafanaMetadataProviderCharm(CharmBase):
     def __init__(self, framework):
         super().__init__(framework)
         self.relation_provider = GrafanaMetadataProvider(
-            self, **SAMPLE_APP_DATA, relation_name=RELATION_NAME, refresh_event=[]
+            self, **SAMPLE_APP_DATA, relation_name=RELATION_NAME
         )
 
 
@@ -47,7 +47,7 @@ def grafana_metadata_provider_context():
 class GrafanaMetadataRequirerCharm(CharmBase):
     META = {
         "name": "requirer",
-        "requires": {RELATION_NAME: {"interface": "istio-info"}},
+        "requires": {RELATION_NAME: {"interface": "grafana-metadata"}},
     }
 
     def __init__(self, framework):
@@ -79,75 +79,24 @@ def local_app_data_relation_state(leader: bool, local_app_data: Optional[dict] =
     return relation, state
 
 
-def test_provider_sender_sends_data_on_relation_joined(grafana_metadata_provider_context):
-    """Tests that a charm using ProviderSender sends the correct data to the relation on a relation joined event."""
+def test_grafana_metadata_provider_sends_data_correctly(grafana_metadata_provider_context):
+    """Tests that a charm using GrafanaMetadataProvider sends the correct data to the relation on a relation joined event."""
     # Arrange
     relation, state = local_app_data_relation_state(leader=True)
 
     # Act
-    grafana_metadata_provider_context.run(grafana_metadata_provider_context.on.relation_joined(relation), state=state)
-
-    # Assert
-    assert relation.local_app_data == SAMPLE_APP_DATA
-
-
-def test_provider_sends_data_on_leader_elected(grafana_metadata_provider_context):
-    """Tests that a charm using IstioInfoProvider sends the correct data to the relation on a leader elected event."""
-    # Arrange
-    relation, state = local_app_data_relation_state(leader=True)
-
-    # Act
-    grafana_metadata_provider_context.run(grafana_metadata_provider_context.on.leader_elected(), state=state)
-
-    # Assert
-    assert relation.local_app_data == SAMPLE_APP_DATA
-
-
-def test_provider_doesnt_send_data_when_not_leader(grafana_metadata_provider_context):
-    """Tests that a charm using the IstioInfoProvider does not send data if not the leader."""
-    # Arrange
-    relation, state = local_app_data_relation_state(leader=False)
-
-    events = [
-        grafana_metadata_provider_context.on.relation_joined(relation),
-        grafana_metadata_provider_context.on.leader_elected(),
-        grafana_metadata_provider_context.on.config_changed(),  # just to have some other event
-    ]
-    for event in events:
-        # Act
-        grafana_metadata_provider_context.run(event, state=state)
-
-        # Assert
-        assert relation.local_app_data == {}
-
-
-@pytest.mark.parametrize(
-    "local_app_data",
-    [
-        {},  # relation starts with empty data
-        SAMPLE_APP_DATA_2,  # relation starts with stale data
-    ],
-)
-def test_provider_is_ready(local_app_data, grafana_metadata_provider_context):
-    """Tests that a charm using the IstioInfoProvider correctly assesses whether the data sent is up to date."""
-    # Arrange
-    relation, state = local_app_data_relation_state(leader=True, local_app_data=local_app_data)
-
     with grafana_metadata_provider_context(
-        grafana_metadata_provider_context.on.relation_joined(relation), state=state
+        # construct a charm using an event that won't trigger anything here
+        grafana_metadata_provider_context.on.update_status(), state=state
     ) as manager:
-        charm = manager.charm
+        manager.charm.relation_provider.send_data()
 
-        # Before executing the event that causes data to be emitted, the relation handler should not be ready
-        assert not charm.relation_provider.is_ready()
-
-        # After the data is sent, the provider should indicate ready
-        manager.run()
-        assert charm.relation_provider.is_ready()
+    # Assert
+    assert relation.local_app_data == SAMPLE_APP_DATA
 
 
-def test_requirer_emits_info_changed_on_relation_data_changes(grafana_metadata_requirer_context):
-    """Tests that a charm using IstioInfoRequirer emits a DataChangedEvent when the relation data changes."""
+def test_grafana_metadata_requirer_emits_info_changed_on_relation_data_changes(grafana_metadata_requirer_context):
+    """Tests that a charm using GrafanaMetadataRequirer emits a DataChangedEvent when the relation data changes."""
     # Arrange
     relation, state = local_app_data_relation_state(leader=False)
 
@@ -200,8 +149,8 @@ def test_requirer_emits_info_changed_on_relation_data_changes(grafana_metadata_r
         ),  # stale data
     ],
 )
-def test_requirer_get_data(relations, expected_data, context_raised, grafana_metadata_requirer_context):
-    """Tests that IstioInfoRequirer.get_data() returns correctly."""
+def test_grafana_metadata_requirer_get_data(relations, expected_data, context_raised, grafana_metadata_requirer_context):
+    """Tests that GrafanaMetadataRequirer.get_data() returns correctly."""
     state = State(
         relations=relations,
         leader=False,
@@ -264,10 +213,10 @@ def test_requirer_get_data(relations, expected_data, context_raised, grafana_met
         ),
     ],
 )
-def test_requirer_get_data_from_all_relations(
+def test_grafana_metadata_requirer_get_data_from_all_relations(
     relations, expected_data, context_raised, grafana_metadata_requirer_context
 ):
-    """Tests that IstioInfoRequirer.get_data_from_all_relations() returns correctly."""
+    """Tests that GrafanaMetadataRequirer.get_data_from_all_relations() returns correctly."""
     state = State(
         relations=relations,
         leader=False,
@@ -291,7 +240,7 @@ def sort_app_data(data):
 
 
 def are_app_data_equal(data1: Union[GrafanaMetadataAppData, None], data2: Union[GrafanaMetadataAppData, None]):
-    """Compare two GrafanaMetadataAppData objects, tolerating when one or both is None."""
+    """Compare two GrafanaMetadataRequirer objects, tolerating when one or both is None."""
     if data1 is None and data2 is None:
         return True
     if data1 is None or data2 is None:

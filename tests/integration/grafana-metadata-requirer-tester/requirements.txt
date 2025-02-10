@@ -1,4 +1,1 @@
 ops
-# lib/charms/grafana_k8s/v0/grafana_metadata.py
-# TODO: Pin to a real versioned release once available
-https://github.com/canonical/charm-relation-building-blocks/archive/initial-files.zip

@@ -1,7 +1,6 @@
 """Tests that assert GrafanaCharm is wired up correctly to be a grafana-metadata provider."""
 from typing import Optional, Tuple
 
-import pytest
 from ops.testing import Relation, State
 
 from charm import PORT
@@ -81,28 +80,3 @@ def test_provider_sends_data_on_leader_elected(ctx):
 
     # Assert
     assert relation.local_app_data == expected
-
-
-@pytest.mark.parametrize(
-    "local_app_data",
-    [
-        {},  # relation starts with empty data
-        SAMPLE_APP_DATA,  # relation starts with stale data
-    ],
-)
-def test_provider_is_ready(local_app_data, ctx):
-    """Tests that a charm using the GrafanaMetadataProvider correctly assesses whether the data sent is up to date."""
-    # Arrange
-    relation, state = local_app_data_relation_state(leader=True, local_app_data=local_app_data)
-
-    with ctx(
-        ctx.on.relation_joined(relation), state=state
-    ) as manager:
-        charm = manager.charm
-
-        # Before executing the event that causes data to be emitted, the relation handler should not be ready
-        assert not charm.grafana_metadata.is_ready()
-
-        # After the data is sent, the provider should indicate ready
-        manager.run()
-        assert charm.grafana_metadata.is_ready()
