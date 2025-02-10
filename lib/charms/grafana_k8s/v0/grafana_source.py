@@ -512,7 +512,7 @@ class GrafanaSourceConsumer(Object):
         Args:
             charm: a :class:`CharmBase` instance that manages this
                 instance of the Grafana source service.
-            grafana_uid: a unique identifier for this Grafana datasource.
+            grafana_uid: an identifier uniquely identifying this grafana-k8s application.
             relation_name: string name of the relation that is provides the
                 Grafana source service. It is strongly advised not to change
                 the default, so that people deploying your charm will have a
