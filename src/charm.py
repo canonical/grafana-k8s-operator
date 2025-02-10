@@ -223,7 +223,7 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- grafana_source relation observations
-        self.source_consumer = GrafanaSourceConsumer(self, "grafana-source")
+        self.source_consumer = GrafanaSourceConsumer(self, grafana_uid=self.unique_name, relation_name="grafana-source")
         self.framework.observe(
             self.source_consumer.on.sources_changed,  # pyright: ignore
             self._on_grafana_source_changed,
@@ -1629,6 +1629,16 @@ class GrafanaCharm(CharmBase):
             Path("sqlite-static").read_bytes(),
             permissions=0o755,
             make_dirs=True,
+        )
+
+    @property
+    def unique_name(self):
+        """Returns a unique identifier for this application."""
+        return "juju_{}_{}_{}_{}".format(
+            self.model.name,
+            self.model.uuid,
+            self.model.app.name,
+            self.model.unit.name.split("/")[1],  # type: ignore
         )
 
 
