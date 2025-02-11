@@ -17,6 +17,7 @@ requires:
 parts:
   charm:
     charm-binary-python-packages:
+      - cryptography
       - ops
       - pydantic-core
       - pydantic
