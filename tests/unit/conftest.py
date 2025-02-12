@@ -6,6 +6,8 @@ from ops.testing import Context
 from charm import GrafanaCharm
 
 
+GRAFANA_FQDN = "grafana-k8s-0.testmodel.svc.cluster.local"
+
 def tautology(*_, **__) -> bool:
     return True
 
@@ -15,7 +17,7 @@ def ctx():
     patches = (
         patch("charm.GrafanaCharm._push_sqlite_static", new=lambda _: None),
         patch("lightkube.core.client.GenericSyncClient"),
-        patch("socket.getfqdn", new=lambda *args: "grafana-k8s-0.testmodel.svc.cluster.local"),
+        patch("socket.getfqdn", new=lambda *args: GRAFANA_FQDN),
         patch("socket.gethostbyname", new=lambda *args: "1.2.3.4"),
         patch.multiple(
             "charm.KubernetesComputeResourcesPatch",

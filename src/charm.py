@@ -38,6 +38,7 @@ import yaml
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
+from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
     GrafanaSourceEvents,
@@ -116,6 +117,7 @@ PEER = "grafana"
 PORT = 3000
 PROFILING_PORT = 8080
 DATABASE_PATH = "/var/lib/grafana/grafana.db"
+GRAFANA_METADATA_RELATION_NAME = "grafana-metadata"
 
 # Template for storing trusted certificate in a file.
 TRUSTED_CA_TEMPLATE = string.Template(
@@ -330,6 +332,19 @@ class GrafanaCharm(CharmBase):
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
 
         self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
+
+        # -- grafana-metadata relation handling
+        self.grafana_metadata = GrafanaMetadataProvider(
+            charm=self,
+            grafana_uid=self.unique_name,
+            ingress_url=self.external_url,
+            internal_url=self.internal_url,
+            relation_name=GRAFANA_METADATA_RELATION_NAME,
+        )
+        self.framework.observe(self.on.leader_elected, self._send_grafana_metadata)
+        self.framework.observe(self.on["grafana-metadata"].relation_joined, self._send_grafana_metadata)
+        self.framework.observe(self.ingress.on.ready, self._send_grafana_metadata)
+        self.framework.observe(self.cert_handler.on.cert_changed, self._send_grafana_metadata)
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
@@ -1640,6 +1655,12 @@ class GrafanaCharm(CharmBase):
             self.model.app.name,
             self.model.unit.name.split("/")[1],  # type: ignore
         )
+
+    def _send_grafana_metadata(self, _):
+        """Send metadata to related applications on the grafana-metadata relation."""
+        if not self.unit.is_leader():
+            return
+        self.grafana_metadata.send_data()
 
 
 if __name__ == "__main__":
