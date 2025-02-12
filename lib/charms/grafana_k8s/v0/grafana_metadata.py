@@ -28,7 +28,7 @@ class FooCharm(CharmBase):
         super().__init__(framework)
         # Create the GrafanaMetadataRequirer instance, providing the relation name you've used
         self.grafana_metadata = GrafanaMetadataRequirer(self, "grafana-metadata")
-        self.framework.observe(self.grafana_metadata.on.data_changed, self.do_something_with_metadata)
+        self.framework.observe(self.grafana_metadata.on.data_changed, self._on_grafana_metadata_data_changed)
 ```
 
 To access the data elsewhere in the charm, use the provided data accessors.  These return `GrafanaMetadataAppData`
