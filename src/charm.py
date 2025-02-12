@@ -1658,6 +1658,8 @@ class GrafanaCharm(CharmBase):
 
     def _send_grafana_metadata(self, _):
         """Send metadata to related applications on the grafana-metadata relation."""
+        if not self.unit.is_leader():
+            return
         self.grafana_metadata.send_data()
 
 

@@ -243,7 +243,11 @@ class GrafanaMetadataProvider(Object):
         return self._charm.model.relations.get(self._relation_name, ())
 
     def send_data(self):
-        """Post grafana-metadata to all related applications."""
+        """Post grafana-metadata to all related applications.
+
+        This method writes to the relation's app data bag, and thus should never be called by a unit that is not the
+        leader otherwise ops will raise an exception.
+        """
         info_relations = self._get_relations()
         for relation in info_relations:
             databag= relation.data[self._charm.app]
