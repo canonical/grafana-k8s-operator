@@ -73,15 +73,15 @@ def copy_grafana_libraries_into_tester_charm(ops_test: OpsTest) -> None:
 @pytest.fixture(scope="module")
 @timed_memoizer
 async def copy_grafana_libraries_into_grafana_metadata_requirer_tester_charm(ops_test: OpsTest):
-    charm_path = (Path(__file__).parent / "grafana-metadata-requirer-tester").absolute()
+    tester_path = (Path(__file__).parent / "grafana-metadata-requirer-tester").absolute()
 
     # Update libraries in the tester charms
-    root_lib_folder = Path(__file__).parent.parent.parent / "lib"
-    tester_lib_folder = charm_path / "lib"
+    grafana_metadata_relative_path = Path("lib/charms/grafana_k8s/v0/grafana_metadata.py")
+    grafana_metadata_lib_source = Path(__file__).parent.parent.parent / grafana_metadata_relative_path
+    grafana_metadata_lib_target = tester_path / grafana_metadata_relative_path
 
-    if os.path.exists(tester_lib_folder):
-        shutil.rmtree(tester_lib_folder)
-    shutil.copytree(root_lib_folder, tester_lib_folder)
+    grafana_metadata_lib_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(grafana_metadata_lib_source, grafana_metadata_lib_target)
 
 
 @pytest.fixture(scope="module")
