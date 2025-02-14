@@ -178,7 +178,13 @@ class GrafanaCharm(CharmBase):
         # -- ingress via raw traefik_route
         # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
         # so this may be none. Rely on `self.ingress.is_ready` later to check
-        self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
+        self.ingress = TraefikRouteRequirer(
+            charm=self,
+            relation=self.model.get_relation("ingress"), # type: ignore
+            relation_name="ingress",
+            raw=True
+        )
+
         self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)  # pyright: ignore
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
