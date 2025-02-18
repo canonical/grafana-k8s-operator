@@ -106,11 +106,11 @@ PYDEPS = ["pydantic>=2"]
 
 log = logging.getLogger(__name__)
 
-DEFAULT_RELATION_NAME = "grafana-info"
+DEFAULT_RELATION_NAME = "grafana-metadata"
 
 
 class GrafanaMetadataAppData(BaseModel):
-    """Data model for the grafana-info interface."""
+    """Data model for the grafana-metadata interface."""
 
     ingress_url: str = Field(description="The ingress URL.")
     internal_url: str = Field(description="The URL for connecting to the prometheus api from inside the cluster.")
@@ -128,7 +128,7 @@ class ReceiverCharmEvents(CharmEvents):
 
 
 class GrafanaMetadataRequirer(Object):
-    """Class for handling the receiver side of the grafana-info relation."""
+    """Class for handling the receiver side of the grafana-metadata relation."""
 
     on = ReceiverCharmEvents()  # type: ignore[reportAssignmentType]
 
@@ -214,7 +214,7 @@ class GrafanaMetadataRequirer(Object):
 
 
 class GrafanaMetadataProvider(Object):
-    """Class for handling the Provider side of the grafana-info relation."""
+    """Class for handling the Provider side of the grafana-metadata relation."""
 
     def __init__(
         self,
