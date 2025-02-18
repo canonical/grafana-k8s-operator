@@ -197,7 +197,7 @@ class GrafanaMetadataRequirer(Object):
         """Return a list of data objects from all relations."""
         relations = self.relations
         info_list = []
-        for i, relation in enumerate(relations):
+        for relation in relations:
             data_dict = relation.data.get(relation.app)
             if not data_dict:
                 info_list.append(None)
