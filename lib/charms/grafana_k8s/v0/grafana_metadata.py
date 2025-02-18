@@ -120,8 +120,8 @@ class DataChangedEvent(EventBase):
     """Charm Event triggered when the relation data has changed."""
 
 
-class ReceiverCharmEvents(CharmEvents):
-    """Events raised by the data receiver side of the interface."""
+class GrafanaMetadataRequirerEvents(CharmEvents):
+    """Events raised by GrafanaMetadataRequirer."""
 
     data_changed = EventSource(DataChangedEvent)
 
@@ -129,7 +129,7 @@ class ReceiverCharmEvents(CharmEvents):
 class GrafanaMetadataRequirer(Object):
     """Class for handling the receiver side of the grafana-metadata relation."""
 
-    on = ReceiverCharmEvents()  # type: ignore[reportAssignmentType]
+    on = GrafanaMetadataRequirerEvents()  # type: ignore[reportAssignmentType]
 
     def __init__(
         self,
