@@ -16,13 +16,13 @@ INTERFACE_NAME = "app-data-interface"
 # Note: if this is changed, the GrafanaMetadataAppData concrete classes below need to change their constructors to match
 SAMPLE_APP_DATA = {
     "grafana_uid": "grafana-uid",
-    "ingress_url": "ingress-url",
-    "internal_url": "internal-url",
+    "ingress_url": "http://www.ingress-url.com/",
+    "internal_url": "http://www.internal-url.com/",
 }
 SAMPLE_APP_DATA_2 = {
     "grafana_uid": "grafana-uid2",
-    "ingress_url": "ingress-url2",
-    "internal_url": "internal-url2",
+    "ingress_url": "http://www.ingress-url2.com/",
+    "internal_url": "http://www.internal-url2.com/",
 }
 
 

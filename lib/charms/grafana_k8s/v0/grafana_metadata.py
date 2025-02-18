@@ -88,9 +88,8 @@ import json
 import logging
 from typing import List, Optional, Union
 
-
 from ops import CharmBase, BoundEvent, EventBase, CharmEvents, EventSource, Object
-from pydantic import BaseModel, Field
+from pydantic import AnyHttpUrl, BaseModel, Field
 
 # The unique Charmhub library identifier, never change it
 LIBID = "26290f24974540adb4464b695bd01ea3"
@@ -112,8 +111,8 @@ DEFAULT_RELATION_NAME = "grafana-metadata"
 class GrafanaMetadataAppData(BaseModel):
     """Data model for the grafana-metadata interface."""
 
-    ingress_url: str = Field(description="The ingress URL.")
-    internal_url: str = Field(description="The URL for connecting to the prometheus api from inside the cluster.")
+    ingress_url: AnyHttpUrl = Field(description="The ingress URL, with scheme.")
+    internal_url: AnyHttpUrl = Field(description="The URL for connecting to the prometheus api from inside the cluster, with scheme.")
     grafana_uid: str = Field(description="The UID of this Grafana application.")
 
 
@@ -232,8 +231,8 @@ class GrafanaMetadataProvider(Object):
         Args:
             charm: The charm instance.
             grafana_uid: The UID of this Grafana instance.
-            ingress_url: The URL for the Grafana ingress.
-            internal_url: The URL for the Grafana internal service.
+            ingress_url: The URL for the Grafana ingress, with scheme.
+            internal_url: The URL for the Grafana internal service, with scheme.
             relation_name: The name of the relation.
         """
         super().__init__(charm, relation_name)

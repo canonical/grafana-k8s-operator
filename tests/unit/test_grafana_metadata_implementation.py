@@ -12,11 +12,11 @@ INTERFACE_NAME = "grafana_metadata"
 # Note: if this is changed, the GrafanaMetadataAppData concrete classes below need to change their constructors to match
 SAMPLE_APP_DATA = {
     "grafana_uid": "grafana-uid",
-    "ingress_url": "ingress-url",
-    "internal_url": "internal-url",
+    "ingress_url": "http://www.ingress-url.com/",
+    "internal_url": "http://www.internal-url.com/",
 }
 
-GRAFANA_URL = f"http://{GRAFANA_FQDN}:{PORT}"
+GRAFANA_URL = f"http://{GRAFANA_FQDN}:{PORT}/"
 
 
 def local_app_data_relation_state(leader: bool, local_app_data: Optional[dict] = None) -> Tuple[Relation, State]:
