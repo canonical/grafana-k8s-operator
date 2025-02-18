@@ -161,10 +161,6 @@ class GrafanaMetadataRequirer(Object):
             self._charm.on[self._relation_name].relation_changed, self.on_relation_changed
         )
 
-    def __len__(self):
-        """Return the number of related applications."""
-        return len(self.get_relations())
-
     def on_relation_changed(self, _: EventBase) -> None:
         """Handle when the remote application data changed."""
         self.on.data_changed.emit()
