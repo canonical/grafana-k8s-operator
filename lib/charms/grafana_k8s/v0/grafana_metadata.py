@@ -18,9 +18,13 @@ requires:
     interface: grafana_metadata
 ```
 
-To handle the relation events in your charm, use `GrafanaMetadataRequirer`.  That object handles all relation events for
-this relation, and emits a `DataChangedEvent` when data changes the charm might want to react to occur.  To set it up,
-instantiate an `GrafanaMetadataRequirer` object in your charm's `__init__` method and observe the `DataChangedEvent`:
+To implement handling this relation:
+
+* instantiate a `GrafanaMetadataRequirer` object in your charm's `__init__` method.  This object handles all low-level
+  events for managing this relation (relation-changed, relation-joined, etc)
+* observe the `DataChangedEvent` event anywhere you want to react to changes in the data provided by this relation.
+
+An example implementation is:
 
 ```python
 class FooCharm(CharmBase):
