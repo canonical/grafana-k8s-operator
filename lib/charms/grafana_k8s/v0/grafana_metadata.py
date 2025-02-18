@@ -127,7 +127,7 @@ class GrafanaMetadataRequirerEvents(CharmEvents):
 
 
 class GrafanaMetadataRequirer(Object):
-    """Class for handling the receiver side of the grafana-metadata relation."""
+    """The requirer side of the grafana-metadata relation."""
 
     on = GrafanaMetadataRequirerEvents()  # type: ignore[reportAssignmentType]
 
@@ -213,7 +213,7 @@ class GrafanaMetadataRequirer(Object):
 
 
 class GrafanaMetadataProvider(Object):
-    """Class for handling the Provider side of the grafana-metadata relation."""
+    """The provider side of the grafana-metadata relation."""
 
     def __init__(
         self,
