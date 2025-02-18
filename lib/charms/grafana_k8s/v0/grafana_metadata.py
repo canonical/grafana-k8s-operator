@@ -165,7 +165,8 @@ class GrafanaMetadataRequirer(Object):
         """Handle when the remote application data changed."""
         self.on.data_changed.emit()
 
-    def get_relations(self):
+    @property
+    def relations(self):
         """Return the relation instances for applications related to us on the monitored relation."""
         return self._charm.model.relations.get(self._relation_name, ())
 
@@ -176,7 +177,7 @@ class GrafanaMetadataRequirer(Object):
         set limit=1 for that relation in charmcraft.yaml.  Returns None if no data is available (either because no
         applications are related to us, or because the related application has not sent data).
         """
-        relations = self.get_relations()
+        relations = self.relations
         if len(relations) == 0:
             return None
         if len(relations) > 1:
@@ -194,7 +195,7 @@ class GrafanaMetadataRequirer(Object):
 
     def get_data_from_all_relations(self) -> List[BaseModel]:
         """Return a list of data objects from all relations."""
-        relations = self.get_relations()
+        relations = self.relations
         info_list = []
         for i, relation in enumerate(relations):
             data_dict = relation.data.get(relation.app)
@@ -237,7 +238,8 @@ class GrafanaMetadataProvider(Object):
         self._data = GrafanaMetadataAppData(ingress_url=ingress_url, internal_url=internal_url, grafana_uid=grafana_uid)
         self._relation_name = relation_name
 
-    def _get_relations(self):
+    @property
+    def relations(self):
         """Return the applications related to us under the monitored relation."""
         return self._charm.model.relations.get(self._relation_name, ())
 
@@ -247,7 +249,7 @@ class GrafanaMetadataProvider(Object):
         This method writes to the relation's app data bag, and thus should never be called by a unit that is not the
         leader otherwise ops will raise an exception.
         """
-        info_relations = self._get_relations()
+        info_relations = self.relations
         for relation in info_relations:
             databag= relation.data[self._charm.app]
             databag.update(self._data.model_dump(mode="json", by_alias=True, exclude_defaults=True, round_trip=True))
