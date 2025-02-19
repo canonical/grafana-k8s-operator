@@ -117,7 +117,6 @@ PEER = "grafana"
 PORT = 3000
 PROFILING_PORT = 8080
 DATABASE_PATH = "/var/lib/grafana/grafana.db"
-GRAFANA_METADATA_RELATION_NAME = "grafana-metadata"
 
 # Template for storing trusted certificate in a file.
 TRUSTED_CA_TEMPLATE = string.Template(
@@ -339,7 +338,7 @@ class GrafanaCharm(CharmBase):
             grafana_uid=self.unique_name,
             ingress_url=self.external_url,
             internal_url=self.internal_url,
-            relation_name=GRAFANA_METADATA_RELATION_NAME,
+            relation_name="grafana-metadata",
         )
         self.framework.observe(self.on.leader_elected, self._send_grafana_metadata)
         self.framework.observe(self.on["grafana-metadata"].relation_joined, self._send_grafana_metadata)
