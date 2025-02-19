@@ -105,7 +105,7 @@ PYDEPS = ["pydantic>=2"]
 
 log = logging.getLogger(__name__)
 
-DEFAULT_RELATION_NAME = "grafana-metadata"
+GRAFANA_METADATA_RELATION_NAME = "grafana-metadata"
 
 
 class GrafanaMetadataAppData(BaseModel):
@@ -134,7 +134,7 @@ class GrafanaMetadataRequirer(Object):
     def __init__(
         self,
         charm: CharmBase,
-        relation_name: str,
+        relation_name: str = GRAFANA_METADATA_RELATION_NAME,
         refresh_event: Optional[Union[BoundEvent, List[BoundEvent]]] = None,
     ) -> None:
         """Initialize the GrafanaMetadataRequirer object.
@@ -218,7 +218,7 @@ class GrafanaMetadataProvider(Object):
         grafana_uid: str,
         ingress_url: str,
         internal_url: str,
-        relation_name: str,
+        relation_name: str = GRAFANA_METADATA_RELATION_NAME,
     ):
         """Initialize the GrafanaMetadataProvider object.
 
