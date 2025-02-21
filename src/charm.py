@@ -333,13 +333,6 @@ class GrafanaCharm(CharmBase):
         self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
 
         # -- grafana-metadata relation handling
-        self.grafana_metadata = GrafanaMetadataProvider(
-            charm=self,
-            grafana_uid=self.unique_name,
-            ingress_url=self.external_url,
-            internal_url=self.internal_url,
-            relation_name="grafana-metadata",
-        )
         self.framework.observe(self.on.leader_elected, self._send_grafana_metadata)
         self.framework.observe(self.on["grafana-metadata"].relation_joined, self._send_grafana_metadata)
         self.framework.observe(self.ingress.on.ready, self._send_grafana_metadata)
@@ -1659,7 +1652,23 @@ class GrafanaCharm(CharmBase):
         """Send metadata to related applications on the grafana-metadata relation."""
         if not self.unit.is_leader():
             return
-        self.grafana_metadata.send_data()
+
+        # grafana-metadata should only send an external URL if it's set, otherwise it leaves that empty
+        internal_url = self.internal_url
+        external_url = self.external_url
+        if external_url == internal_url:
+            # external_url is not set and just defaulted back to internal_url.  Set it to None
+            external_url = None
+
+        grafana_metadata = GrafanaMetadataProvider(
+            relations=self.model.relations,
+            grafana_uid=self.unique_name,
+            ingress_url=external_url,
+            direct_url=internal_url,
+            app=self.app,
+            relation_name="grafana-metadata",
+        )
+        grafana_metadata.publish()
 
 
 if __name__ == "__main__":

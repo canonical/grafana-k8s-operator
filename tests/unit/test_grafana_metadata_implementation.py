@@ -1,5 +1,6 @@
 """Tests that assert GrafanaCharm is wired up correctly to be a grafana-metadata provider."""
 from typing import Optional, Tuple
+from unittest.mock import patch, PropertyMock
 
 from ops.testing import Relation, State
 
@@ -13,10 +14,11 @@ INTERFACE_NAME = "grafana_metadata"
 SAMPLE_APP_DATA = {
     "grafana_uid": "grafana-uid",
     "ingress_url": "http://www.ingress-url.com/",
-    "internal_url": "http://www.internal-url.com/",
+    "direct_url": "http://www.internal-url.com/",
 }
 
 GRAFANA_URL = f"http://{GRAFANA_FQDN}:{PORT}/"
+GRAFANA_INGRESS_URL = "http://www.ingress-url.com/"
 
 
 def local_app_data_relation_state(leader: bool, local_app_data: Optional[dict] = None) -> Tuple[Relation, State]:
@@ -39,7 +41,7 @@ def local_app_data_relation_state(leader: bool, local_app_data: Optional[dict] =
 
 
 def test_provider_sender_sends_data_on_relation_joined(ctx):
-    """Tests that a charm using ProviderSender sends the correct data to the relation on a relation joined event."""
+    """Tests that a charm using GrafanaMetadataProvider sends the correct data on a relation joined event."""
     # Arrange
     relation, state = local_app_data_relation_state(leader=True)
 
@@ -52,8 +54,30 @@ def test_provider_sender_sends_data_on_relation_joined(ctx):
         manager.run()
         expected = {
             "grafana_uid": charm.unique_name,
-            "internal_url": GRAFANA_URL,
-            "ingress_url": GRAFANA_URL,
+            "direct_url": GRAFANA_URL,
+        }
+
+    # Assert
+    assert relation.local_app_data == expected
+
+
+@patch("charm.GrafanaCharm.external_url", PropertyMock(return_value=GRAFANA_INGRESS_URL))
+def test_provider_sender_sends_data_with_ingress_url_on_relation_joined(ctx):
+    """Tests that a charm using GrafanaMetadataProvider with an external url sends the correct data."""
+    # Arrange
+    relation, state = local_app_data_relation_state(leader=True)
+
+    # Act
+    with ctx(
+            ctx.on.relation_joined(relation),
+            state=state
+    ) as manager:
+        charm = manager.charm
+        manager.run()
+        expected = {
+            "grafana_uid": charm.unique_name,
+            "direct_url": GRAFANA_URL,
+            "ingress_url": GRAFANA_INGRESS_URL,
         }
 
     # Assert
@@ -74,8 +98,7 @@ def test_provider_sends_data_on_leader_elected(ctx):
         manager.run()
         expected = {
             "grafana_uid": charm.unique_name,
-            "internal_url": GRAFANA_URL,
-            "ingress_url": GRAFANA_URL,
+            "direct_url": GRAFANA_URL,
         }
 
     # Assert

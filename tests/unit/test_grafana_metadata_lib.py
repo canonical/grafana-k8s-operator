@@ -7,7 +7,7 @@ import pytest
 from ops import CharmBase
 from ops.testing import Context, Relation, State
 
-from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider, GrafanaMetadataRequirer, DataChangedEvent, \
+from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider, GrafanaMetadataRequirer, \
     GrafanaMetadataAppData
 
 RELATION_NAME = "app-data-relation"
@@ -17,14 +17,17 @@ INTERFACE_NAME = "app-data-interface"
 SAMPLE_APP_DATA = {
     "grafana_uid": "grafana-uid",
     "ingress_url": "http://www.ingress-url.com/",
-    "internal_url": "http://www.internal-url.com/",
+    "direct_url": "http://www.internal-url.com/",
 }
 SAMPLE_APP_DATA_2 = {
     "grafana_uid": "grafana-uid2",
     "ingress_url": "http://www.ingress-url2.com/",
-    "internal_url": "http://www.internal-url2.com/",
+    "direct_url": "http://www.internal-url2.com/",
 }
-
+SAMPLE_APP_DATA_NO_INGRESS_URL = {
+    "grafana_uid": "grafana-uid",
+    "direct_url": "http://www.internal-url.com/",
+}
 
 class GrafanaMetadataProviderCharm(CharmBase):
     META = {
@@ -35,13 +38,31 @@ class GrafanaMetadataProviderCharm(CharmBase):
     def __init__(self, framework):
         super().__init__(framework)
         self.relation_provider = GrafanaMetadataProvider(
-            self, **SAMPLE_APP_DATA, relation_name=RELATION_NAME
+            self.model.relations, **SAMPLE_APP_DATA, app=self.app, relation_name=RELATION_NAME
+        )
+
+
+class GrafanaMetadataProviderWithoutIngressCharm(CharmBase):
+    META = {
+        "name": "provider",
+        "provides": {RELATION_NAME: {"interface": RELATION_NAME}},
+    }
+
+    def __init__(self, framework):
+        super().__init__(framework)
+        self.relation_provider = GrafanaMetadataProvider(
+            self.model.relations, **SAMPLE_APP_DATA_NO_INGRESS_URL, app=self.app, relation_name=RELATION_NAME
         )
 
 
 @pytest.fixture()
 def grafana_metadata_provider_context():
     return Context(charm_type=GrafanaMetadataProviderCharm, meta=GrafanaMetadataProviderCharm.META)
+
+
+@pytest.fixture()
+def grafana_metadata_provider_without_ingress_context():
+    return Context(charm_type=GrafanaMetadataProviderWithoutIngressCharm, meta=GrafanaMetadataProviderCharm.META)
 
 
 class GrafanaMetadataRequirerCharm(CharmBase):
@@ -52,7 +73,7 @@ class GrafanaMetadataRequirerCharm(CharmBase):
 
     def __init__(self, framework):
         super().__init__(framework)
-        self.relation_requirer = GrafanaMetadataRequirer(self, relation_name=RELATION_NAME)
+        self.relation_requirer = GrafanaMetadataRequirer(self.model.relations, relation_name=RELATION_NAME)
 
 
 @pytest.fixture()
@@ -80,7 +101,7 @@ def local_app_data_relation_state(leader: bool, local_app_data: Optional[dict] =
 
 
 def test_grafana_metadata_provider_sends_data_correctly(grafana_metadata_provider_context):
-    """Tests that a charm using GrafanaMetadataProvider sends the correct data to the relation on a relation joined event."""
+    """Tests that a charm using GrafanaMetadataProvider sends the correct data during publish."""
     # Arrange
     relation, state = local_app_data_relation_state(leader=True)
 
@@ -89,26 +110,28 @@ def test_grafana_metadata_provider_sends_data_correctly(grafana_metadata_provide
         # construct a charm using an event that won't trigger anything here
         grafana_metadata_provider_context.on.update_status(), state=state
     ) as manager:
-        manager.charm.relation_provider.send_data()
+        manager.charm.relation_provider.publish()
 
     # Assert
     assert relation.local_app_data == SAMPLE_APP_DATA
 
 
-def test_grafana_metadata_requirer_emits_info_changed_on_relation_data_changes(grafana_metadata_requirer_context):
-    """Tests that a charm using GrafanaMetadataRequirer emits a DataChangedEvent when the relation data changes."""
+def test_grafana_metadata_provider_without_ingress_sends_data_correctly(
+        grafana_metadata_provider_without_ingress_context
+):
+    """Tests that a charm using GrafanaMetadataProvider without an ingress_url sends the correct data during publish."""
     # Arrange
-    relation, state = local_app_data_relation_state(leader=False)
+    relation, state = local_app_data_relation_state(leader=True)
 
     # Act
-    grafana_metadata_requirer_context.run(
-        grafana_metadata_requirer_context.on.relation_changed(relation), state=state
-    )
+    with grafana_metadata_provider_without_ingress_context(
+        # construct a charm using an event that won't trigger anything here
+        grafana_metadata_provider_without_ingress_context.on.update_status(), state=state
+    ) as manager:
+        manager.charm.relation_provider.publish()
 
-    # Assert we emitted the info changed event
-    # Note: emitted_events also includes the event we executed above in .run()
-    assert len(grafana_metadata_requirer_context.emitted_events) == 2
-    assert isinstance(grafana_metadata_requirer_context.emitted_events[1], DataChangedEvent)
+    # Assert
+    assert relation.local_app_data == SAMPLE_APP_DATA_NO_INGRESS_URL
 
 
 @pytest.mark.parametrize(
@@ -131,6 +154,17 @@ def test_grafana_metadata_requirer_emits_info_changed_on_relation_data_changes(g
             GrafanaMetadataAppData(**SAMPLE_APP_DATA),
             does_not_raise(),
         ),  # one populated relation
+        (
+            [
+                Relation(
+                    RELATION_NAME,
+                    INTERFACE_NAME,
+                    remote_app_data=SAMPLE_APP_DATA_NO_INGRESS_URL,
+                )
+            ],
+            GrafanaMetadataAppData(**SAMPLE_APP_DATA_NO_INGRESS_URL),
+            does_not_raise(),
+        ),  # one populated relation without ingress_url
         (
             [
                 Relation(
@@ -164,74 +198,6 @@ def test_grafana_metadata_requirer_get_data(relations, expected_data, context_ra
         with context_raised:
             data = charm.relation_requirer.get_data()
             assert are_app_data_equal(data, expected_data)
-
-
-@pytest.mark.parametrize(
-    "relations, expected_data, context_raised",
-    [
-        # no relations
-        ([], [], does_not_raise()),
-        # one empty relation
-        (
-            [Relation(RELATION_NAME, INTERFACE_NAME, remote_app_data={})],
-            [None],
-            does_not_raise(),
-        ),
-        # one populated relation
-        (
-            [
-                Relation(
-                    RELATION_NAME,
-                    INTERFACE_NAME,
-                    remote_app_data=SAMPLE_APP_DATA,
-                )
-            ],
-            [GrafanaMetadataAppData(**SAMPLE_APP_DATA)],
-            does_not_raise(),
-        ),
-        # many related applications, some with missing data
-        (
-            [
-                Relation(
-                    RELATION_NAME,
-                    INTERFACE_NAME,
-                    remote_app_data=SAMPLE_APP_DATA,
-                ),
-                Relation(RELATION_NAME, INTERFACE_NAME, remote_app_data={}),
-                Relation(
-                    RELATION_NAME,
-                    INTERFACE_NAME,
-                    remote_app_data=SAMPLE_APP_DATA_2,
-                ),
-            ],
-            [
-                GrafanaMetadataAppData(**SAMPLE_APP_DATA),
-                None,
-                GrafanaMetadataAppData(**SAMPLE_APP_DATA_2),
-            ],
-            does_not_raise(),
-        ),
-    ],
-)
-def test_grafana_metadata_requirer_get_data_from_all_relations(
-    relations, expected_data, context_raised, grafana_metadata_requirer_context
-):
-    """Tests that GrafanaMetadataRequirer.get_data_from_all_relations() returns correctly."""
-    state = State(
-        relations=relations,
-        leader=False,
-    )
-
-    with grafana_metadata_requirer_context(
-        grafana_metadata_requirer_context.on.update_status(), state=state
-    ) as manager:
-        charm = manager.charm
-
-        with context_raised:
-            data = sort_app_data(charm.relation_requirer.get_data_from_all_relations())
-            expected_data = sort_app_data(expected_data)
-            for actual, expected in zip(data, expected_data):
-                assert are_app_data_equal(actual, expected)
 
 
 def sort_app_data(data):
