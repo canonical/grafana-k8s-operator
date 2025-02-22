@@ -1663,8 +1663,8 @@ class GrafanaCharm(CharmBase):
         grafana_metadata = GrafanaMetadataProvider(
             relations=self.model.relations,
             grafana_uid=self.unique_name,
-            ingress_url=external_url,
-            direct_url=internal_url,
+            ingress_url=external_url,  # pyright: ignore
+            direct_url=internal_url,  # pyright: ignore
             app=self.app,
             relation_name="grafana-metadata",
         )

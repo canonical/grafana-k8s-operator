@@ -173,8 +173,8 @@ class GrafanaMetadataProvider:
         relations: RelationMapping,
         app: Application,
         grafana_uid: str,
-        direct_url: str,
-        ingress_url: Optional[str] = None,
+        direct_url: AnyHttpUrl,
+        ingress_url: Optional[AnyHttpUrl] = None,
         relation_name: str = GRAFANA_METADATA_RELATION_NAME,
     ):
         """Initialize the GrafanaMetadataProvider object.

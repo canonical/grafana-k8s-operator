@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 class MetadataTester(CharmBase):
     def __init__(self, framework):
         super().__init__(framework)
-        self.metadata_relation = Requirer(self, "metadata")
+        self.metadata_relation = Requirer(self.model.relations, "metadata")
 
         self.framework.observe(self.on.collect_unit_status, self.on_collect_unit_status)
         self.framework.observe(self.on.get_metadata_action, self.on_get_metadata)
 
     def on_collect_unit_status(self, event: CollectStatusEvent):
         statuses = []
-        if len(self.metadata_relation) == 0:
+        if len(self.metadata_relation.relations) == 0:
             statuses.append(WaitingStatus("Waiting for metadata relation"))
         else:
             relation_data = self.metadata_relation.get_data()

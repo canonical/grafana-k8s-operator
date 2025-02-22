@@ -38,7 +38,7 @@ class GrafanaMetadataProviderCharm(CharmBase):
     def __init__(self, framework):
         super().__init__(framework)
         self.relation_provider = GrafanaMetadataProvider(
-            self.model.relations, **SAMPLE_APP_DATA, app=self.app, relation_name=RELATION_NAME
+            self.model.relations, **SAMPLE_APP_DATA, app=self.app, relation_name=RELATION_NAME  # pyright: ignore
         )
 
 
@@ -51,7 +51,7 @@ class GrafanaMetadataProviderWithoutIngressCharm(CharmBase):
     def __init__(self, framework):
         super().__init__(framework)
         self.relation_provider = GrafanaMetadataProvider(
-            self.model.relations, **SAMPLE_APP_DATA_NO_INGRESS_URL, app=self.app, relation_name=RELATION_NAME
+            self.model.relations, **SAMPLE_APP_DATA_NO_INGRESS_URL, app=self.app, relation_name=RELATION_NAME  # pyright: ignore
         )
 
 
@@ -151,7 +151,7 @@ def test_grafana_metadata_provider_without_ingress_sends_data_correctly(
                     remote_app_data=SAMPLE_APP_DATA,
                 )
             ],
-            GrafanaMetadataAppData(**SAMPLE_APP_DATA),
+            GrafanaMetadataAppData(**SAMPLE_APP_DATA),  # pyright: ignore
             does_not_raise(),
         ),  # one populated relation
         (
@@ -162,7 +162,7 @@ def test_grafana_metadata_provider_without_ingress_sends_data_correctly(
                     remote_app_data=SAMPLE_APP_DATA_NO_INGRESS_URL,
                 )
             ],
-            GrafanaMetadataAppData(**SAMPLE_APP_DATA_NO_INGRESS_URL),
+            GrafanaMetadataAppData(**SAMPLE_APP_DATA_NO_INGRESS_URL),  # pyright: ignore
             does_not_raise(),
         ),  # one populated relation without ingress_url
         (
