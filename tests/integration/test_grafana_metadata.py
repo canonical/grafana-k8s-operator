@@ -4,6 +4,7 @@
 
 import json
 import logging
+import pytest
 
 
 from helpers import (
@@ -22,6 +23,7 @@ grafana_resources = {
 APP_NAME = "grafana"
 TESTER_APP_NAME = "metadata-requirer"
 
+@pytest.mark.abort_on_fail
 async def test_deploy_grafana(
     ops_test, grafana_charm
 ):
@@ -43,6 +45,7 @@ async def test_deploy_grafana(
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
 
 
+@pytest.mark.abort_on_fail
 async def test_grafana_metadata_relation(ops_test, grafana_metadata_requirer_tester_charm):
     """Test the metadata relation works as expected in attachment."""
     tester_charm = grafana_metadata_requirer_tester_charm
@@ -60,9 +63,9 @@ async def test_grafana_metadata_relation(ops_test, grafana_metadata_requirer_tes
     )
 
     actual = await get_tester_data(tester_application)
+    assert actual.get("direct_url", None)
+    assert actual.get("ingress_url", None) is None
     assert actual.get("grafana_uid", None)
-    assert actual.get("ingress_url", None)
-    assert actual.get("internal_url", None)
 
 
 async def test_grafana_metadata_relation_removal(ops_test, grafana_metadata_requirer_tester_charm):

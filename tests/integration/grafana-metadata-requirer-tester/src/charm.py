@@ -32,7 +32,7 @@ class MetadataTester(CharmBase):
             else:
                 statuses.append(
                     ActiveStatus(
-                        f"Alive with metadata relation data: '{relation_data.model_dump()}'"
+                        f"Alive with metadata relation data: '{relation_data.model_dump(mode='json')}'"
                     )
                 )
         for status in statuses:
@@ -43,7 +43,7 @@ class MetadataTester(CharmBase):
         if relation_data is None:
             relation_data = {}
         else:
-            relation_data = relation_data.model_dump()
+            relation_data = relation_data.model_dump(mode='json')
         event.set_results({"relation-data": json.dumps(relation_data)})
 
 
