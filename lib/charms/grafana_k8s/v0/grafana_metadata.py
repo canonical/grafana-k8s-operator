@@ -1,8 +1,8 @@
 """grafana_metadata.
 
-This library implements data accessors for the provider and requirer sides of the grafana-metadata interface.  This
-interface is used to transfer information about a Grafana installation, such as its URLs and a unique fingerprint for
-this instance of Grafana.
+This library implements data accessors the grafana-metadata interface.  The grafana-metadata interface is used to
+transfer information about an instance of Grafana, such as how to access and uniquely identify it.  Typically, this is
+useful for charms that create a Grafana instance and want other applications to be able to access it.
 
 ## Usage
 
