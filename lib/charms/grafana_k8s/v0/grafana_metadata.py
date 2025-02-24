@@ -1,13 +1,14 @@
 """grafana_metadata.
 
-This implements provider and requirer sides of the grafana-metadata interface, which is used to communicate information
-about a Grafana installation.
+This library implements data accessors for the provider and requirer sides of the grafana-metadata interface.  This
+interface is used to transfer information about a Grafana installation, such as its URLs and a unique fingerprint for
+this instance of Grafana.
 
 ## Usage
 
 ### Requirer
 
-To add this relation to your charm as a requirer, add the following to your `charmcraft.yaml` or `metadata.yaml`:
+Add the following to your `charmcraft.yaml` or `metadata.yaml`:
 
 ```yaml
 requires:
@@ -41,7 +42,7 @@ class FooCharm(CharmBase):
 
 ### Provider
 
-To add this relation to your charm as a provider, add the following to your `charmcraft.yaml` or `metadata.yaml`:
+Add the following to your `charmcraft.yaml` or `metadata.yaml`:
 
 ```yaml
 provides:
@@ -69,6 +70,7 @@ class FooCharm(CharmBase):
 
         self.framework.observe(self.on.leader_elected, self.do_something_to_publish)
         self.framework.observe(self._charm.on["grafana-metadata"].relation_joined, self.do_something_to_publish)
+        self.framework.observe(self.on.some_event_that_changes_grafanas_url, self.do_something_to_publish)
 ```
 """
 import json
