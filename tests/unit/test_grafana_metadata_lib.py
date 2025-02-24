@@ -200,11 +200,6 @@ def test_grafana_metadata_requirer_get_data(relations, expected_data, context_ra
             assert are_app_data_equal(data, expected_data)
 
 
-def sort_app_data(data):
-    """Return sorted version of the list of relation data objects."""
-    return sorted(data, key=lambda x: x.grafana_uid if x else "")
-
-
 def are_app_data_equal(data1: Union[GrafanaMetadataAppData, None], data2: Union[GrafanaMetadataAppData, None]):
     """Compare two GrafanaMetadataRequirer objects, tolerating when one or both is None."""
     if data1 is None and data2 is None:
