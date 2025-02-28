@@ -1661,14 +1661,15 @@ class GrafanaCharm(CharmBase):
             external_url = None
 
         grafana_metadata = GrafanaMetadataProvider(
-            relations=self.model.relations,
-            grafana_uid=self.unique_name,
-            ingress_url=external_url,  # pyright: ignore
-            direct_url=internal_url,  # pyright: ignore
+            relation_mapping=self.model.relations,
             app=self.app,
             relation_name="grafana-metadata",
         )
-        grafana_metadata.publish()
+        grafana_metadata.publish(
+            grafana_uid=self.unique_name,
+            ingress_url=external_url,  # pyright: ignore
+            direct_url=internal_url,  # pyright: ignore
+        )
 
 
 if __name__ == "__main__":

@@ -1,29 +1,18 @@
 """grafana_metadata.
 
-This library implements data accessors the grafana-metadata interface.  The grafana-metadata interface is used to
-transfer information about an instance of Grafana, such information to access and uniquely identify it.  Typically, this
-is useful for charms that create a Grafana instance and want other applications to be able to access it.
+This library implements endpoint wrappers for the grafana-metadata interface.  The grafana-metadata interface is used to
+transfer information about an instance of Grafana, such as how to access and uniquely identify it.  Typically, this is
+useful for charms that operate a Grafana instance to give other applications access to its API.
 
 ## Usage
 
 ### Requirer
 
-Add the following to your `charmcraft.yaml` or `metadata.yaml`:
+GrafanaMetadataRequirer is a wrapper for pulling data from the grafana-metadata interface.  To use it in your charm:
 
-```yaml
-requires:
-  grafana-metadata:
-    # The example below uses the API for when limit=1.  If you need to support multiple related applications, remove
-    # this and use the list-based data accessor method.
-    limit: 1
-    interface: grafana_metadata
-```
-
-To implement handling this relation:
-
-* observe the relation-changed event for this relation wherever your charm needs to use this data (this relation DOES
-  NOT automatically observe any events)
-* wherever you need access to the data, create a `GrafanaMetadataRequirer` instance and use `.get_data()`
+* observe the relation-changed event for this relation wherever your charm needs to use this data (this endpoint wrapper
+  DOES NOT automatically observe any events)
+* wherever you need access to the data, call `GrafanaMetadataRequirer(...).get_data()`
 
 An example implementation is:
 
@@ -31,29 +20,32 @@ An example implementation is:
 class FooCharm(CharmBase):
     def __init__(self, framework):
         super().__init__(framework)
+
+        grafana_mnetadata = GrafanaMetadataRequirer(self.model.relations, "grafana-metadata")
+
         self.framework.observe(self.on["grafana-metadata"].relation_changed, self._on_grafana_metadata_changed)
 
-    def do_something_with_metadata(self):
-        # Get exactly one related application's data, raising if more than one is available
-        grafana_metadata = GrafanaMetadataRequirer(self.model.relations, "grafana-metadata")
-        metadata = grafana_metadata.get_data()
+    def _on_grafana_metadata_changed(self):
+        data = grafana_mnetadata.get_data()
         ...
+```
+
+Where you also add relation to your `charmcraft.yaml` or `metadata.yaml` (note that GrafanaMetadataRequirer is designed
+for relating to a single application and must be used with limit=1 as shown below):
+
+```yaml
+requires:
+  grafana-metadata:
+    limit: 1
+    interface: grafana_metadata
 ```
 
 ### Provider
 
-Add the following to your `charmcraft.yaml` or `metadata.yaml`:
-
-```yaml
-provides:
-  grafana-metadata:
-    interface: grafana_metadata
-```
-
-To manage sending data to related applications in your charm, use `GrafanaMetadataProvider`.  Note that
-`GrafanaMetadataProvider` *does not* manage any events, but instead provides a `publish` method for sending data to
+GrafanaMetadataProvider is a wrapper for publishing data to charms related using the grafana-metadata interface.  Note
+that `GrafanaMetadataProvider` *does not* manage any events, but instead provides a `publish` method for sending data to
 all related applications.  Triggering `publish` appropriately is left to the charm author, although generally you want
-to do this at least during relation_joined and leader_elected events.  An example implementation is:
+to do this at least during the `relation_joined` and `leader_elected` events.  An example implementation is:
 
 ```python
 class FooCharm(CharmBase):
@@ -61,19 +53,26 @@ class FooCharm(CharmBase):
         super().__init__(framework)
         self.grafana_metadata = GrafanaMetadataProvider(
             relations=self.model.relations,
+            relation_name="grafana-metadata",
             app=self.app,
-            grafana_uid=self.unique_name,
-            direct_url=self.direct_url,
-            ingress_url=self.external_url,
-            relation_name="grafana-metadata"
         )
 
         self.framework.observe(self.on.leader_elected, self.do_something_to_publish)
         self.framework.observe(self._charm.on["grafana-metadata"].relation_joined, self.do_something_to_publish)
-        self.framework.observe(self.on.some_event_that_changes_grafanas_url, self.do_something_to_publish)
+        self.framework.observe(self.on.some_event_that_changes_grafana_metadata, self.do_something_to_publish)
+
+    def do_something_to_publish(self, e):
+        self.grafana_metadata.publish(...)
+```
+
+Where you also add the following to your `charmcraft.yaml` or `metadata.yaml`:
+
+```yaml
+provides:
+  grafana-metadata:
+    interface: grafana_metadata
 ```
 """
-import json
 import logging
 from typing import Optional
 
@@ -94,7 +93,7 @@ PYDEPS = ["pydantic>=2"]
 
 log = logging.getLogger(__name__)
 
-GRAFANA_METADATA_RELATION_NAME = "grafana-metadata"
+DEFAULT_RELATION_NAME = "grafana-metadata"
 
 
 class GrafanaMetadataAppData(BaseModel):
@@ -114,12 +113,12 @@ class GrafanaMetadataAppData(BaseModel):
 
 
 class GrafanaMetadataRequirer:
-    """The requirer side of the grafana-metadata relation."""
+    """Endpoint wrapper for the requirer side of the grafana-metadata relation."""
 
     def __init__(
         self,
-        relations: RelationMapping,
-        relation_name: str = GRAFANA_METADATA_RELATION_NAME,
+        relation_mapping: RelationMapping,
+        relation_name: str = DEFAULT_RELATION_NAME,
     ) -> None:
         """Initialize the GrafanaMetadataRequirer object.
 
@@ -132,10 +131,11 @@ class GrafanaMetadataRequirer:
         get_data method will raise if more than one related application is available.
 
         Args:
-            relations: The RelationMapping of a charm (typically `self.model.relations` from within a charm object).
-            relation_name: The name of the relation.
+            relation_mapping: The RelationMapping of a charm (typically `self.model.relations` from within a charm
+                              object).
+            relation_name: The name of the wrapped relation.
         """
-        self._charm_relation_mapping = relations
+        self._charm_relation_mapping = relation_mapping
         self._relation_name = relation_name
 
     @property
@@ -154,17 +154,15 @@ class GrafanaMetadataRequirer:
         if len(relations) == 0:
             return None
         if len(relations) > 1:
-            # TODO: Different exception type?
             raise ValueError("Cannot get_info when more than one application is related.")
 
-        raw_data_dict = relations[0].data.get(relations[0].app)
+        # Being a little cautious here using getattr and get, since some funny things have happened with relation data
+        # in the past.
+        raw_data_dict = getattr(relations[0], "data", {}).get(relations[0].app)
         if not raw_data_dict:
             return None
 
-        # Static analysis errors saying the keys may not be strings.  Protect against this by converting them.
-        raw_data_dict = {str(k): v for k, v in raw_data_dict.items()}
-
-        return GrafanaMetadataAppData.model_validate_json(json.dumps(raw_data_dict))  # type: ignore
+        return GrafanaMetadataAppData.model_validate(raw_data_dict)
 
 
 class GrafanaMetadataProvider:
@@ -172,12 +170,9 @@ class GrafanaMetadataProvider:
 
     def __init__(
         self,
-        relations: RelationMapping,
+        relation_mapping: RelationMapping,
         app: Application,
-        grafana_uid: str,
-        direct_url: AnyHttpUrl,
-        ingress_url: Optional[AnyHttpUrl] = None,
-        relation_name: str = GRAFANA_METADATA_RELATION_NAME,
+        relation_name: str = DEFAULT_RELATION_NAME,
     ):
         """Initialize the GrafanaMetadataProvider object.
 
@@ -187,18 +182,11 @@ class GrafanaMetadataProvider:
         relation_joined event.
 
         Args:
-            relations: The RelationMapping of a charm (typically `self.model.relations` from within a charm object).
+            relation_mapping: The RelationMapping of a charm (typically `self.model.relations` from within a charm object).
             app: This application.
-            grafana_uid: The UID of this Grafana instance.
-            direct_url: The cluster-internal URL at which this application can be reached.  Typically, this is a
-                        Kubernetes FQDN like name.namespace.svc.cluster.local for connecting to the prometheus api
-                        from inside the cluster, with scheme.
-            ingress_url: The non-internal URL at which this application can be reached.  Typically, this is an ingress
-                         URL.
             relation_name: The name of the relation.
         """
-        self._charm_relation_mapping = relations
-        self._data = GrafanaMetadataAppData(ingress_url=ingress_url, direct_url=direct_url, grafana_uid=grafana_uid)
+        self._charm_relation_mapping = relation_mapping
         self._app = app
         self._relation_name = relation_name
 
@@ -207,13 +195,26 @@ class GrafanaMetadataProvider:
         """Return the applications related to us under the monitored relation."""
         return self._charm_relation_mapping.get(self._relation_name, ())
 
-    def publish(self):
+    def publish(self, grafana_uid: str, direct_url: AnyHttpUrl, ingress_url: Optional[AnyHttpUrl] = None):
         """Post grafana-metadata to all related applications.
 
         This method writes to the relation's app data bag, and thus should never be called by a unit that is not the
         leader otherwise ops will raise an exception.
+
+        Args:
+            grafana_uid: The UID of this Grafana instance.
+            direct_url: The cluster-internal URL at which this application can be reached.  Typically, this is a
+                        Kubernetes FQDN like name.namespace.svc.cluster.local for connecting to the prometheus api
+                        from inside the cluster, with scheme.
+            ingress_url: The non-internal URL at which this application can be reached.  Typically, this is an ingress
+                         URL.
         """
-        info_relations = self.relations
-        for relation in info_relations:
-            databag= relation.data[self._app]
-            databag.update(self._data.model_dump(mode="json", by_alias=True, exclude_defaults=True, round_trip=True))
+        data = GrafanaMetadataAppData(
+            grafana_uid=grafana_uid,
+            direct_url=direct_url,
+            ingress_url=ingress_url
+        ).model_dump(mode="json", by_alias=True, exclude_defaults=True, round_trip=True)
+
+        for relation in self.relations:
+            databag = relation.data[self._app]
+            databag.update(data)
