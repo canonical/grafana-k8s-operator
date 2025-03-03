@@ -38,6 +38,7 @@ import yaml
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
+from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
     GrafanaSourceEvents,
@@ -330,6 +331,12 @@ class GrafanaCharm(CharmBase):
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
 
         self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
+
+        # -- grafana-metadata relation handling
+        self.framework.observe(self.on.leader_elected, self._send_grafana_metadata)
+        self.framework.observe(self.on["grafana-metadata"].relation_joined, self._send_grafana_metadata)
+        self.framework.observe(self.ingress.on.ready, self._send_grafana_metadata)
+        self.framework.observe(self.cert_handler.on.cert_changed, self._send_grafana_metadata)
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
@@ -1639,6 +1646,29 @@ class GrafanaCharm(CharmBase):
             self.model.uuid,
             self.model.app.name,
             self.model.unit.name.split("/")[1],  # type: ignore
+        )
+
+    def _send_grafana_metadata(self, _):
+        """Send metadata to related applications on the grafana-metadata relation."""
+        if not self.unit.is_leader():
+            return
+
+        # grafana-metadata should only send an external URL if it's set, otherwise it leaves that empty
+        internal_url = self.internal_url
+        external_url = self.external_url
+        if external_url == internal_url:
+            # external_url is not set and just defaulted back to internal_url.  Set it to None
+            external_url = None
+
+        grafana_metadata = GrafanaMetadataProvider(
+            relation_mapping=self.model.relations,
+            app=self.app,
+            relation_name="grafana-metadata",
+        )
+        grafana_metadata.publish(
+            grafana_uid=self.unique_name,
+            ingress_url=external_url,  # pyright: ignore
+            direct_url=internal_url,  # pyright: ignore
         )
 
 
