@@ -1674,8 +1674,8 @@ class GrafanaCharm(CharmBase):
         )
         grafana_metadata.publish(
             grafana_uid=self.unique_name,
-            ingress_url=external_url,  # pyright: ignore
-            direct_url=internal_url,  # pyright: ignore
+            ingress_url=external_url,
+            direct_url=internal_url,
         )
 
 
