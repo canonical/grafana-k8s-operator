@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from playwright.async_api import Playwright as AsyncPlaywright, BrowserType
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -116,3 +117,8 @@ async def grafana_metadata_requirer_tester_charm(ops_test: OpsTest, copy_grafana
 @pytest.fixture(scope="module")
 def temp_dir(tmp_path_factory):
     return tmp_path_factory.mktemp("data")
+
+
+@pytest.fixture(scope="module")
+def browser_type(playwright: AsyncPlaywright) -> BrowserType:
+    return playwright.firefox
