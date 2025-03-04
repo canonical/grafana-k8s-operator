@@ -429,6 +429,21 @@ class GrafanaSourceProvider(Object):
                 continue
             self._set_sources(rel)
 
+    def get_grafana_base_url(self) -> Dict[str, Dict[str, str]]:
+        # TODO update docstring
+        """Get the grafana external URL assigned by the remote end(s) to this datasource.
+
+        Returns a mapping from remote application UIDs to unit names to datasource uids.
+        """
+        urls = {}
+        for rel in self._charm.model.relations.get(self._relation_name, []):
+            if not rel:
+                continue
+            app_databag = rel.data[rel.app]
+            grafana_uid = app_databag.get("grafana_uid")
+            urls[grafana_uid] = app_databag.get("grafana_base_url")
+        return urls
+
     def get_source_uids(self) -> Dict[str, Dict[str, str]]:
         """Get the datasource UID(s) assigned by the remote end(s) to this datasource.
 
@@ -505,6 +520,7 @@ class GrafanaSourceConsumer(Object):
         self,
         charm: CharmBase,
         grafana_uid: str,
+        grafana_base_url: str,
         relation_name: str = DEFAULT_RELATION_NAME,
     ) -> None:
         """A Grafana based Monitoring service consumer, i.e., the charm that uses a datasource.
@@ -513,6 +529,7 @@ class GrafanaSourceConsumer(Object):
             charm: a :class:`CharmBase` instance that manages this
                 instance of the Grafana source service.
             grafana_uid: an unique identifier for this grafana-k8s application.
+            grafana_base_url: the base URL (potentially ingressed) for this grafana-k8s application.
             relation_name: string name of the relation that is provides the
                 Grafana source service. It is strongly advised not to change
                 the default, so that people deploying your charm will have a
@@ -527,6 +544,7 @@ class GrafanaSourceConsumer(Object):
         self._relation_name = relation_name
         self._charm = charm
         self._grafana_uid = grafana_uid
+        self._grafana_base_url = grafana_base_url
         events = self._charm.on[relation_name]
 
         # We're stuck with this forever now so upgrades work, or until such point as we can
@@ -582,6 +600,7 @@ class GrafanaSourceConsumer(Object):
         """
         rel.data[self._charm.app]["grafana_uid"] = self._grafana_uid
         rel.data[self._charm.app]["datasource_uids"] = json.dumps(uids)
+        rel.data[self._charm.app]["grafana_base_url"] = self._grafana_base_url
 
     def _get_source_config(self, rel: Relation):
         """Generate configuration from data stored in relation data by providers."""
