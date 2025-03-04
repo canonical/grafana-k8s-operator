@@ -3,6 +3,7 @@ import json
 from ops import CharmBase, Framework
 from ops.testing import Container, State
 from scenario import Relation, PeerRelation, Context
+from unittest.mock import patch
 
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 
@@ -12,6 +13,7 @@ containers = [
 ]
 
 
+@patch("socket.getfqdn", new=lambda *args: "fqdn")
 def test_datasource_sharing(ctx):
     # GIVEN a datasource relation with two remote units
     datasource = Relation(
@@ -43,6 +45,8 @@ def test_datasource_sharing(ctx):
         "remote_host/1": "juju_foo_bar_baz_1",
     }
     assert local_app_data["grafana_uid"]
+    # AND its base URL
+    assert local_app_data["grafana_base_url"] == "http://fqdn:3000"
 
 
 def test_datasource_get():
@@ -51,6 +55,8 @@ def test_datasource_get():
         "prometheus/0": "some-datasource-uid",
         "prometheus/1": "some-datasource-uid",
     }
+    grafana_uid = "foo-grafana-1"
+    grafana_base_url = "http://ingress/model-grafana"
     datasource = Relation(
         "grafana-source",
         remote_app_name="remote_host",
@@ -61,8 +67,9 @@ def test_datasource_get():
             )
         },
         remote_app_data={
-            "grafana_uid": "foo-grafana-1",
+            "grafana_uid": grafana_uid,
             "datasource_uids": json.dumps(local_ds_uids),
+            "grafana_base_url": grafana_base_url,
         },
     )
     state = State(leader=True, relations={datasource})
@@ -84,8 +91,10 @@ def test_datasource_get():
     with ctx(ctx.on.relation_changed(datasource), state) as mgr:
         charm = mgr.charm
         # THEN we can see our datasource uids via the provider
-        ds_uids = list(charm.source_provider.get_source_uids().values())  # pyright: ignore
+        ds_uids = list(charm.source_provider.get_source_uids().values())  # type: ignore
         assert ds_uids[0] == local_ds_uids
+        # AND the Grafana base URL via the provider
+        assert charm.source_provider.get_grafana_base_urls() == {grafana_uid: grafana_base_url}  # type: ignore
 
 
 def test_datasource_get_nodata():
@@ -123,3 +132,5 @@ def test_datasource_get_nodata():
         charm = mgr.charm
         # THEN we can see no datasource uids via the provider
         assert not charm.source_provider.get_source_uids()  # type: ignore
+        # AND we can see no Grafana base URL via the provider
+        assert not charm.source_provider.get_grafana_base_urls()  # type: ignore

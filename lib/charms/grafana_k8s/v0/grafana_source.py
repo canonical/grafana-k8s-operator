@@ -162,7 +162,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 25
+LIBPATCH = 26
 
 logger = logging.getLogger(__name__)
 
@@ -429,7 +429,7 @@ class GrafanaSourceProvider(Object):
                 continue
             self._set_sources(rel)
 
-    def get_grafana_base_url(self) -> Dict[str, Dict[str, str]]:
+    def get_grafana_base_urls(self) -> Dict[str, str]:
         # TODO update docstring
         """Get the grafana external URL assigned by the remote end(s) to this datasource.
 
@@ -441,6 +441,12 @@ class GrafanaSourceProvider(Object):
                 continue
             app_databag = rel.data[rel.app]
             grafana_uid = app_databag.get("grafana_uid")
+            if not grafana_uid:
+                logger.warning(
+                    "remote end is using an old grafana_datasource interface: "
+                    "`grafana_uid` field not found."
+                )
+                continue
             urls[grafana_uid] = app_databag.get("grafana_base_url")
         return urls
 
