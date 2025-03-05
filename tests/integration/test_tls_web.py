@@ -45,6 +45,7 @@ async def test_deploy(ops_test, grafana_charm):
             apps=[grafana.name],
             raise_on_error=False,
             timeout=1200,
+            wait_for_exact_units=2,
         ),
         ops_test.model.wait_for_idle(
             apps=["ca"],
@@ -78,13 +79,13 @@ async def test_server_cert(ops_test: OpsTest):
         cmd = [
             "sh",
             "-c",
-            f"echo | openssl s_client -showcerts -servername {grafana_ip}:3000 -connect {grafana_ip}:3000 2>/dev/null | openssl x509 -inform pem -noout -text",
+            f"echo | openssl s_client -showcerts -servername {grafana_ip}:3000 -connect {grafana_ip}:3000 | openssl x509 -inform pem -noout -text",
         ]
         retcode, stdout, stderr = await ops_test.run(*cmd)
         fqdn = (
             f"{grafana.name}-{i}.{grafana.name}-endpoints.{ops_test.model_name}.svc.cluster.local"
         )
-        assert fqdn in stdout
+        assert fqdn in stdout, stderr
 
 
 @pytest.mark.abort_on_fail
@@ -97,11 +98,11 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
     for i in range(grafana.scale):
         unit_name = f"{grafana.name}/{i}"
         # Save CA cert locally
-        # juju show-unit grafana/0 --format yaml | yq '.grafana/0."relation-info"[0]."local-unit".data.ca' > /tmp/cacert.pem
+        # juju show-unit grafana/0 | yq '.grafana/0."relation-info".[] | select (.endpoint=="certificates") | .application-data.[]' | jq '.[0].ca' -r
         cmd = [
             "sh",
             "-c",
-            f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="replicas") | ."local-unit".data.ca\'',
+            f"juju show-unit {unit_name} --format yaml | yq '.{unit_name}.\"relation-info\".[] | select (.endpoint==\"certificates\") | .application-data.[]' | jq '.[0].ca' -r",
         ]
         retcode, stdout, stderr = await ops_test.run(*cmd)
         cert = stdout
