@@ -34,7 +34,7 @@ any point in time by calling the
 `TracingEndpointRequirer.request_protocols(*protocol:str, relation:Optional[Relation])` method.
 Using this method also allows you to use per-relation protocols.
 
-Units of provider charms obtain the tempo endpoint to which they will push their traces by calling
+Units of requirer charms obtain the tempo endpoint to which they will push their traces by calling
 `TracingEndpointRequirer.get_endpoint(protocol: str)`, where `protocol` is, for example:
 - `otlp_grpc`
 - `otlp_http`
@@ -44,7 +44,10 @@ Units of provider charms obtain the tempo endpoint to which they will push their
 If the `protocol` is not in the list of protocols that the charm requested at endpoint set-up time,
 the library will raise an error.
 
-## Requirer Library Usage
+We recommend that you scale up your tracing provider and relate it to an ingress so that your tracing requests
+go through the ingress and get load balanced across all units. Otherwise, if the provider's leader goes down, your tracing goes down.
+
+## Provider Library Usage
 
 The `TracingEndpointProvider` object may be used by charms to manage relations with their
 trace sources. For this purposes a Tempo-like charm needs to do two things
@@ -107,7 +110,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 6
 
 PYDEPS = ["pydantic"]
 
@@ -126,9 +129,9 @@ ReceiverProtocol = Literal[
 ]
 
 RawReceiver = Tuple[ReceiverProtocol, str]
-"""Helper type. A raw receiver is defined as a tuple consisting of the protocol name, and the (external, if available),
-(secured, if available) resolvable server url.
-"""
+# Helper type. A raw receiver is defined as a tuple consisting of the protocol name, and the (external, if available),
+# (secured, if available) resolvable server url.
+
 
 BUILTIN_JUJU_KEYS = {"ingress-address", "private-address", "egress-subnets"}
 
@@ -147,8 +150,7 @@ receiver_protocol_to_transport_protocol: Dict[ReceiverProtocol, TransportProtoco
     "jaeger_thrift_http": TransportProtocolType.http,
     "jaeger_grpc": TransportProtocolType.grpc,
 }
-"""A mapping between telemetry protocols and their corresponding transport protocol.
-"""
+# A mapping between telemetry protocols and their corresponding transport protocol.
 
 
 class TracingError(Exception):
@@ -888,13 +890,15 @@ class TracingEndpointRequirer(Object):
             filter(lambda i: i.protocol.name == protocol, app_data.receivers)
         )
         if not receivers:
-            logger.error(f"no receiver found with protocol={protocol!r}")
+            # it can happen if the charm requests tracing protocols, but the relay (such as grafana-agent) isn't yet
+            # connected to the tracing backend. In this case, it's not an error the charm author can do anything about
+            logger.warning(f"no receiver found with protocol={protocol!r}.")
             return
         if len(receivers) > 1:
-            logger.error(
+            # if we have more than 1 receiver that matches, it shouldn't matter which receiver we'll be using.
+            logger.warning(
                 f"too many receivers with protocol={protocol!r}; using first one. Found: {receivers}"
             )
-            return
 
         receiver = receivers[0]
         return receiver.url
@@ -946,7 +950,6 @@ def charm_tracing_config(
      proceed with charm tracing (with or without tls, as appropriate)
 
     Usage:
-      If you are using charm_tracing >= v1.9:
     >>> from lib.charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
     >>> from lib.charms.tempo_coordinator_k8s.v0.tracing import charm_tracing_config
     >>> @trace_charm(tracing_endpoint="my_endpoint", cert_path="cert_path")
@@ -956,24 +959,6 @@ def charm_tracing_config(
     >>>         self.tracing = TracingEndpointRequirer(...)
     >>>         self.my_endpoint, self.cert_path = charm_tracing_config(
     ...             self.tracing, self._cert_path)
-
-      If you are using charm_tracing < v1.9:
-    >>> from lib.charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-    >>> from lib.charms.tempo_coordinator_k8s.v0.tracing import charm_tracing_config
-    >>> @trace_charm(tracing_endpoint="my_endpoint", cert_path="cert_path")
-    >>> class MyCharm(...):
-    >>>     _cert_path = "/path/to/cert/on/charm/container.crt"
-    >>>     def __init__(self, ...):
-    >>>         self.tracing = TracingEndpointRequirer(...)
-    >>>         self._my_endpoint, self._cert_path = charm_tracing_config(
-    ...             self.tracing, self._cert_path)
-    >>>     @property
-    >>>     def my_endpoint(self):
-    >>>         return self._my_endpoint
-    >>>     @property
-    >>>     def cert_path(self):
-    >>>         return self._cert_path
-
     """
     if not endpoint_requirer.is_ready():
         return None, None
