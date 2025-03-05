@@ -56,7 +56,7 @@ def test_datasource_get():
         "prometheus/1": "some-datasource-uid",
     }
     grafana_uid = "foo-grafana-1"
-    grafana_base_url = "http://ingress/model-grafana"
+    grafana_base_url = "http://ingress"
     datasource = Relation(
         "grafana-source",
         remote_app_name="remote_host",

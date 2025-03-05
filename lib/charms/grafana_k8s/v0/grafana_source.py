@@ -430,10 +430,9 @@ class GrafanaSourceProvider(Object):
             self._set_sources(rel)
 
     def get_grafana_base_urls(self) -> Dict[str, str]:
-        # TODO update docstring
-        """Get the grafana external URL assigned by the remote end(s) to this datasource.
+        """Get the grafana base URL (potentially ingressed) assigned by the remote end(s) to this datasource.
 
-        Returns a mapping from remote application UIDs to unit names to datasource uids.
+        Returns a mapping from remote application UIDs to URL.
         """
         urls = {}
         for rel in self._charm.model.relations.get(self._relation_name, []):
