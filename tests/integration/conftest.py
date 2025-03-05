@@ -72,6 +72,20 @@ def copy_grafana_libraries_into_tester_charm(ops_test: OpsTest) -> None:
 
 @pytest.fixture(scope="module")
 @timed_memoizer
+async def copy_grafana_libraries_into_grafana_metadata_requirer_tester_charm(ops_test: OpsTest):
+    tester_path = (Path(__file__).parent / "grafana-metadata-requirer-tester").absolute()
+
+    # Update libraries in the tester charms
+    grafana_metadata_relative_path = Path("lib/charms/grafana_k8s/v0/grafana_metadata.py")
+    grafana_metadata_lib_source = Path(__file__).parent.parent.parent / grafana_metadata_relative_path
+    grafana_metadata_lib_target = tester_path / grafana_metadata_relative_path
+
+    grafana_metadata_lib_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(grafana_metadata_lib_source, grafana_metadata_lib_target)
+
+
+@pytest.fixture(scope="module")
+@timed_memoizer
 async def grafana_charm(ops_test: OpsTest) -> Path:
     """Grafana charm used for integration testing."""
     if charm_file := os.environ.get("CHARM_PATH"):
@@ -86,6 +100,15 @@ async def grafana_charm(ops_test: OpsTest) -> Path:
 async def grafana_tester_charm(ops_test: OpsTest) -> Path:
     """A charm to integration test the Grafana charm."""
     charm_path = "tests/integration/grafana-tester"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+@timed_memoizer
+async def grafana_metadata_requirer_tester_charm(ops_test: OpsTest, copy_grafana_libraries_into_grafana_metadata_requirer_tester_charm) -> Path:
+    """A charm to integration test the grafana-metadata relation."""
+    charm_path = "tests/integration/grafana-metadata-requirer-tester"
     charm = await ops_test.build_charm(charm_path)
     return charm
 

@@ -91,6 +91,10 @@ provides:
   metrics-endpoint:
     interface: prometheus_scrape
     description: Links to grafana's own `/metrics` endpoint.
+  grafana-metadata:
+    interface: grafana_metadata
+    description: |
+      Provides metadata about the grafana instance, such as its URL and ID.
 
 peers:
   grafana:
