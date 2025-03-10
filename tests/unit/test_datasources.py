@@ -94,7 +94,7 @@ def test_datasource_get():
         ds_uids = list(charm.source_provider.get_source_uids().values())  # type: ignore
         assert ds_uids[0] == local_ds_uids
         # AND the Grafana base URL via the provider
-        assert charm.source_provider.get_grafana_base_urls() == {grafana_uid: grafana_base_url}  # type: ignore
+        assert charm.source_provider.get_grafana_base_urls() == {datasource.id: grafana_base_url}  # type: ignore
 
 
 def test_datasource_get_nodata():

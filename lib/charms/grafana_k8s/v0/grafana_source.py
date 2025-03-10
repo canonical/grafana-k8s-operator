@@ -432,21 +432,14 @@ class GrafanaSourceProvider(Object):
     def get_grafana_base_urls(self) -> Dict[str, str]:
         """Get the grafana base URL (potentially ingressed) assigned by the remote end(s) to this datasource.
 
-        Returns a mapping from remote application UIDs to URL.
+        Returns a mapping from relation ID to URL.
         """
         urls = {}
         for rel in self._charm.model.relations.get(self._relation_name, []):
             if not rel:
                 continue
             app_databag = rel.data[rel.app]
-            grafana_uid = app_databag.get("grafana_uid")
-            if not grafana_uid:
-                logger.warning(
-                    "remote end is using an old grafana_datasource interface: "
-                    "`grafana_uid` field not found."
-                )
-                continue
-            urls[grafana_uid] = app_databag.get("grafana_base_url")
+            urls[rel.id] = app_databag.get("grafana_base_url")
         return urls
 
     def get_source_uids(self) -> Dict[str, Dict[str, str]]:
