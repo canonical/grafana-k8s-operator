@@ -91,10 +91,13 @@ def test_datasource_get():
     with ctx(ctx.on.relation_changed(datasource), state) as mgr:
         charm = mgr.charm
         # THEN we can see our datasource uids via the provider
-        ds_uids = list(charm.source_provider.get_source_uids().values())  # type: ignore
-        assert ds_uids[0] == local_ds_uids
-        # AND the Grafana base URL via the provider
-        assert charm.source_provider.get_grafana_base_urls() == {datasource.id: grafana_base_url}  # type: ignore
+        ds_uids = list(charm.source_provider.get_source_uids().values())[0]  # type: ignore
+        assert ds_uids == local_ds_uids
+        # AND `get_source_data.datasource_uids` is equivalent to `get_source_uids`
+        source_data = list(charm.source_provider.get_source_data().values())[0]
+        assert ds_uids == source_data.datasource_uids
+        # AND we can see the Grafana external URL via the provider
+        assert source_data.external_url == grafana_base_url
 
 
 def test_datasource_get_nodata():
@@ -132,5 +135,5 @@ def test_datasource_get_nodata():
         charm = mgr.charm
         # THEN we can see no datasource uids via the provider
         assert not charm.source_provider.get_source_uids()  # type: ignore
-        # AND we can see no Grafana base URL via the provider
-        assert not charm.source_provider.get_grafana_base_urls()  # type: ignore
+        # AND `get_source_data.datasource_uids` is equivalent to `get_source_uids`
+        assert charm.source_provider.get_source_uids() == charm.source_provider.get_source_data()

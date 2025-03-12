@@ -131,6 +131,7 @@ import json
 import logging
 import re
 import socket
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 from ops.charm import (
@@ -171,6 +172,22 @@ DEFAULT_PEER_NAME = "grafana"
 RELATION_INTERFACE_NAME = "grafana_datasource"
 
 
+@dataclass
+class GrafanaSourceData:
+    """This class represents the data Grafana provides others about itself."""
+
+    datasource_uids: Dict[str, str]
+    external_url: str
+
+    def get_unit_uid(self, unit: str):
+        """Return the UID for a given unit."""
+        if unit in self.datasource_uids:
+            datasource_uid = self.datasource_uids[unit]
+        else:
+            datasource_uid = ""
+        return datasource_uid
+
+
 def _type_convert_stored(obj) -> Union[dict, list]:
     """Convert Stored* to their appropriate types, recursively."""
     if isinstance(obj, StoredList):
@@ -206,8 +223,7 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            "The '{}' relation has '{}' as "
-            "interface rather than the expected '{}'".format(
+            "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
                 relation_name, actual_relation_interface, expected_relation_interface
             )
         )
@@ -429,25 +445,12 @@ class GrafanaSourceProvider(Object):
                 continue
             self._set_sources(rel)
 
-    def get_grafana_base_urls(self) -> Dict[str, str]:
-        """Get the grafana base URL (potentially ingressed) assigned by the remote end(s) to this datasource.
+    def get_source_data(self) -> Dict[str, GrafanaSourceData]:
+        """Get the Grafana data assigned by the remote end(s) to this datasource.
 
-        Returns a mapping from relation ID to URL.
+        Returns a mapping from remote application UIDs to GrafanaSourceData.
         """
-        urls = {}
-        for rel in self._charm.model.relations.get(self._relation_name, []):
-            if not rel:
-                continue
-            app_databag = rel.data[rel.app]
-            urls[rel.id] = app_databag.get("grafana_base_url")
-        return urls
-
-    def get_source_uids(self) -> Dict[str, Dict[str, str]]:
-        """Get the datasource UID(s) assigned by the remote end(s) to this datasource.
-
-        Returns a mapping from remote application UIDs to unit names to datasource uids.
-        """
-        uids = {}
+        data = {}
         for rel in self._charm.model.relations.get(self._relation_name, []):
             if not rel:
                 continue
@@ -459,9 +462,21 @@ class GrafanaSourceProvider(Object):
                     "`grafana_uid` field not found."
                 )
                 continue
+            grafana_data = GrafanaSourceData(
+                datasource_uids=json.loads(app_databag.get("datasource_uids", "{}")),
+                external_url=app_databag.get("grafana_base_url", ""),
+            )
+            data[grafana_uid] = grafana_data
+        return data
 
-            uids[grafana_uid] = json.loads(app_databag.get("datasource_uids", "{}"))
-        return uids
+    def get_source_uids(self) -> Dict[str, Dict[str, str]]:
+        """Get the datasource UID(s) assigned by the remote end(s) to this datasource.
+
+        Use the `get_source_data` public method instead.
+        Returns a mapping from remote application UIDs to unit names to datasource uids.
+        """
+        data = self.get_source_data()
+        return {grafana_uid: data[grafana_uid].datasource_uids for grafana_uid in data}
 
     def _set_sources_from_event(self, event: RelationJoinedEvent) -> None:
         """Get a `Relation` object from the event to pass on."""
@@ -751,7 +766,8 @@ class GrafanaSourceConsumer(Object):
             self._stored.sources_to_delete = set()
             peer_sources_to_delete = set(self.get_peer_data("sources_to_delete"))
             sources_to_delete = set.union(
-                old_sources_to_delete, peer_sources_to_delete  # pyright: ignore
+                old_sources_to_delete,
+                peer_sources_to_delete,  # pyright: ignore
             )
             self.set_peer_data("sources_to_delete", sources_to_delete)
 
