@@ -765,10 +765,7 @@ class GrafanaSourceConsumer(Object):
             )
             self._stored.sources_to_delete = set()
             peer_sources_to_delete = set(self.get_peer_data("sources_to_delete"))
-            sources_to_delete = set.union(
-                old_sources_to_delete,
-                peer_sources_to_delete,  # pyright: ignore
-            )
+            sources_to_delete = set.union(old_sources_to_delete, peer_sources_to_delete)  # pyright: ignore
             self.set_peer_data("sources_to_delete", sources_to_delete)
 
     def update_sources(self, relation: Optional[Relation] = None) -> None:
