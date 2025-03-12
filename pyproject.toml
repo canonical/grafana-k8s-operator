@@ -16,7 +16,7 @@ dependencies = [
   "lightkube>=0.11",
   # lib/charms/grafana_k8s/v0/grafana_dashboard.py
   # lib/charms/temo_k8s/v1/charm_tracing.py
-  "cosl", 
+  "cosl",
   # lib/charms/tempo_k8s/v1/charm_tracing.py
   "opentelemetry-exporter-otlp-proto-http",
   "pydantic",
@@ -38,12 +38,13 @@ dev = [
   # Integration
   "juju<=3.3.0,>=3.0",
   "websockets<14.0",
-  "oauth_tools@git+https://github.com/canonical/iam-bundle@671a33419869fab1fe63d81873b41f6b181498e3#egg=oauth_tools",
   "lightkube",
   "minio",
+  "oauth-tools",
   "pytest-operator>=0.39",
   "ops[testing]",
   "pytest-asyncio",
+  "pytest-playwright",
   "aiohttp",
   "asyncstdlib",
   "sh",
@@ -90,3 +91,6 @@ addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 [tool.codespell]
 skip = ".git,.tox,build,venv*"
 ignore-words-list = "assertIn"
+
+[tool.uv.sources]
+oauth-tools = { git = "https://github.com/canonical/iam-bundle", rev = "oauth_tools-v0.1.2" }
