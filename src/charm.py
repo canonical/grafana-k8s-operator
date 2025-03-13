@@ -225,7 +225,10 @@ class GrafanaCharm(CharmBase):
 
         # -- grafana_source relation observations
         self.source_consumer = GrafanaSourceConsumer(
-            self, grafana_uid=self.unique_name, relation_name="grafana-source"
+            self,
+            grafana_uid=self.unique_name,
+            grafana_base_url=self.external_url,
+            relation_name="grafana-source",
         )
         self.framework.observe(
             self.source_consumer.on.sources_changed,  # pyright: ignore
