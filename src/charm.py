@@ -38,6 +38,7 @@ import yaml
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
+from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
     GrafanaSourceEvents,
@@ -54,7 +55,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     ResourceRequirements,
     adjust_resource_requirements,
 )
-from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateAvailableEvent,
     CertificateRemovedEvent,
@@ -169,7 +170,7 @@ class GrafanaCharm(CharmBase):
             charm=self,
             key="grafana-server-cert",
             peer_relation_name="replicas",
-            extra_sans_dns=[socket.getfqdn()],
+            sans=[socket.getfqdn()],
         )
 
         # -- trusted_cert_transfer
@@ -228,7 +229,9 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- grafana_source relation observations
-        self.source_consumer = GrafanaSourceConsumer(self, grafana_uid=self.unique_name, relation_name="grafana-source")
+        self.source_consumer = GrafanaSourceConsumer(
+            self, grafana_uid=self.unique_name, relation_name="grafana-source"
+        )
         self.framework.observe(
             self.source_consumer.on.sources_changed,  # pyright: ignore
             self._on_grafana_source_changed,
@@ -335,6 +338,14 @@ class GrafanaCharm(CharmBase):
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
 
         self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
+
+        # -- grafana-metadata relation handling
+        self.framework.observe(self.on.leader_elected, self._send_grafana_metadata)
+        self.framework.observe(
+            self.on["grafana-metadata"].relation_joined, self._send_grafana_metadata
+        )
+        self.framework.observe(self.ingress.on.ready, self._send_grafana_metadata)
+        self.framework.observe(self.cert_handler.on.cert_changed, self._send_grafana_metadata)
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
@@ -950,8 +961,8 @@ class GrafanaCharm(CharmBase):
         # Verify that the certificate and key are correctly configured
         workload = self.containers["workload"]
         return (
-            self.cert_handler.cert
-            and self.cert_handler.key
+            self.cert_handler.server_cert
+            and self.cert_handler.private_key
             and workload.exists(GRAFANA_CRT_PATH)
             and workload.exists(GRAFANA_KEY_PATH)
         )
@@ -1091,23 +1102,26 @@ class GrafanaCharm(CharmBase):
         if self.oauth.is_client_created():
             oauth_provider_info = self.oauth.get_provider_info()
 
-            extra_info.update(
-                {
-                    "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
-                    "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(str, oauth_provider_info.client_id),
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
-                        str, oauth_provider_info.client_secret
-                    ),
-                    "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
-                    "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
-                    # TODO: This toggle will be removed on grafana v10.3, remove it
-                    "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
-                }
-            )
+            if oauth_provider_info:
+                extra_info.update(
+                    {
+                        "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
+                        "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(
+                            str, oauth_provider_info.client_id
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
+                            str, oauth_provider_info.client_secret
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
+                        "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
+                        # TODO: This toggle will be removed on grafana v10.3, remove it
+                        "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
+                    }
+                )
 
         if self.workload_tracing.is_ready():
             topology = self._topology
@@ -1401,7 +1415,7 @@ class GrafanaCharm(CharmBase):
 
     @property
     def _scheme(self) -> str:
-        return "https" if self.cert_handler.cert else "http"
+        return "https" if self.cert_handler.server_cert else "http"
 
     @property
     def internal_url(self) -> str:
@@ -1521,36 +1535,36 @@ class GrafanaCharm(CharmBase):
 
     def _update_cert(self):
         container = self.containers["workload"]
-        if self.cert_handler.cert:
+        if self.cert_handler.server_cert:
             # Save the workload certificates
             container.push(
                 GRAFANA_CRT_PATH,
-                self.cert_handler.cert,
+                self.cert_handler.server_cert,
                 make_dirs=True,
             )
         else:
             container.remove_path(GRAFANA_CRT_PATH, recursive=True)
 
-        if self.cert_handler.key:
+        if self.cert_handler.private_key:
             container.push(
                 GRAFANA_KEY_PATH,
-                self.cert_handler.key,
+                self.cert_handler.private_key,
                 make_dirs=True,
             )
         else:
             container.remove_path(GRAFANA_KEY_PATH, recursive=True)
 
-        if self.cert_handler.ca:
+        if self.cert_handler.ca_cert:
             # Save the CA among the trusted CAs and trust it
             container.push(
                 CA_CERT_PATH,
-                self.cert_handler.ca,
+                self.cert_handler.ca_cert,
                 make_dirs=True,
             )
 
             # Repeat for the charm container. We need it there for grafana client requests.
             CA_CERT_PATH.parent.mkdir(exist_ok=True, parents=True)
-            CA_CERT_PATH.write_text(self.cert_handler.ca)
+            CA_CERT_PATH.write_text(self.cert_handler.ca_cert)
         else:
             container.remove_path(CA_CERT_PATH, recursive=True)
             # Repeat for the charm container.
@@ -1630,6 +1644,29 @@ class GrafanaCharm(CharmBase):
             self.model.uuid,
             self.model.app.name,
             self.model.unit.name.split("/")[1],  # type: ignore
+        )
+
+    def _send_grafana_metadata(self, _):
+        """Send metadata to related applications on the grafana-metadata relation."""
+        if not self.unit.is_leader():
+            return
+
+        # grafana-metadata should only send an external URL if it's set, otherwise it leaves that empty
+        internal_url = self.internal_url
+        external_url = self.external_url
+        if external_url == internal_url:
+            # external_url is not set and just defaulted back to internal_url.  Set it to None
+            external_url = None
+
+        grafana_metadata = GrafanaMetadataProvider(
+            relation_mapping=self.model.relations,
+            app=self.app,
+            relation_name="grafana-metadata",
+        )
+        grafana_metadata.publish(
+            grafana_uid=self.unique_name,
+            ingress_url=external_url,  # pyright: ignore
+            direct_url=internal_url,  # pyright: ignore
         )
 
 
