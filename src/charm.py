@@ -55,7 +55,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     ResourceRequirements,
     adjust_resource_requirements,
 )
-from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateAvailableEvent,
     CertificateRemovedEvent,
@@ -170,7 +170,7 @@ class GrafanaCharm(CharmBase):
             charm=self,
             key="grafana-server-cert",
             peer_relation_name="replicas",
-            extra_sans_dns=[socket.getfqdn()],
+            sans=[socket.getfqdn()],
         )
 
         # -- trusted_cert_transfer
@@ -339,7 +339,9 @@ class GrafanaCharm(CharmBase):
 
         # -- grafana-metadata relation handling
         self.framework.observe(self.on.leader_elected, self._send_grafana_metadata)
-        self.framework.observe(self.on["grafana-metadata"].relation_joined, self._send_grafana_metadata)
+        self.framework.observe(
+            self.on["grafana-metadata"].relation_joined, self._send_grafana_metadata
+        )
         self.framework.observe(self.ingress.on.ready, self._send_grafana_metadata)
         self.framework.observe(self.cert_handler.on.cert_changed, self._send_grafana_metadata)
 
@@ -957,8 +959,8 @@ class GrafanaCharm(CharmBase):
         # Verify that the certificate and key are correctly configured
         workload = self.containers["workload"]
         return (
-            self.cert_handler.cert
-            and self.cert_handler.key
+            self.cert_handler.server_cert
+            and self.cert_handler.private_key
             and workload.exists(GRAFANA_CRT_PATH)
             and workload.exists(GRAFANA_KEY_PATH)
         )
@@ -1098,23 +1100,26 @@ class GrafanaCharm(CharmBase):
         if self.oauth.is_client_created():
             oauth_provider_info = self.oauth.get_provider_info()
 
-            extra_info.update(
-                {
-                    "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
-                    "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(str, oauth_provider_info.client_id),
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
-                        str, oauth_provider_info.client_secret
-                    ),
-                    "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
-                    "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
-                    # TODO: This toggle will be removed on grafana v10.3, remove it
-                    "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
-                }
-            )
+            if oauth_provider_info:
+                extra_info.update(
+                    {
+                        "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
+                        "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(
+                            str, oauth_provider_info.client_id
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
+                            str, oauth_provider_info.client_secret
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
+                        "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
+                        # TODO: This toggle will be removed on grafana v10.3, remove it
+                        "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
+                    }
+                )
 
         if self.workload_tracing.is_ready():
             topology = self._topology
@@ -1408,7 +1413,7 @@ class GrafanaCharm(CharmBase):
 
     @property
     def _scheme(self) -> str:
-        return "https" if self.cert_handler.cert else "http"
+        return "https" if self.cert_handler.server_cert else "http"
 
     @property
     def internal_url(self) -> str:
@@ -1542,36 +1547,36 @@ class GrafanaCharm(CharmBase):
 
     def _update_cert(self):
         container = self.containers["workload"]
-        if self.cert_handler.cert:
+        if self.cert_handler.server_cert:
             # Save the workload certificates
             container.push(
                 GRAFANA_CRT_PATH,
-                self.cert_handler.cert,
+                self.cert_handler.server_cert,
                 make_dirs=True,
             )
         else:
             container.remove_path(GRAFANA_CRT_PATH, recursive=True)
 
-        if self.cert_handler.key:
+        if self.cert_handler.private_key:
             container.push(
                 GRAFANA_KEY_PATH,
-                self.cert_handler.key,
+                self.cert_handler.private_key,
                 make_dirs=True,
             )
         else:
             container.remove_path(GRAFANA_KEY_PATH, recursive=True)
 
-        if self.cert_handler.ca:
+        if self.cert_handler.ca_cert:
             # Save the CA among the trusted CAs and trust it
             container.push(
                 CA_CERT_PATH,
-                self.cert_handler.ca,
+                self.cert_handler.ca_cert,
                 make_dirs=True,
             )
 
             # Repeat for the charm container. We need it there for grafana client requests.
             CA_CERT_PATH.parent.mkdir(exist_ok=True, parents=True)
-            CA_CERT_PATH.write_text(self.cert_handler.ca)
+            CA_CERT_PATH.write_text(self.cert_handler.ca_cert)
         else:
             container.remove_path(CA_CERT_PATH, recursive=True)
             # Repeat for the charm container.

@@ -73,6 +73,7 @@ provides:
     interface: grafana_metadata
 ```
 """
+
 import logging
 from typing import Optional
 
@@ -80,14 +81,14 @@ from ops import RelationMapping, Application
 from pydantic import AnyHttpUrl, BaseModel, Field
 
 # The unique Charmhub library identifier, never change it
-LIBID = "26290f24974540adb4464b695bd01ea3"
+LIBID = "cee305b7fe0546548cbfe81c3bd20e33"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 PYDEPS = ["pydantic>=2"]
 
@@ -102,12 +103,11 @@ class GrafanaMetadataAppData(BaseModel):
     ingress_url: Optional[AnyHttpUrl] = Field(
         default=None,
         description="The non-internal URL at which this application can be reached.  Typically, this is an ingress URL.",
-
     )
     direct_url: AnyHttpUrl = Field(
         description="The cluster-internal URL at which this application can be reached.  Typically, this is a"
-                    " Kubernetes FQDN like name.namespace.svc.cluster.local for connecting to the prometheus api"
-                    " from inside the cluster, with scheme."
+        " Kubernetes FQDN like name.namespace.svc.cluster.local for connecting to the prometheus api"
+        " from inside the cluster, with scheme."
     )
     grafana_uid: str = Field(description="The UID of this Grafana application.")
 
@@ -195,7 +195,9 @@ class GrafanaMetadataProvider:
         """Return the applications related to us under the monitored relation."""
         return self._charm_relation_mapping.get(self._relation_name, ())
 
-    def publish(self, grafana_uid: str, direct_url: AnyHttpUrl, ingress_url: Optional[AnyHttpUrl] = None):
+    def publish(
+        self, grafana_uid: str, direct_url: AnyHttpUrl, ingress_url: Optional[AnyHttpUrl] = None
+    ):
         """Post grafana-metadata to all related applications.
 
         This method writes to the relation's app data bag, and thus should never be called by a unit that is not the
@@ -210,9 +212,7 @@ class GrafanaMetadataProvider:
                          URL.
         """
         data = GrafanaMetadataAppData(
-            grafana_uid=grafana_uid,
-            direct_url=direct_url,
-            ingress_url=ingress_url
+            grafana_uid=grafana_uid, direct_url=direct_url, ingress_url=ingress_url
         ).model_dump(mode="json", by_alias=True, exclude_defaults=True, round_trip=True)
 
         for relation in self.relations:
