@@ -177,7 +177,7 @@ class GrafanaSourceData:
     """This class represents the data Grafana provides others about itself."""
 
     datasource_uids: Dict[str, str]
-    external_url: str
+    external_url: Optional[str]
 
     def get_unit_uid(self, unit: str):
         """Return the UID for a given unit."""
@@ -464,7 +464,7 @@ class GrafanaSourceProvider(Object):
                 continue
             grafana_data = GrafanaSourceData(
                 datasource_uids=json.loads(app_databag.get("datasource_uids", "{}")),
-                external_url=app_databag.get("grafana_base_url", ""),
+                external_url=app_databag.get("grafana_base_url"),
             )
             data[grafana_uid] = grafana_data
         return data
@@ -472,7 +472,7 @@ class GrafanaSourceProvider(Object):
     def get_source_uids(self) -> Dict[str, Dict[str, str]]:
         """Get the datasource UID(s) assigned by the remote end(s) to this datasource.
 
-        Use the `get_source_data` public method instead.
+        DEPRECATED: This method is deprecated. Use the `get_source_data` instead.
         Returns a mapping from remote application UIDs to unit names to datasource uids.
         """
         data = self.get_source_data()

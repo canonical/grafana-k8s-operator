@@ -86,53 +86,53 @@ class TestSourceConsumer(unittest.TestCase):
         self.harness.begin()
         self.harness.add_relation("grafana", "grafana-k8s")
 
-    # def setup_charm_relations(self, multi=False):
-    #     """Create relations used by test cases.
+    def setup_charm_relations(self, multi=False):
+        """Create relations used by test cases.
 
-    #     Args:
-    #         multi: a boolean indicating if multiple relations must be
-    #         created.
-    #     """
-    #     rel_ids = []
-    #     self.assertEqual(self.harness.charm._stored.source_events, 0)
-    #     rel_id = self.harness.add_relation("grafana-source", "provider")
-    #     rel_ids.append(rel_id)
-    #     self.harness.update_relation_data(
-    #         rel_id,
-    #         "provider",
-    #         {
-    #             "grafana_source_data": json.dumps(SOURCE_DATA),
-    #         },
-    #     )
-    #     self.harness.add_relation_unit(rel_id, "provider/0")
-    #     self.harness.update_relation_data(
-    #         rel_id, "provider/0", {"grafana_source_host": "1.2.3.4:9090"}
-    #     )
-    #     self.assertEqual(self.harness.charm._stored.source_events, 2)
+        Args:
+            multi: a boolean indicating if multiple relations must be
+            created.
+        """
+        rel_ids = []
+        self.assertEqual(self.harness.charm._stored.source_events, 0)
+        rel_id = self.harness.add_relation("grafana-source", "provider")
+        rel_ids.append(rel_id)
+        self.harness.update_relation_data(
+            rel_id,
+            "provider",
+            {
+                "grafana_source_data": json.dumps(SOURCE_DATA),
+            },
+        )
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        self.harness.update_relation_data(
+            rel_id, "provider/0", {"grafana_source_host": "1.2.3.4:9090"}
+        )
+        self.assertEqual(self.harness.charm._stored.source_events, 2)
 
-    #     if multi:
-    #         rel_id = self.harness.add_relation("grafana-source", "other-provider")
-    #         rel_ids.append(rel_id)
-    #         self.harness.update_relation_data(
-    #             rel_id,
-    #             "other-provider",
-    #             {
-    #                 "grafana_source_data": json.dumps(OTHER_SOURCE_DATA),
-    #             },
-    #         )
-    #         self.harness.add_relation_unit(rel_id, "other-provider/0")
-    #         self.harness.update_relation_data(
-    #             rel_id, "other-provider/0", {"grafana_source_host": "2.3.4.5:9090"}
-    #         )
-    #         self.assertEqual(self.harness.charm._stored.num_events, 4)
+        if multi:
+            rel_id = self.harness.add_relation("grafana-source", "other-provider")
+            rel_ids.append(rel_id)
+            self.harness.update_relation_data(
+                rel_id,
+                "other-provider",
+                {
+                    "grafana_source_data": json.dumps(OTHER_SOURCE_DATA),
+                },
+            )
+            self.harness.add_relation_unit(rel_id, "other-provider/0")
+            self.harness.update_relation_data(
+                rel_id, "other-provider/0", {"grafana_source_host": "2.3.4.5:9090"}
+            )
+            self.assertEqual(self.harness.charm._stored.num_events, 4)
 
-    #     return rel_ids
+        return rel_ids
 
-    # def validate_sources(self, sources):
-    #     for source in sources:
-    #         self.assertIn("source_name", source)
-    #         self.assertIn("source_type", source)
-    #         self.assertIn("url", source)
+    def validate_sources(self, sources):
+        for source in sources:
+            self.assertIn("source_name", source)
+            self.assertIn("source_type", source)
+            self.assertIn("url", source)
 
     def test_consumer_notifies_on_new_sources(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
