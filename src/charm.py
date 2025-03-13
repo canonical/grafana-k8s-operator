@@ -38,6 +38,7 @@ import yaml
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
+from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
     GrafanaSourceEvents,
@@ -54,12 +55,13 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     ResourceRequirements,
     adjust_resource_requirements,
 )
-from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateAvailableEvent,
     CertificateRemovedEvent,
     CertificateTransferRequires,
 )
+from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.charm import (
@@ -75,7 +77,7 @@ from ops.charm import (
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from ops.framework import StoredState
-from ops.main import main
+from ops import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port
 
 from ops.pebble import (
@@ -113,6 +115,7 @@ CA_CERT_PATH = Path("/usr/local/share/ca-certificates/cos-ca.crt")
 DATABASE = "database"
 PEER = "grafana"
 PORT = 3000
+PROFILING_PORT = 8080
 DATABASE_PATH = "/var/lib/grafana/grafana.db"
 
 # Template for storing trusted certificate in a file.
@@ -167,7 +170,7 @@ class GrafanaCharm(CharmBase):
             charm=self,
             key="grafana-server-cert",
             peer_relation_name="replicas",
-            extra_sans_dns=[socket.getfqdn()],
+            sans=[socket.getfqdn()],
         )
 
         # -- trusted_cert_transfer
@@ -188,7 +191,7 @@ class GrafanaCharm(CharmBase):
 
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
-            jobs=self._scrape_jobs,
+            jobs=self._metrics_scrape_jobs,
             refresh_event=[
                 self.on.grafana_pebble_ready,  # pyright: ignore
                 self.on.update_status,
@@ -204,11 +207,13 @@ class GrafanaCharm(CharmBase):
         self.charm_tracing_endpoint, self.server_cert = charm_tracing_config(
             self.charm_tracing, CA_CERT_PATH
         )
+        self.profiling = ProfilingEndpointProvider(self, jobs=self._profiling_scrape_jobs)
 
         # -- standard events
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(
-            self.on.grafana_pebble_ready, self._on_pebble_ready  # pyright: ignore
+            self.on.grafana_pebble_ready,
+            self._on_pebble_ready,  # pyright: ignore
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
@@ -219,7 +224,9 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- grafana_source relation observations
-        self.source_consumer = GrafanaSourceConsumer(self, "grafana-source")
+        self.source_consumer = GrafanaSourceConsumer(
+            self, grafana_uid=self.unique_name, relation_name="grafana-source"
+        )
         self.framework.observe(
             self.source_consumer.on.sources_changed,  # pyright: ignore
             self._on_grafana_source_changed,
@@ -262,7 +269,8 @@ class GrafanaCharm(CharmBase):
             self, self.name, resource_reqs_func=self._resource_reqs_from_config
         )
         self.framework.observe(
-            self.resource_patch.on.patch_failed, self._on_resource_patch_failed  # pyright: ignore
+            self.resource_patch.on.patch_failed,
+            self._on_resource_patch_failed,  # pyright: ignore
         )
         # -- grafana_auth relation observations
         self.grafana_auth_requirer = AuthRequirer(
@@ -274,6 +282,15 @@ class GrafanaCharm(CharmBase):
         self.framework.observe(
             self.grafana_auth_requirer.on.auth_conf_available,  # pyright: ignore
             self._on_grafana_auth_conf_available,
+        )
+        # -- profiling observations
+        self.framework.observe(
+            self.on.profiling_endpoint_relation_created,  # type: ignore
+            self._on_profiling_endpoint_created,
+        )
+        self.framework.observe(
+            self.on.profiling_endpoint_relation_broken,  # type: ignore
+            self._on_profiling_endpoint_broken,
         )
         # -- workload tracing observations
         self.framework.observe(
@@ -287,7 +304,8 @@ class GrafanaCharm(CharmBase):
 
         # -- cert_handler observations
         self.framework.observe(
-            self.cert_handler.on.cert_changed, self._on_server_cert_changed  # pyright: ignore
+            self.cert_handler.on.cert_changed,
+            self._on_server_cert_changed,  # pyright: ignore
         )
 
         # -- trusted_cert_transfer observations
@@ -304,15 +322,25 @@ class GrafanaCharm(CharmBase):
 
         # oauth relation observations
         self.framework.observe(
-            self.oauth.on.oauth_info_changed, self._on_oauth_info_changed  # pyright: ignore
+            self.oauth.on.oauth_info_changed,
+            self._on_oauth_info_changed,  # pyright: ignore
         )
         self.framework.observe(
-            self.oauth.on.oauth_info_removed, self._on_oauth_info_changed  # pyright: ignore
+            self.oauth.on.oauth_info_removed,
+            self._on_oauth_info_changed,  # pyright: ignore
         )
 
         # self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
 
         self.catalog = CatalogueConsumer(charm=self, item=self._catalogue_item)
+
+        # -- grafana-metadata relation handling
+        self.framework.observe(self.on.leader_elected, self._send_grafana_metadata)
+        self.framework.observe(
+            self.on["grafana-metadata"].relation_joined, self._send_grafana_metadata
+        )
+        self.framework.observe(self.ingress.on.ready, self._send_grafana_metadata)
+        self.framework.observe(self.cert_handler.on.cert_changed, self._send_grafana_metadata)
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
@@ -401,7 +429,9 @@ class GrafanaCharm(CharmBase):
         litestream_config = {"addr": ":9876", "dbs": [{"path": DATABASE_PATH}]}
 
         if not leader:
-            litestream_config["dbs"][0].update({"upstream": {"url": "http://${LITESTREAM_UPSTREAM_URL}"}})  # type: ignore
+            litestream_config["dbs"][0].update(
+                {"upstream": {"url": "http://${LITESTREAM_UPSTREAM_URL}"}}
+            )  # type: ignore
 
         container = self.containers["replication"]
         if container.can_connect():
@@ -617,7 +647,7 @@ class GrafanaCharm(CharmBase):
         default_config = os.path.join(dashboard_path, "default.yaml")
         default_config_string = yaml.dump(dashboard_config)
 
-        if not os.path.exists(dashboard_path):
+        if not container.exists(dashboard_path):
             try:
                 container.push(default_config, default_config_string, make_dirs=True)
                 self.restart_grafana()
@@ -726,7 +756,8 @@ class GrafanaCharm(CharmBase):
 
         # Get required information
         database_fields = {
-            field: event.relation.data[event.app].get(field) for field in REQUIRED_DATABASE_FIELDS  # type: ignore
+            field: event.relation.data[event.app].get(field)
+            for field in REQUIRED_DATABASE_FIELDS  # type: ignore
         }
 
         # if any required fields are missing, warn the user and return
@@ -770,6 +801,14 @@ class GrafanaCharm(CharmBase):
 
     def _on_workload_tracing_endpoint_removed(self, event: RelationBrokenEvent) -> None:
         """Removes workload tracing information from grafana's config."""
+        self._configure()
+
+    def _on_profiling_endpoint_created(self, _) -> None:
+        """Turn on grafana server profiling."""
+        self._configure()
+
+    def _on_profiling_endpoint_broken(self, _) -> None:
+        """Turn off grafana server profiling (if no other profiling relations exist)."""
         self._configure()
 
     def _generate_grafana_config(self) -> str:
@@ -917,8 +956,8 @@ class GrafanaCharm(CharmBase):
         # Verify that the certificate and key are correctly configured
         workload = self.containers["workload"]
         return (
-            self.cert_handler.cert
-            and self.cert_handler.key
+            self.cert_handler.server_cert
+            and self.cert_handler.private_key
             and workload.exists(GRAFANA_CRT_PATH)
             and workload.exists(GRAFANA_KEY_PATH)
         )
@@ -1058,23 +1097,26 @@ class GrafanaCharm(CharmBase):
         if self.oauth.is_client_created():
             oauth_provider_info = self.oauth.get_provider_info()
 
-            extra_info.update(
-                {
-                    "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
-                    "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(str, oauth_provider_info.client_id),
-                    "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
-                        str, oauth_provider_info.client_secret
-                    ),
-                    "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
-                    "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
-                    "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
-                    # TODO: This toggle will be removed on grafana v10.3, remove it
-                    "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
-                }
-            )
+            if oauth_provider_info:
+                extra_info.update(
+                    {
+                        "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
+                        "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(
+                            str, oauth_provider_info.client_id
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
+                            str, oauth_provider_info.client_secret
+                        ),
+                        "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
+                        "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
+                        "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
+                        # TODO: This toggle will be removed on grafana v10.3, remove it
+                        "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
+                    }
+                )
 
         if self.workload_tracing.is_ready():
             topology = self._topology
@@ -1082,6 +1124,17 @@ class GrafanaCharm(CharmBase):
                 {
                     "OTEL_RESOURCE_ATTRIBUTES": f"juju_application={topology.application},juju_model={topology.model}"
                     + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
+                }
+            )
+
+        # if we have any profiling relations, switch on profiling
+        if self.model.relations.get("profiling-endpoint"):
+            # https://grafana.com/docs/grafana/v9.5/setup-grafana/configure-grafana/configure-tracing/#turn-on-profiling
+            extra_info.update(
+                {
+                    "GF_DIAGNOSTICS_PROFILING_ENABLED": "true",
+                    "GF_DIAGNOSTICS_PROFILING_ADDR": "0.0.0.0",
+                    "GF_DIAGNOSTICS_PROFILING_PORT": str(PROFILING_PORT),
                 }
             )
 
@@ -1100,17 +1153,17 @@ class GrafanaCharm(CharmBase):
                             "GF_LOG_LEVEL": cast(str, self.model.config["log_level"]),
                             "GF_PLUGINS_ENABLE_ALPHA": "true",
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
-                            "GF_SECURITY_ALLOW_EMBEDDING": cast(
-                                str, self.model.config["allow_embedding"]
-                            ),
+                            "GF_SECURITY_ALLOW_EMBEDDING": str(
+                                self.model.config["allow_embedding"]
+                            ).lower(),
                             "GF_SECURITY_ADMIN_USER": cast(str, self.model.config["admin_user"]),
                             "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
-                            "GF_AUTH_ANONYMOUS_ENABLED": cast(
-                                str, self.model.config["allow_anonymous_access"]
-                            ),
+                            "GF_AUTH_ANONYMOUS_ENABLED": str(
+                                self.model.config["allow_anonymous_access"]
+                            ).lower(),
                             "GF_USERS_AUTO_ASSIGN_ORG": str(
                                 self.model.config["enable_auto_assign_org"]
-                            ),
+                            ).lower(),
                             **extra_info,
                         },
                     }
@@ -1357,7 +1410,7 @@ class GrafanaCharm(CharmBase):
 
     @property
     def _scheme(self) -> str:
-        return "https" if self.cert_handler.cert else "http"
+        return "https" if self.cert_handler.server_cert else "http"
 
     @property
     def internal_url(self) -> str:
@@ -1475,10 +1528,14 @@ class GrafanaCharm(CharmBase):
         return env_vars
 
     @property
-    def _scrape_jobs(self) -> list:
+    def _metrics_scrape_jobs(self) -> list:
         parts = urlparse(self.internal_url)
         job = {"static_configs": [{"targets": [parts.netloc]}], "scheme": self._scheme}
+        return [job]
 
+    @property
+    def _profiling_scrape_jobs(self) -> list:
+        job = {"static_configs": [{"targets": [f"*:{PROFILING_PORT}"]}], "scheme": self._scheme}
         return [job]
 
     def _on_server_cert_changed(self, _):
@@ -1487,36 +1544,36 @@ class GrafanaCharm(CharmBase):
 
     def _update_cert(self):
         container = self.containers["workload"]
-        if self.cert_handler.cert:
+        if self.cert_handler.server_cert:
             # Save the workload certificates
             container.push(
                 GRAFANA_CRT_PATH,
-                self.cert_handler.cert,
+                self.cert_handler.server_cert,
                 make_dirs=True,
             )
         else:
             container.remove_path(GRAFANA_CRT_PATH, recursive=True)
 
-        if self.cert_handler.key:
+        if self.cert_handler.private_key:
             container.push(
                 GRAFANA_KEY_PATH,
-                self.cert_handler.key,
+                self.cert_handler.private_key,
                 make_dirs=True,
             )
         else:
             container.remove_path(GRAFANA_KEY_PATH, recursive=True)
 
-        if self.cert_handler.ca:
+        if self.cert_handler.ca_cert:
             # Save the CA among the trusted CAs and trust it
             container.push(
                 CA_CERT_PATH,
-                self.cert_handler.ca,
+                self.cert_handler.ca_cert,
                 make_dirs=True,
             )
 
             # Repeat for the charm container. We need it there for grafana client requests.
             CA_CERT_PATH.parent.mkdir(exist_ok=True, parents=True)
-            CA_CERT_PATH.write_text(self.cert_handler.ca)
+            CA_CERT_PATH.write_text(self.cert_handler.ca_cert)
         else:
             container.remove_path(CA_CERT_PATH, recursive=True)
             # Repeat for the charm container.
@@ -1586,6 +1643,39 @@ class GrafanaCharm(CharmBase):
             Path("sqlite-static").read_bytes(),
             permissions=0o755,
             make_dirs=True,
+        )
+
+    @property
+    def unique_name(self):
+        """Returns a unique identifier for this application."""
+        return "juju_{}_{}_{}_{}".format(
+            self.model.name,
+            self.model.uuid,
+            self.model.app.name,
+            self.model.unit.name.split("/")[1],  # type: ignore
+        )
+
+    def _send_grafana_metadata(self, _):
+        """Send metadata to related applications on the grafana-metadata relation."""
+        if not self.unit.is_leader():
+            return
+
+        # grafana-metadata should only send an external URL if it's set, otherwise it leaves that empty
+        internal_url = self.internal_url
+        external_url = self.external_url
+        if external_url == internal_url:
+            # external_url is not set and just defaulted back to internal_url.  Set it to None
+            external_url = None
+
+        grafana_metadata = GrafanaMetadataProvider(
+            relation_mapping=self.model.relations,
+            app=self.app,
+            relation_name="grafana-metadata",
+        )
+        grafana_metadata.publish(
+            grafana_uid=self.unique_name,
+            ingress_url=external_url,  # pyright: ignore
+            direct_url=internal_url,  # pyright: ignore
         )
 
 

@@ -19,10 +19,6 @@ grafana_resources = {
 }
 
 
-async def test_setup_env(ops_test):
-    await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
-
-
 @pytest.mark.abort_on_fail
 async def test_password_returns_correct_value_after_upgrading(ops_test, grafana_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
@@ -46,7 +42,7 @@ async def test_password_returns_correct_value_after_upgrading(ops_test, grafana_
         apps=[app_name], status="active", timeout=300, wait_for_exact_units=1, idle_period=30
     )
 
-    # libjuju doesn't actually allow waiting for idle with zero units with any argument combintation
+    # libjuju doesn't actually allow waiting for idle with zero units with any argument combination
     # block_until() to do it ourselves. The scale also blows it away so fast that the health check
     # fails, and the unit never finalizes.
     # FIXME: stop destroying when https://bugs.launchpad.net/juju/+bug/1951415 is resolved

@@ -3,12 +3,14 @@
 # See LICENSE file for licensing details.
 import functools
 import logging
+import os
 import shutil
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
 import pytest
+from playwright.async_api import Playwright as AsyncPlaywright, BrowserType
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -71,8 +73,25 @@ def copy_grafana_libraries_into_tester_charm(ops_test: OpsTest) -> None:
 
 @pytest.fixture(scope="module")
 @timed_memoizer
+async def copy_grafana_libraries_into_grafana_metadata_requirer_tester_charm(ops_test: OpsTest):
+    tester_path = (Path(__file__).parent / "grafana-metadata-requirer-tester").absolute()
+
+    # Update libraries in the tester charms
+    grafana_metadata_relative_path = Path("lib/charms/grafana_k8s/v0/grafana_metadata.py")
+    grafana_metadata_lib_source = Path(__file__).parent.parent.parent / grafana_metadata_relative_path
+    grafana_metadata_lib_target = tester_path / grafana_metadata_relative_path
+
+    grafana_metadata_lib_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(grafana_metadata_lib_source, grafana_metadata_lib_target)
+
+
+@pytest.fixture(scope="module")
+@timed_memoizer
 async def grafana_charm(ops_test: OpsTest) -> Path:
     """Grafana charm used for integration testing."""
+    if charm_file := os.environ.get("CHARM_PATH"):
+        return Path(charm_file)
+
     charm = await ops_test.build_charm(".")
     return charm
 
@@ -87,5 +106,19 @@ async def grafana_tester_charm(ops_test: OpsTest) -> Path:
 
 
 @pytest.fixture(scope="module")
+@timed_memoizer
+async def grafana_metadata_requirer_tester_charm(ops_test: OpsTest, copy_grafana_libraries_into_grafana_metadata_requirer_tester_charm) -> Path:
+    """A charm to integration test the grafana-metadata relation."""
+    charm_path = "tests/integration/grafana-metadata-requirer-tester"
+    charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
 def temp_dir(tmp_path_factory):
     return tmp_path_factory.mktemp("data")
+
+
+@pytest.fixture(scope="module")
+def browser_type(playwright: AsyncPlaywright) -> BrowserType:
+    return playwright.firefox

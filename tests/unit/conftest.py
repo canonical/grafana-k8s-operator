@@ -2,7 +2,7 @@ from contextlib import ExitStack
 from unittest.mock import patch
 
 import pytest
-from scenario import State, Container
+from ops.testing import Context
 
 from charm import GrafanaCharm
 
@@ -14,16 +14,7 @@ def tautology(*_, **__) -> bool:
 
 
 @pytest.fixture
-def containers():
-    """Mocks for standard containers grafana needs to work."""
-    return [
-        Container(name="grafana", can_connect=True),
-        Container(name="litestream", can_connect=True),
-    ]
-
-
-@pytest.fixture(autouse=True, scope="module")
-def apply_all_patches():
+def ctx():
     with ExitStack() as stack:
         stack.enter_context(patch.multiple(
             "charm.KubernetesComputeResourcesPatch",
@@ -36,16 +27,4 @@ def apply_all_patches():
         stack.enter_context(patch("socket.getfqdn", new=lambda *args: GRAFANA_FQDN))
         stack.enter_context(patch("socket.gethostbyname", new=lambda *args: "1.2.3.4"))
         stack.enter_context(patch.object(GrafanaCharm, "grafana_version", "0.1.0"))
-        yield
-
-
-@pytest.fixture
-def grafana_source_tester(interface_tester, containers):
-    interface_tester.configure(
-        charm_type=GrafanaCharm,
-        state_template=State(
-            leader=True,
-            containers=containers,
-        ),
-    )
-    yield interface_tester
+        yield Context(GrafanaCharm)

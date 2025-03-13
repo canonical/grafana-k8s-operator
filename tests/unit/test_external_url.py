@@ -12,11 +12,11 @@ from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.model import ActiveStatus
 from ops.testing import Harness
 
-from charm import PORT, GrafanaCharm
+from src.charm import PORT, GrafanaCharm
 
 logger = logging.getLogger(__name__)
 
-ops.testing.SIMULATE_CAN_CONNECT = True
+ops.testing.SIMULATE_CAN_CONNECT = True  # type: ignore
 CONTAINER_NAME = "grafana"
 SERVICE_NAME = "grafana"
 
@@ -69,7 +69,7 @@ class TestExternalUrl(unittest.TestCase):
         service = (
             self.harness.get_container_pebble_plan(CONTAINER_NAME).services["grafana"].to_dict()
         )
-        return service["environment"]
+        return service["environment"]  # type: ignore
 
     def is_service_running(self) -> bool:
         service = self.harness.model.unit.get_container(CONTAINER_NAME).get_service(SERVICE_NAME)

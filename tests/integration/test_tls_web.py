@@ -90,25 +90,26 @@ async def test_server_cert(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_https_reachable(ops_test: OpsTest, temp_dir):
     """Make sure grafana's https endpoint is reachable using curl and ca cert."""
+    assert ops_test.model
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=1200, idle_period=30
     )
     for i in range(grafana.scale):
         unit_name = f"{grafana.name}/{i}"
         # Save CA cert locally
-        # juju show-unit grafana/0 --format yaml | yq '.grafana/0."relation-info"[0]."local-unit".data.ca' > /tmp/cacert.pem
+        # juju show-unit grafana/0 --format yaml | yq '.grafana/0."relation-info".[] | select(.endpoint=="certificates") | ."application-data".certificates' | jq -r '.[0].ca' > /tmp/cacert.pem
         cmd = [
             "sh",
             "-c",
-            f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="replicas") | ."local-unit".data.ca\'',
+            f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="certificates") | ."application-data".certificates\' | jq -r \'.[0].ca\'',
         ]
-        retcode, stdout, stderr = await ops_test.run(*cmd)
+        _, stdout, _ = await ops_test.run(*cmd)
         cert = stdout
         cert_path = temp_dir / "local.cert"
         with open(cert_path, "wt") as f:
             f.writelines(cert)
 
-        # Confirm alertmanager TLS endpoint reachable
+        # Confirm Grafana TLS endpoint reachable
         # curl --fail-with-body --capath /tmp --cacert /tmp/cacert.pem https://grafana.local:3000/-/ready
         fqdn = (
             f"{grafana.name}-{i}.{grafana.name}-endpoints.{ops_test.model_name}.svc.cluster.local"
@@ -126,7 +127,10 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
 @pytest.mark.abort_on_fail
 async def test_https_still_reachable_after_refresh(ops_test: OpsTest, grafana_charm, temp_dir):
     """Make sure grafana's https endpoint is still reachable after an upgrade."""
-    await ops_test.model.applications[grafana.name].refresh(path=grafana_charm)
+    assert ops_test.model
+    grafana_app = ops_test.model.applications[grafana.name]
+    assert grafana_app
+    await grafana_app.refresh(path=grafana_charm)
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=600, idle_period=30
     )

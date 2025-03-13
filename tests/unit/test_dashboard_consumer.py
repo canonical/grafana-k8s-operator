@@ -524,7 +524,8 @@ class TestDashboardConsumer(unittest.TestCase):
 
         return rel_ids
 
-    def test_consumer_notifies_on_new_dashboards(self):
+    @patch("charm.GrafanaCharm.restart_grafana")
+    def test_consumer_notifies_on_new_dashboards(self, restart_patcher):
         self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         self.setup_charm_relations()
@@ -541,8 +542,11 @@ class TestDashboardConsumer(unittest.TestCase):
                 }
             ],
         )
+        # assert restart is not called
+        assert restart_patcher.call_count == 0
 
-    def test_consumer_notifies_on_new_dashboards_without_dropdowns(self):
+    @patch("charm.GrafanaCharm.restart_grafana")
+    def test_consumer_notifies_on_new_dashboards_without_dropdowns(self, restart_patcher):
         self.assertEqual(len(self.harness.charm.grafana_consumer.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
         self.setup_without_dropdowns(DASHBOARD_TEMPLATE)
@@ -559,6 +563,8 @@ class TestDashboardConsumer(unittest.TestCase):
                 }
             ],
         )
+        # assert restart is not called
+        assert restart_patcher.call_count == 0
 
     def test_consumer_error_on_bad_json(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
@@ -590,9 +596,7 @@ class TestDashboardConsumer(unittest.TestCase):
                     "dashboards": json.dumps(bad_data),
                 },
             )
-            self.assertTrue(
-                any("Invalid JSON in Grafana dashboard: file:tester" in msg for msg in cm.output)
-            )
+            self.assertIn("Invalid JSON in Grafana dashboard 'file:tester'", "\n".join(cm.output))
 
     def test_consumer_templates_datasource(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)

@@ -83,9 +83,18 @@ requires:
     interface: tracing
 
 provides:
+  profiling-endpoint:
+    interface: parca_scrape
+    description: |
+      Links to grafana's pprof endpoint. Can be used to integrate with parca to 
+      profile the grafana server process.
   metrics-endpoint:
     interface: prometheus_scrape
     description: Links to grafana's own `/metrics` endpoint.
+  grafana-metadata:
+    interface: grafana_metadata
+    description: |
+      Provides metadata about the grafana instance, such as its URL and ID.
 
 peers:
   grafana:
@@ -105,21 +114,20 @@ resources:
     description: upstream image for sqlite streaming
     upstream-source: docker.io/litestream/litestream:0.4.0-beta.2
 
-bases:
-  - build-on:
-      - name: "ubuntu"
-        channel: "20.04"
-    run-on:
-      - name: "ubuntu"
-        channel: "20.04"
+platforms:
+  ubuntu@20.04:amd64:
 
 parts:
   charm:
-    # This is currently necessary because it cuts on packing times.
-    # It can be removed when we have at least multithreading on charmcraft pack.
-    charm-binary-python-packages: [cryptography, jsonschema, pydantic, maturin]
-    build-packages:
-      - git
+    charm-binary-python-packages: [cryptography, jsonschema, pydantic, pydantic-core, maturin]
+    # include rustc and cargo to compile pydantic
+    build-packages: [git, rustc, cargo]
+    build-snaps: [astral-uv]
+    override-build: |
+      uv export --frozen --no-hashes --format=requirements-txt -o requirements.txt
+      git describe --always > version
+      craftctl default
+    charm-requirements: [requirements.txt]
   static-sqlite3:
     plugin: dump
     source: .
@@ -134,8 +142,8 @@ parts:
     build-packages:
       - curl
     override-pull: |
-      curl -L -O https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_TARGET_ARCH}
-      chmod +x cos-tool-*
+      curl -L -O https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_ARCH_BUILD_FOR}
+      chmod 775 cos-tool-*
 
 actions:
   get-admin-password:

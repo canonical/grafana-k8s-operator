@@ -22,7 +22,7 @@ if "unittest.util" in __import__("sys").modules:
 RELATION_TEMPLATES_DATA = {
     "file:first": {
         "charm": "provider-tester",
-        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAKdGVzdF9maXJzdAoAAIC4BxCQe2GHAAEjC8Ib/QkftvN9AQAAAAAEWVo=",
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+Wj4ABnAGFdAD2IioaUXFVrEu9eEJyRf99sCsBItFjkmWby27QUlLkEOLcnhduY4+mCN01d1q200x5gz1Apuivvaa7GnxNV4yiVBn3QjP2OBr0vK+YIyoLqYOFFTVApImfM8MR4BO6WQAAAAAAAZwA0Rx1MbSEAAX1o+lt++R+2830BAAAAAARZWg==",
         "inject_dropdowns": True,
         "dashboard_alt_uid": "6291687b37603a46",
         "juju_topology": {
@@ -34,7 +34,7 @@ RELATION_TEMPLATES_DATA = {
     },
     "file:other": {
         "charm": "provider-tester",
-        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9zZWNvbmQKAEby/qNFFKmEAAEkDKYY2NgftvN9AQAAAAAEWVo=",
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+Wj4ABoAGJdAD2IioaUXFVrEu9eFYCcHnOClmJwFGpUF9+f4scQVLIVh0dGRthp7VR8CepwuMuYM/ENRpca4OEO01DyoSAoNKyvNYzdITZDhBzuG6/HGZIDoZL34cJn3QP2kFr4HMRCtAAAAAAAmGsLclsH64QAAX5przhUpR+2830BAAAAAARZWg==",
         "inject_dropdowns": True,
         "dashboard_alt_uid": "a44939b79a5ba1d4",
         "juju_topology": {
@@ -49,7 +49,7 @@ RELATION_TEMPLATES_DATA = {
 MANUAL_TEMPLATE_DATA = {
     "file:manual": {
         "charm": "provider-tester",
-        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+Wj4ABoAGRdAD2IioaUXFVrEu9eEzLJAYcoJaoKeAoA9UD/AQKJqydHHoSE4tSLR65Xmqkzo/Sw/nNZImWBh5mIcpaLjVmjkrOlu9xza7tlno4m4n26CTdZOjfkAc3UD48RvzIVxS7j8POwIAAAEJtP70FL2ooAAYABaQAAADxRq6axxGf7AgAAAAAEWVo=",
         "inject_dropdowns": True,
         "dashboard_alt_uid": "0b73d01f7b214e98",
         "juju_topology": {
@@ -65,7 +65,7 @@ MANUAL_TEMPLATE_DATA = {
 MANUAL_TEMPLATE_DATA_NO_DROPDOWNS = {
     "file:manual": {
         "charm": "provider-tester",
-        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQALdGVzdF9tYW51YWwKAJN3IemeHXT1AAEkDKYY2NgftvN9AQAAAAAEWVo=",
+        "content": "/Td6WFoAAATm1rRGAgAhARYAAAB0L+Wj4ABoAGRdAD2IioaUXFVrEu9eEzLJAYcoJaoKeAoA9UD/AQKJqydHHoSE4tSLR65Xmqkzo/Sw/nNZImWBh5mIcpaLjVmjkrOlu9xza7tlno4m4n26CTdZOjfkAc3UD48RvzIVxS7j8POwIAAAEJtP70FL2ooAAYABaQAAADxRq6axxGf7AgAAAAAEWVo=",
         "inject_dropdowns": False,
         "dashboard_alt_uid": "0b73d01f7b214e98",
         "juju_topology": {},

@@ -1,13 +1,12 @@
-name: Release Charm to Edge and Publish Libraries
+name: Release Charm
 
 on:
   push:
     branches:
       - main
+      - track/**
 
 jobs:
   release:
-    uses: canonical/observability/.github/workflows/charm-release.yaml@main
+    uses: canonical/observability/.github/workflows/charm-release.yaml@v1
     secrets: inherit
-    with:
-      ip-range: 10.64.140.43/30

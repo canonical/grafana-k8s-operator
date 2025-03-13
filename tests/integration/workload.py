@@ -4,6 +4,7 @@
 from typing import Optional
 
 import aiohttp
+from tenacity import retry
 from urllib3 import make_headers
 
 
@@ -54,6 +55,7 @@ class Grafana:
                 result = await response.json()
                 return result if response.status == 200 else {}
 
+    @retry
     async def health(self) -> dict:
         """A convenience method which queries the API to see whether Grafana is really ready.
 
@@ -66,7 +68,9 @@ class Grafana:
         async with aiohttp.ClientSession(headers=self.headers) as session:
             async with session.get(uri) as response:
                 result = await response.json()
-                return result if response.status == 200 else {}
+                if response.status == 200:
+                    return result
+                raise Exception("Grafana is not ready")
 
     async def datasources(self) -> list:
         """Fetch datasources.

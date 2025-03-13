@@ -39,7 +39,8 @@ class GrafanaCharm(CharmBase):
         self._stored.set_default(source_events=0)  # available data sources
         self._stored.set_default(source_delete_events=0)
 
-        self.grafana_consumer = GrafanaSourceConsumer(self, "grafana-source")
+        self.grafana_uid = "grafana-1234"
+        self.grafana_consumer = GrafanaSourceConsumer(self, grafana_uid=self.grafana_uid, relation_name="grafana-source")
         self.framework.observe(self.grafana_consumer.on.sources_changed, self.source_events)
         self.framework.observe(
             self.grafana_consumer.on.sources_to_delete_changed,
@@ -321,7 +322,8 @@ class TestSourceConsumer(unittest.TestCase):
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
         )
 
-        self.harness.charm.on["grafana-source"].relation_broken.emit(rel_id)
+        rel = self.harness.charm.framework.model.get_relation("grafana-source", rel_id)  # type: ignore
+        self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 0)
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources_to_delete), 0)
 

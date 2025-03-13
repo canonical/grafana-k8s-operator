@@ -6,7 +6,7 @@ __pycache__
 .tox
 .coverage
 venv
-tests/integration/grafana-tester/lib/charms/grafana_k8s/*
+tests/integration/*-tester/lib/*
 cos-tool*
 sqlite-static
 
@@ -45,3 +45,6 @@ override.tf.json
 .terraformrc
 terraform.rc
 .terraform.lock.hcl
+
+# Tracing stuff
+.charm_tracing_buffer.raw

@@ -9,27 +9,27 @@ with the oauth integration.
 """
 
 import logging
+from pathlib import Path
 from helpers import oci_image
 
 import os
 import pytest
 import requests
-from playwright.async_api._generated import Page, BrowserContext
+from playwright.async_api import Page, BrowserContext
 from pytest_operator.plugin import OpsTest
 
-from oauth_tools.dex import ExternalIdpManager
-from oauth_tools.oauth_test_helper import (
+from oauth_tools import (
     deploy_identity_bundle,
     get_reverse_proxy_app_url,
-    complete_external_idp_login,
+    complete_auth_code_login,
     access_application_login_page,
     click_on_sign_in_button_by_text,
     verify_page_loads,
     get_cookie_from_browser_by_name,
+    ExternalIdpService,
 )
-from oauth_tools.conftest import *  # noqa
-from oauth_tools.constants import EXTERNAL_USER_EMAIL, APPS
 
+pytest_plugins = ["oauth_tools.fixtures"]
 logger = logging.getLogger(__name__)
 
 tester_resources = {
@@ -43,14 +43,22 @@ grafana_resources = {
 }
 
 
-# @pytest.mark.skip_if_deployed
-# @pytest.mark.abort_on_fail
-@pytest.mark.skip(reason="This test file started failing on timeout and blocks our releases")
-async def test_build_and_deploy(ops_test: OpsTest, grafana_charm):
-    # Instantiating the ExternalIdpManager object deploys the external identity provider.
-    external_idp_manager = ExternalIdpManager(ops_test=ops_test)
+@pytest.mark.skip_if_deployed
+@pytest.mark.abort_on_fail
+async def test_build_and_deploy(
+    ops_test: OpsTest,
+    grafana_charm: Path,
+    hydra_app_name: str,
+    public_traefik_app_name: str,
+    self_signed_certificates_app_name: str,
+    ext_idp_service: ExternalIdpService,
+) -> None:
+    assert ops_test.model
 
-    await deploy_identity_bundle(ops_test=ops_test, external_idp_manager=external_idp_manager)
+    # Deploy identity bundle
+    await deploy_identity_bundle(
+        ops_test=ops_test, bundle_channel="0.2/edge", ext_idp_service=ext_idp_service
+    )
 
     # Deploy grafana
     await ops_test.model.deploy(
@@ -61,15 +69,15 @@ async def test_build_and_deploy(ops_test: OpsTest, grafana_charm):
     )
 
     # Integrate grafana with the identity bundle
-    await ops_test.model.integrate("grafana:oauth", APPS.HYDRA)
-    await ops_test.model.integrate("grafana:ingress", APPS.TRAEFIK_PUBLIC)
-    await ops_test.model.integrate("grafana:receive-ca-cert", APPS.SELF_SIGNED_CERTIFICATES)
+    await ops_test.model.integrate("grafana:oauth", hydra_app_name)
+    await ops_test.model.integrate("grafana:ingress", public_traefik_app_name)
+    await ops_test.model.integrate("grafana:receive-ca-cert", self_signed_certificates_app_name)
 
     await ops_test.model.wait_for_idle(
         apps=[
-            APPS.HYDRA,
-            APPS.TRAEFIK_PUBLIC,
-            APPS.SELF_SIGNED_CERTIFICATES,
+            hydra_app_name,
+            public_traefik_app_name,
+            self_signed_certificates_app_name,
             "grafana",
         ],
         status="active",
@@ -79,13 +87,15 @@ async def test_build_and_deploy(ops_test: OpsTest, grafana_charm):
     )
 
 
-@pytest.mark.skip(reason="This test file started failing on timeout and blocks our releases")
 async def test_oauth_login_with_identity_bundle(
-    ops_test: OpsTest, page: Page, context: BrowserContext
+    ops_test: OpsTest,
+    page: Page,
+    context: BrowserContext,
+    public_traefik_app_name: str,
+    user_email: str,
+    ext_idp_service: ExternalIdpService,
 ) -> None:
-    external_idp_manager = ExternalIdpManager(ops_test=ops_test)
-
-    grafana_proxy = await get_reverse_proxy_app_url(ops_test, APPS.TRAEFIK_PUBLIC, "grafana")
+    grafana_proxy = await get_reverse_proxy_app_url(ops_test, public_traefik_app_name, "grafana")
     redirect_login = os.path.join(grafana_proxy, "login")
 
     await access_application_login_page(
@@ -96,9 +106,7 @@ async def test_oauth_login_with_identity_bundle(
         page=page, text="Sign in with external identity provider"
     )
 
-    await complete_external_idp_login(
-        page=page, ops_test=ops_test, external_idp_manager=external_idp_manager
-    )
+    await complete_auth_code_login(page=page, ops_test=ops_test, ext_idp_service=ext_idp_service)
 
     redirect_url = os.path.join(grafana_proxy, "?*")
     await verify_page_loads(page=page, url=redirect_url)
@@ -114,6 +122,4 @@ async def test_oauth_login_with_identity_bundle(
         verify=False,
     )
     assert request.status_code == 200
-    assert request.json()["email"] == EXTERNAL_USER_EMAIL
-
-    external_idp_manager.remove_idp_service()
+    assert request.json()["email"] == user_email

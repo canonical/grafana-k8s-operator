@@ -162,7 +162,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 22
+LIBPATCH = 25
 
 logger = logging.getLogger(__name__)
 
@@ -432,13 +432,22 @@ class GrafanaSourceProvider(Object):
     def get_source_uids(self) -> Dict[str, Dict[str, str]]:
         """Get the datasource UID(s) assigned by the remote end(s) to this datasource.
 
-        Returns a mapping from remote application names to unit names to datasource uids.
+        Returns a mapping from remote application UIDs to unit names to datasource uids.
         """
         uids = {}
         for rel in self._charm.model.relations.get(self._relation_name, []):
             if not rel:
                 continue
-            uids[rel.app.name] = json.loads(rel.data[rel.app]["datasource_uids"])
+            app_databag = rel.data[rel.app]
+            grafana_uid = app_databag.get("grafana_uid")
+            if not grafana_uid:
+                logger.warning(
+                    "remote end is using an old grafana_datasource interface: "
+                    "`grafana_uid` field not found."
+                )
+                continue
+
+            uids[grafana_uid] = json.loads(app_databag.get("datasource_uids", "{}"))
         return uids
 
     def _set_sources_from_event(self, event: RelationJoinedEvent) -> None:
@@ -495,6 +504,7 @@ class GrafanaSourceConsumer(Object):
     def __init__(
         self,
         charm: CharmBase,
+        grafana_uid: str,
         relation_name: str = DEFAULT_RELATION_NAME,
     ) -> None:
         """A Grafana based Monitoring service consumer, i.e., the charm that uses a datasource.
@@ -502,6 +512,7 @@ class GrafanaSourceConsumer(Object):
         Args:
             charm: a :class:`CharmBase` instance that manages this
                 instance of the Grafana source service.
+            grafana_uid: an unique identifier for this grafana-k8s application.
             relation_name: string name of the relation that is provides the
                 Grafana source service. It is strongly advised not to change
                 the default, so that people deploying your charm will have a
@@ -515,6 +526,7 @@ class GrafanaSourceConsumer(Object):
         super().__init__(charm, relation_name)
         self._relation_name = relation_name
         self._charm = charm
+        self._grafana_uid = grafana_uid
         events = self._charm.on[relation_name]
 
         # We're stuck with this forever now so upgrades work, or until such point as we can
@@ -568,6 +580,7 @@ class GrafanaSourceConsumer(Object):
 
         Assumes only leader unit will call this method
         """
+        rel.data[self._charm.app]["grafana_uid"] = self._grafana_uid
         rel.data[self._charm.app]["datasource_uids"] = json.dumps(uids)
 
     def _get_source_config(self, rel: Relation):
