@@ -201,10 +201,7 @@ class GrafanaMetadataProvider:
         return self._charm_relation_mapping.get(self._relation_name, ())
 
     def publish(
-        self,
-        grafana_uid: str,
-        direct_url: Union[AnyHttpUrl, str],
-        ingress_url: Optional[Union[AnyHttpUrl, str]] = None
+        self, grafana_uid: str, direct_url: AnyHttpUrlOrStrUrl, ingress_url: Optional[AnyHttpUrlOrStrUrl] = None
     ):
         """Post grafana-metadata to all related applications.
 
