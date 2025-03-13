@@ -1,4 +1,4 @@
-# Copyright 2022 Jon Seager
+# Copyright 2025 Canonical
 # See LICENSE file for licensing details.
 """## Overview.
 
@@ -174,7 +174,8 @@ import socket
 from typing import List, Optional, Union
 
 import ops
-from charms.observability_libs.v0.juju_topology import JujuTopology
+from cosl import JujuTopology
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "dbc3d2e89cb24917b99c40e14354dd25"
@@ -184,13 +185,21 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 5
 
 
 logger = logging.getLogger(__name__)
 
 
-ALLOWED_KEYS = {"job_name", "static_configs", "scrape_interval", "scrape_timeout"}
+ALLOWED_KEYS = {
+    "job_name",
+    "static_configs",
+    "scrape_interval",
+    "scrape_timeout",
+    "scheme",
+    "profiling_config",
+    "tls_config",
+}
 DEFAULT_JOB = {"static_configs": [{"targets": ["*:80"]}]}
 DEFAULT_RELATION_NAME = "profiling-endpoint"
 RELATION_INTERFACE_NAME = "parca_scrape"
@@ -289,12 +298,12 @@ def _validate_relation_by_interface_and_direction(
 
     if expected_relation_role == ops.RelationRole.provides:
         if relation_name not in charm.meta.provides:
-            raise ops.RelationRoleMismatchError(
+            raise RelationRoleMismatchError(
                 relation_name, ops.RelationRole.provides, ops.RelationRole.requires
             )
     elif expected_relation_role == ops.RelationRole.requires:
         if relation_name not in charm.meta.requires:
-            raise ops.RelationRoleMismatchError(
+            raise RelationRoleMismatchError(
                 relation_name, ops.RelationRole.requires, ops.RelationRole.provides
             )
     else:
@@ -686,7 +695,7 @@ class ProfilingEndpointProvider(ops.Object):
 
         Args:
             charm: a `ops.CharmBase` object that manages this
-                `ProfilingEndpointProvider` object. Typically this is `self` in the instantiating
+                `ProfilingEndpointProvider` object. Typically, this is `self` in the instantiating
                 class.
             relation_name: an optional string name of the relation between `charm`
                 and the Parca charmed service. The default is "profiling-endpoint". It is strongly
@@ -723,8 +732,8 @@ class ProfilingEndpointProvider(ops.Object):
         self._jobs = [_sanitize_scrape_configuration(job) for job in jobs]
 
         events = self._charm.on[self._relation_name]
-        self.framework.observe(events.relation_joined, self._set_scrape_job_spec)
-        self.framework.observe(events.relation_changed, self._set_scrape_job_spec)
+        self.framework.observe(events.relation_joined, self._publish_all_relation_data)
+        self.framework.observe(events.relation_changed, self._publish_all_relation_data)
 
         if not refresh_event:
             if len(self._charm.meta.containers) == 1:
@@ -745,19 +754,21 @@ class ProfilingEndpointProvider(ops.Object):
         for ev in refresh_event:
             self.framework.observe(ev, self._set_unit_ip)
 
-        self.framework.observe(self._charm.on.upgrade_charm, self._set_scrape_job_spec)
+        self.framework.observe(self._charm.on.upgrade_charm, self._publish_all_relation_data)
         # If there is no leader during relation_joined we will still need to set alert rules.
-        self.framework.observe(self._charm.on.leader_elected, self._set_scrape_job_spec)
+        self.framework.observe(self._charm.on.leader_elected, self._publish_all_relation_data)
 
-    def _set_scrape_job_spec(self, event):
-        """Ensure scrape target information is made available to Parca.
+    def update_scrape_job_spec(self, jobs):
+        """Update scrape job specification.
 
-        When a profiling provider charm is related to a Parca charm, the profiling provider sets
-        specification and metadata related to its own scrape configuration. This information is set
-        using Juju application data. Each of the consumer units also sets its own host address in
-        Juju unit relation data.
+        This will override the job specs you passed to the constructor.
+        Use it if for some reason you can't rely on that being up to date.
         """
-        self._set_unit_ip(event)
+        self._jobs = [_sanitize_scrape_configuration(job) for job in jobs]
+        self._publish_all_relation_data()
+
+    def _publish_all_relation_data(self, _event=None):
+        self._set_unit_ip()
 
         if not self._charm.unit.is_leader():
             return
@@ -766,7 +777,17 @@ class ProfilingEndpointProvider(ops.Object):
             relation.data[self._charm.app]["scrape_metadata"] = json.dumps(self._scrape_metadata)
             relation.data[self._charm.app]["scrape_jobs"] = json.dumps(self._scrape_jobs)
 
-    def _set_unit_ip(self, _):
+    def set_scrape_job_spec(self):
+        """Ensure the scrape target information (as passed to this object on __init__) is published.
+
+        When a profiling provider charm is related to a Parca charm, the profiling provider sets
+        specification and metadata related to its own scrape configuration. This information is set
+        using Juju application data. Each of the consumer units also sets its own host address in
+        Juju unit relation data.
+        """
+        self._publish_all_relation_data()
+
+    def _set_unit_ip(self, _event=None):
         """Set unit host address.
 
         Each time a profiling provider charm container is restarted it updates its own host address
@@ -790,6 +811,22 @@ class ProfilingEndpointProvider(ops.Object):
             return True
         except ValueError:
             return False
+
+    @property
+    def _relations(self) -> List[Relation]:
+        """The relations currently active on this endpoint."""
+        return self._charm.model.relations[self._relation_name]
+
+    def is_ready(self, relation: Optional[Relation] = None) -> bool:
+        """Check if the relation(s) on this endpoint are ready."""
+        relations = [relation] if relation else self._relations
+
+        if not relations:
+            logger.debug(f"no relation on {self._relation_name!r}.")
+            return False
+
+        # TODO: once we have a pydantic model, we can also check for the integrity of the databags.
+        return all((relation.app and relation.data) for relation in relations)
 
     @property
     def _scrape_jobs(self) -> list:
