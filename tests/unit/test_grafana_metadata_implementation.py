@@ -51,14 +51,14 @@ def test_provider_sender_sends_data_on_relation_joined(ctx):
             state=state
     ) as manager:
         charm = manager.charm
-        manager.run()
+        state_out = manager.run()
         expected = {
             "grafana_uid": charm.unique_name,
             "direct_url": GRAFANA_URL,
         }
 
     # Assert
-    assert relation.local_app_data == expected
+    assert state_out.get_relation(relation.id).local_app_data == expected
 
 
 @patch("charm.GrafanaCharm.external_url", PropertyMock(return_value=GRAFANA_INGRESS_URL))
@@ -73,7 +73,7 @@ def test_provider_sender_sends_data_with_ingress_url_on_relation_joined(ctx):
             state=state
     ) as manager:
         charm = manager.charm
-        manager.run()
+        state_out = manager.run()
         expected = {
             "grafana_uid": charm.unique_name,
             "direct_url": GRAFANA_URL,
@@ -81,7 +81,7 @@ def test_provider_sender_sends_data_with_ingress_url_on_relation_joined(ctx):
         }
 
     # Assert
-    assert relation.local_app_data == expected
+    assert state_out.get_relation(relation.id).local_app_data == expected
 
 
 def test_provider_sends_data_on_leader_elected(ctx):
@@ -95,11 +95,11 @@ def test_provider_sends_data_on_leader_elected(ctx):
             state=state
     ) as manager:
         charm = manager.charm
-        manager.run()
+        state_out = manager.run()
         expected = {
             "grafana_uid": charm.unique_name,
             "direct_url": GRAFANA_URL,
         }
 
     # Assert
-    assert relation.local_app_data == expected
+    assert state_out.get_relation(relation.id).local_app_data == expected

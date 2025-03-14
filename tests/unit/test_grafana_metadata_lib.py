@@ -15,18 +15,18 @@ INTERFACE_NAME = "app-data-interface"
 # Note: if this is changed, the GrafanaMetadataAppData concrete classes below need to change their constructors to match
 SAMPLE_APP_DATA = GrafanaMetadataAppData(
     grafana_uid="grafana-uid",
-    ingress_url="http://www.ingress-url.com/",  # pyright: ignore
-    direct_url="http://www.internal-url.com/",  # pyright: ignore
+    ingress_url="http://www.ingress-url.com/",
+    direct_url="http://www.internal-url.com/",
 )
 SAMPLE_APP_DATA_2 = GrafanaMetadataAppData(
     grafana_uid="grafana-uid2",
-    ingress_url="http://www.ingress-url2.com/",  # pyright: ignore
-    direct_url="http://www.internal-url2.com/",  # pyright: ignore
+    ingress_url="http://www.ingress-url2.com/",
+    direct_url="http://www.internal-url2.com/",
 )
 SAMPLE_APP_DATA_NO_INGRESS_URL = GrafanaMetadataAppData(
     grafana_uid="grafana-uid",
-    ingress_url="http://www.ingress-url.com/",  # pyright: ignore
-    direct_url="http://www.internal-url.com/",  # pyright: ignore
+    ingress_url="http://www.ingress-url.com/",
+    direct_url="http://www.internal-url.com/",
 )
 
 
@@ -39,7 +39,7 @@ class GrafanaMetadataProviderCharm(CharmBase):
     def __init__(self, framework):
         super().__init__(framework)
         self.relation_provider = GrafanaMetadataProvider(
-            self.model.relations, app=self.app, relation_name=RELATION_NAME  # pyright: ignore
+            self.model.relations, app=self.app, relation_name=RELATION_NAME
         )
 
 
@@ -79,10 +79,11 @@ def test_grafana_metadata_provider_sends_data_correctly(data, grafana_metadata_p
     ) as manager:
         manager.charm.relation_provider.publish(**data.model_dump())
 
-    # Assert
-    # Convert local_app_data to TempoApiAppData for comparison
-    actual = GrafanaMetadataAppData.model_validate(dict(grafana_metadata_relation.local_app_data))
-    assert actual == data
+        # Assert
+        # Convert local_app_data to TempoApiAppData for comparison
+        grafana_metadata_relation_out = manager.ops.state.get_relation(grafana_metadata_relation.id)
+        actual = GrafanaMetadataAppData.model_validate(dict(grafana_metadata_relation_out.local_app_data))
+        assert actual == data
 
 
 @pytest.mark.parametrize(
@@ -104,7 +105,7 @@ def test_grafana_metadata_provider_sends_data_correctly(data, grafana_metadata_p
                     remote_app_data=SAMPLE_APP_DATA.model_dump(mode="json"),
                 )
             ],
-            SAMPLE_APP_DATA,  # pyright: ignore
+            SAMPLE_APP_DATA,
         ),
         # one populated relation without ingress_url
         (
