@@ -1136,15 +1136,11 @@ class GrafanaCharm(CharmBase):
                 }
             )
 
-        # self.admin_password can be None if (and only if) we are not the leader AND the leader
-        # hasn't generated the password yet (or shared it with us over secret).
-        # So, eventually we'll get it.
-        # Regardless, if we're followers, we don't need to start grafana with the right
-        # credentials at all! we will inherit them automatically from the replication primary (the leader).
-        # therefore, if we're not leader, we can set literally anything: it will soon be entirely useless.
-        # we generate a random throwaway password, which may cause unintended restarts
-        # until we obtain the actual one from the leader.
-        extra_info["GF_SECURITY_ADMIN_PASSWORD"] = self.admin_password if self.unit.is_leader() else generate_password()
+        # If we're followers, we don't need to set any credentials on the grafana process.
+        # This Grafana instance will inherit them automatically from the replication primary (the leader).
+        if self.unit.is_leader():
+            extra_info["GF_SECURITY_ADMIN_PASSWORD"] = self.admin_password
+            extra_info["GF_SECURITY_ADMIN_USER"] = cast(str, self.model.config["admin_user"])
 
         layer = Layer(
             {
@@ -1170,7 +1166,6 @@ class GrafanaCharm(CharmBase):
                             "GF_USERS_AUTO_ASSIGN_ORG": str(
                                 self.model.config["enable_auto_assign_org"]
                             ).lower(),
-                            "GF_SECURITY_ADMIN_USER": cast(str, self.model.config["admin_user"]),
                             **extra_info,
                         },
                     }
@@ -1344,7 +1339,7 @@ class GrafanaCharm(CharmBase):
             return
 
         if pw_changed:
-            if not self.unit.is_leader():
+            if self.unit.is_leader():
                 msg = "Admin password has been changed by an administrator."
             else:
                 # it takes a little bit of time for grafana to settle on the
@@ -1381,11 +1376,12 @@ class GrafanaCharm(CharmBase):
             raise
 
         # if we're leader and have already generated the secret in a previous run,
-        # or we're a follower and the leader has given us a secret already, we're done
+        # or we're a follower and the leader has given us a secret already: fetch the password
         if secret:
             logger.debug("secret found: returning key")
             return secret.get_content()[secret_content_key]
 
+        # if we're a leader: generate the password and drop it in a secret
         if self.unit.is_leader():
             logger.info("leader: generating secret")
 
@@ -1396,6 +1392,7 @@ class GrafanaCharm(CharmBase):
                 description="Secret to hold the admin password for this grafana instance."
             )
             return password
+
         # if we're a follower and the leader hasn't generated a password and put it in a secret yet,
         # then we return None as we can't know yet what the password is
         return None
