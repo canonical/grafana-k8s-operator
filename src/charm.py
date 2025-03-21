@@ -26,16 +26,43 @@ import re
 import secrets
 import socket
 import string
+import subprocess
 import time
-from cosl import JujuTopology
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, cast
+from typing import Any, Callable, Dict, cast, Optional
 from urllib.parse import urlparse
-import subprocess
 
 import yaml
+from cosl import JujuTopology
+from ops import main, ModelError
+from ops.charm import (
+    ActionEvent,
+    CharmBase,
+    ConfigChangedEvent,
+    HookEvent,
+    RelationBrokenEvent,
+    RelationChangedEvent,
+    RelationJoinedEvent,
+    UpgradeCharmEvent,
+)
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port, SecretNotFoundError
+from ops.pebble import (
+    APIError,
+    ConnectionError,
+    ChangeError,
+    ExecError,
+    Layer,
+    PathError,
+    ProtocolError,
+)
+
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateAvailableEvent,
+    CertificateRemovedEvent,
+    CertificateTransferRequires,
+)
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider
@@ -56,40 +83,11 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     adjust_resource_requirements,
 )
 from charms.observability_libs.v1.cert_handler import CertHandler
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
-    CertificateAvailableEvent,
-    CertificateRemovedEvent,
-    CertificateTransferRequires,
-)
 from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
-from ops.charm import (
-    ActionEvent,
-    CharmBase,
-    ConfigChangedEvent,
-    HookEvent,
-    RelationBrokenEvent,
-    RelationChangedEvent,
-    RelationJoinedEvent,
-    UpgradeCharmEvent,
-)
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
-from ops.framework import StoredState
-from ops import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port
-
-from ops.pebble import (
-    APIError,
-    ConnectionError,
-    ChangeError,
-    ExecError,
-    Layer,
-    PathError,
-    ProtocolError,
-)
-
+from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from grafana_client import Grafana, GrafanaCommError
 
 logger = logging.getLogger()
@@ -149,8 +147,6 @@ class GrafanaCharm(CharmBase):
     https://grafana.com/docs/grafana/latest/administration/provisioning/
     """
 
-    _stored = StoredState()
-
     def __init__(self, *args):
         super().__init__(*args)
 
@@ -162,7 +158,6 @@ class GrafanaCharm(CharmBase):
         }
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
-        self._stored.set_default(admin_password="")
         self._topology = JujuTopology.from_charm(self)
 
         # -- cert_handler
@@ -424,8 +419,8 @@ class GrafanaCharm(CharmBase):
         leader = self.unit.is_leader()
 
         if (
-            self.containers["replication"].get_plan().services
-            != self._build_replication(leader).services
+                self.containers["replication"].get_plan().services
+                != self._build_replication(leader).services
         ):
             restart = True
 
@@ -959,10 +954,10 @@ class GrafanaCharm(CharmBase):
         # Verify that the certificate and key are correctly configured
         workload = self.containers["workload"]
         return (
-            self.cert_handler.server_cert
-            and self.cert_handler.private_key
-            and workload.exists(GRAFANA_CRT_PATH)
-            and workload.exists(GRAFANA_KEY_PATH)
+                self.cert_handler.server_cert
+                and self.cert_handler.private_key
+                and workload.exists(GRAFANA_CRT_PATH)
+                and workload.exists(GRAFANA_KEY_PATH)
         )
 
     def restart_grafana(self) -> None:
@@ -1126,7 +1121,7 @@ class GrafanaCharm(CharmBase):
             extra_info.update(
                 {
                     "OTEL_RESOURCE_ATTRIBUTES": f"juju_application={topology.application},juju_model={topology.model}"
-                    + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
+                                                + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
                 }
             )
 
@@ -1140,6 +1135,16 @@ class GrafanaCharm(CharmBase):
                     "GF_DIAGNOSTICS_PROFILING_PORT": str(PROFILING_PORT),
                 }
             )
+
+        # self.admin_password can be None if (and only if) we are not the leader AND the leader
+        # hasn't generated the password yet (or shared it with us over secret).
+        # So, eventually we'll get it.
+        # Regardless, if we're followers, we don't need to start grafana with the right
+        # credentials at all! we will inherit them automatically from the replication primary (the leader).
+        # therefore, if we're not leader, we can set literally anything: it will soon be entirely useless.
+        # we generate a random throwaway password, which may cause unintended restarts
+        # until we obtain the actual one from the leader.
+        extra_info["GF_SECURITY_ADMIN_PASSWORD"] = self.admin_password if self.unit.is_leader() else generate_password()
 
         layer = Layer(
             {
@@ -1159,14 +1164,13 @@ class GrafanaCharm(CharmBase):
                             "GF_SECURITY_ALLOW_EMBEDDING": str(
                                 self.model.config["allow_embedding"]
                             ).lower(),
-                            "GF_SECURITY_ADMIN_USER": cast(str, self.model.config["admin_user"]),
-                            "GF_SECURITY_ADMIN_PASSWORD": self._get_admin_password(),
                             "GF_AUTH_ANONYMOUS_ENABLED": str(
                                 self.model.config["allow_anonymous_access"]
                             ).lower(),
                             "GF_USERS_AUTO_ASSIGN_ORG": str(
                                 self.model.config["enable_auto_assign_org"]
                             ).lower(),
+                            "GF_SECURITY_ADMIN_USER": cast(str, self.model.config["admin_user"]),
                             **extra_info,
                         },
                     }
@@ -1318,62 +1322,86 @@ class GrafanaCharm(CharmBase):
         return datasources_string
 
     def _on_get_admin_password(self, event: ActionEvent) -> None:
-        """Returns the grafana url and password for the admin user as an action response."""
+        """Returns the grafana url and password for the admin user as an action response.
+
+        This operation is leader-only.
+        """
+        admin_password = self.admin_password
+        if not self.unit.is_leader() and admin_password is None:
+            event.fail("Still waiting for the leader to generate an admin password...")
+            return
+
         if not self.grafana_service.is_ready:
             event.fail("Grafana is not reachable yet. Please try again in a few minutes")
             return
 
         try:
             pw_changed = self.grafana_service.password_has_been_changed(
-                cast(str, self.model.config["admin_user"]), self._get_admin_password()
+                cast(str, self.model.config["admin_user"]), admin_password
             )
         except GrafanaCommError as e:
             event.fail(f"Grafana is not reachable yet: {e}. Please try again in a few minutes.")
             return
 
         if pw_changed:
+            if not self.unit.is_leader():
+                msg = "Admin password has been changed by an administrator."
+            else:
+                # it takes a little bit of time for grafana to settle on the
+                # authentication data provided by the leader unit
+                msg = ("Admin password may have been changed by an administrator. "
+                       "To be sure, run this action on the leader unit.")
+
             event.set_results(
                 {
                     "url": self.external_url,
-                    "admin-password": "Admin password has been changed by an administrator",
+                    "admin-password": msg,
                 }
             )
         else:
             event.set_results(
-                {"url": self.external_url, "admin-password": self._get_admin_password()}
+                {"url": self.external_url, "admin-password": admin_password}
             )
 
-    def _generate_admin_password(self) -> None:
-        """Generate the admin password if it's not already in stored state, and store it there."""
-        if not self._stored.admin_password:  # type: ignore[truthy-function]
-            logger.debug("Grafana admin password is not in stored state, so generating a new one.")
-            self._stored.admin_password = self._generate_password()
+    @property
+    def admin_password(self) -> Optional[str]:
+        """The admin password."""
+        # check if secret exists already
+        secret = None
+        secret_label = "admin-password"
+        secret_content_key = "password"
 
-    def _get_admin_password(self) -> str:
-        """Returns the password for the admin user.
+        try:
+            secret = self.model.get_secret(label=secret_label)
+        except SecretNotFoundError:
+            logger.info("admin-password secret does not exist yet")
+        except ModelError:
+            logger.exception("error retrieving admin-password secret")
+        except:
+            raise
 
-        Assuming we can_connect, otherwise cannot produce output. Caller should guard.
-        """
-        ctr = self.containers["workload"]
-        svc = ctr.get_plan().services.get(self.name)
-        if svc:
-            # The grafana service has already started, which means the GF_SECURITY_ADMIN_PASSWORD
-            # envvar is the authoritative source for the admin password (just in case something
-            # went wrong with stored state; we need a single source of truth at all times).
-            if pw := svc.environment.get("GF_SECURITY_ADMIN_PASSWORD"):
-                self._stored.admin_password = pw
-            else:
-                # For some reason the password is blank. Generate one if it's not in stored state.
-                self._generate_admin_password()
-        else:
-            # We don't have a service for grafana in the pebble plan, which means this function was
-            # called by the layer builder. Generate password if it's not in stored state.
-            self._generate_admin_password()
+        # if we're leader and have already generated the secret in a previous run,
+        # or we're a follower and the leader has given us a secret already, we're done
+        if secret:
+            logger.debug("secret found: returning key")
+            return secret.get_content()[secret_content_key]
 
-        return self._stored.admin_password  # type: ignore
+        if self.unit.is_leader():
+            logger.info("leader: generating secret")
+
+            password = generate_password()
+            self.app.add_secret(
+                {secret_content_key: password},
+                label=secret_label,
+                description="Secret to hold the admin password for this grafana instance."
+            )
+            return password
+        # if we're a follower and the leader hasn't generated a password and put it in a secret yet,
+        # then we return None as we can't know yet what the password is
+        return None
 
     def _poll_container(
-        self, func: Callable[[], bool], timeout: float = 2.0, delay: float = 0.1
+            self, func: Callable[[], bool], timeout: float = 2.0, delay: float = 0.1
     ) -> bool:
         """Try to poll the container to work around Container.is_connect() being point-in-time.
 
@@ -1395,13 +1423,6 @@ class GrafanaCharm(CharmBase):
                 logger.debug("Failed to poll the container due to a Pebble error")
 
         return False
-
-    def _generate_password(self) -> str:
-        """Generates a random 12 character password."""
-        # Really limited by what can be passed into shell commands, since this all goes
-        # through subprocess. So much for complex password
-        chars = string.ascii_letters + string.digits
-        return "".join(secrets.choice(chars) for _ in range(12))
 
     def _resource_reqs_from_config(self) -> ResourceRequirements:
         limits = {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}
@@ -1680,6 +1701,14 @@ class GrafanaCharm(CharmBase):
             ingress_url=external_url,  # pyright: ignore
             direct_url=internal_url,  # pyright: ignore
         )
+
+
+def generate_password() -> str:
+    """Generates a random 12 character password."""
+    # Really limited by what can be passed into shell commands, since this all goes
+    # through subprocess. So much for complex password
+    chars = string.ascii_letters + string.digits
+    return "".join(secrets.choice(chars) for _ in range(12))
 
 
 if __name__ == "__main__":
