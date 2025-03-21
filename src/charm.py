@@ -1139,7 +1139,8 @@ class GrafanaCharm(CharmBase):
         # If we're followers, we don't need to set any credentials on the grafana process.
         # This Grafana instance will inherit them automatically from the replication primary (the leader).
         if self.unit.is_leader():
-            extra_info["GF_SECURITY_ADMIN_PASSWORD"] = self.admin_password
+            # self.admin_password is guaranteed str if this unit is leader
+            extra_info["GF_SECURITY_ADMIN_PASSWORD"] = cast(str, self.admin_password)
             extra_info["GF_SECURITY_ADMIN_USER"] = cast(str, self.model.config["admin_user"])
 
         layer = Layer(
@@ -1325,6 +1326,11 @@ class GrafanaCharm(CharmBase):
         if not self.unit.is_leader() and admin_password is None:
             event.fail("Still waiting for the leader to generate an admin password...")
             return
+
+        if not admin_password:
+            # if we got here this means this unit is leader; so we must have generated a password.
+            # this should never happen. No Way Jose.
+            raise RuntimeError()
 
         if not self.grafana_service.is_ready:
             event.fail("Grafana is not reachable yet. Please try again in a few minutes")
