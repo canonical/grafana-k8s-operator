@@ -78,10 +78,13 @@ def test_grafana_metadata_provider_sends_data_correctly(data, grafana_metadata_p
         grafana_metadata_provider_context.on.update_status(), state=state
     ) as manager:
         manager.charm.relation_provider.publish(**data.model_dump())
+        state_out = manager.run()
 
     # Assert
     # Convert local_app_data to TempoApiAppData for comparison
-    actual = GrafanaMetadataAppData.model_validate(dict(grafana_metadata_relation.local_app_data))
+    actual = GrafanaMetadataAppData.model_validate(
+        dict(state_out.get_relation(grafana_metadata_relation.id).local_app_data)
+    )
     assert actual == data
 
 
