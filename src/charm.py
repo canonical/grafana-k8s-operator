@@ -23,7 +23,6 @@ import json
 import logging
 import os
 import re
-import secrets
 import socket
 import string
 import subprocess
@@ -35,7 +34,7 @@ from urllib.parse import urlparse
 
 import yaml
 from cosl import JujuTopology
-from ops import main, ModelError
+from ops import main
 from ops.charm import (
     ActionEvent,
     CharmBase,
@@ -46,7 +45,7 @@ from ops.charm import (
     RelationJoinedEvent,
     UpgradeCharmEvent,
 )
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port, SecretNotFoundError
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Port
 from ops.pebble import (
     APIError,
     ConnectionError,
@@ -56,6 +55,7 @@ from ops.pebble import (
     PathError,
     ProtocolError,
 )
+from secret_storage import SecretStorage
 
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -89,6 +89,7 @@ from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from grafana_client import Grafana, GrafanaCommError
+from secret_storage import generate_password
 
 logger = logging.getLogger()
 
@@ -159,6 +160,8 @@ class GrafanaCharm(CharmBase):
         self._grafana_config_ini_hash = None
         self._grafana_datasources_hash = None
         self._topology = JujuTopology.from_charm(self)
+        self._secret_storage = SecretStorage(self, "admin-password",
+                                             default=lambda: {"password": generate_password()})
 
         # -- cert_handler
         self.cert_handler = CertHandler(
@@ -1317,7 +1320,6 @@ class GrafanaCharm(CharmBase):
         datasources_string = yaml.dump(datasources_dict)
         return datasources_string
 
-
     class GetAdminPWDFailures:
         waiting_for_leader = "Still waiting for the leader to generate an admin password..."
         not_reachable = 'Grafana is not reachable yet. Please try again in a few minutes'
@@ -1328,6 +1330,7 @@ class GrafanaCharm(CharmBase):
     def _on_get_admin_password(self, event: ActionEvent) -> None:
         """Returns the grafana url and password for the admin user as an action response."""
         admin_password = self.admin_password
+
         if not self.unit.is_leader() and admin_password is None:
             return event.fail(self.GetAdminPWDFailures.waiting_for_leader)
 
@@ -1371,41 +1374,10 @@ class GrafanaCharm(CharmBase):
     @property
     def admin_password(self) -> Optional[str]:
         """The admin password."""
-        # check if secret exists already
-        secret = None
-        secret_label = "admin-password"
-        secret_content_key = "password"
-
-        try:
-            secret = self.model.get_secret(label=secret_label)
-        except SecretNotFoundError:
-            logger.info("admin-password secret does not exist yet")
-        except ModelError:
-            logger.exception("error retrieving admin-password secret")
-        except:
-            raise
-
-        # if we're leader and have already generated the secret in a previous run,
-        # or we're a follower and the leader has given us a secret already: fetch the password
-        if secret:
-            logger.debug("secret found: returning key")
-            return secret.get_content()[secret_content_key]
-
-        # if we're a leader: generate the password and drop it in a secret
-        if self.unit.is_leader():
-            logger.info("leader: generating secret")
-
-            password = generate_password()
-            self.app.add_secret(
-                {secret_content_key: password},
-                label=secret_label,
-                description="Secret to hold the admin password for this grafana instance."
-            )
-            return password
-
-        # if we're a follower and the leader hasn't generated a password and put it in a secret yet,
-        # then we return None as we can't know yet what the password is
-        return None
+        contents = self._secret_storage.contents
+        if not contents:
+            return None
+        return contents.get('password')
 
     def _poll_container(
             self, func: Callable[[], bool], timeout: float = 2.0, delay: float = 0.1
@@ -1708,14 +1680,6 @@ class GrafanaCharm(CharmBase):
             ingress_url=external_url,  # pyright: ignore
             direct_url=internal_url,  # pyright: ignore
         )
-
-
-def generate_password() -> str:
-    """Generates a random 12 character password."""
-    # Really limited by what can be passed into shell commands, since this all goes
-    # through subprocess. So much for complex password
-    chars = string.ascii_letters + string.digits
-    return "".join(secrets.choice(chars) for _ in range(12))
 
 
 if __name__ == "__main__":
