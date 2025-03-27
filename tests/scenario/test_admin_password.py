@@ -5,7 +5,7 @@ from unittest.mock import patch, PropertyMock
 import pytest
 from ops import testing
 
-from charm import GrafanaCharm
+from charm import GrafanaCharm, generate_password
 
 
 @contextmanager
@@ -45,8 +45,12 @@ def ctx():
     return testing.Context(GrafanaCharm)
 
 
-def check_valid_password(s: str):
-    assert re.match(r"[A-Za-z0-9]{12}", s)
+def test_generate_password():
+    # run this test some 1000 times since generate_password is stochastic
+    for n in range(1000):
+        pwd = generate_password()
+        assert len(pwd) == 12
+        assert re.match(r"[A-Za-z0-9]{12}", pwd)
 
 
 def test_can_get_password(ctx):
@@ -55,14 +59,14 @@ def test_can_get_password(ctx):
 
     # WHEN we receive any hook
     with ctx(ctx.on.update_status(), state) as mgr:
-        # THEN the .admin_password attribute returns a valid password
+        # THEN the .admin_password attribute returns something
         pwd = mgr.charm.admin_password
-        check_valid_password(pwd)
         state_out = mgr.run()
 
     # AND THEN the output state contains a secret with the expected contents
     assert len(state_out.secrets) == 1
     secret = list(state_out.secrets)[0]
+    assert pwd, "password is empty"
     assert secret.latest_content['password'] == pwd
 
 
@@ -78,7 +82,7 @@ def test_action_happy_path(ctx, leader):
         with password_changed(False):
             ctx.run(ctx.on.action('get-admin-password'), state)
 
-    # THEN we obtain the expected result
+    # THEN the secret's password matches the pre-existing password
     assert ctx.action_results["admin-password"] == pwd
 
 
@@ -93,8 +97,7 @@ def test_action_no_secret_yet_follower(ctx):
                 ctx.run(ctx.on.action('get-admin-password'), state)
 
     # THEN the action fails with this message
-    assert failure.value.message=='Still waiting for the leader to generate an admin password...'
-
+    assert failure.value.message == GrafanaCharm.GetAdminPWDFailures.waiting_for_leader
 
 
 @pytest.mark.parametrize("leader", (True, False))
@@ -111,8 +114,7 @@ def test_action_grafana_down(ctx, leader):
             ctx.run(ctx.on.action('get-admin-password'), state)
 
     # THEN the action fails with this message
-    assert failure.value.message=='Grafana is not reachable yet. Please try again in a few minutes'
-
+    assert failure.value.message == GrafanaCharm.GetAdminPWDFailures.not_reachable
 
 
 @pytest.mark.parametrize("leader", (True, False))
@@ -122,6 +124,7 @@ def test_action_password_changed(ctx, leader):
     state = testing.State(leader=leader, secrets={
         testing.Secret(tracked_content={"password": pwd}, label="admin-password")})
 
+    # AND GIVEN the admin password was changed behind the scenes
     # WHEN we run the get-admin-password action
     with password_changed(True):
         with grafana_ready(True):
@@ -129,9 +132,6 @@ def test_action_password_changed(ctx, leader):
 
     # THEN we obtain an error message
     if leader:
-        assert ctx.action_results["admin-password"] == "Admin password has been changed by an administrator."
+        assert ctx.action_results["admin-password"] == GrafanaCharm.GetAdminPWDFailures.changed_by_admin
     else:
-        assert ctx.action_results["admin-password"] == (
-            "Admin password may have been changed by an administrator. "
-            "To be sure, run this action on the leader unit."
-        )
+        assert ctx.action_results["admin-password"] == GrafanaCharm.GetAdminPWDFailures.perhaps_changed_by_admin

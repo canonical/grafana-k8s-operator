@@ -1317,15 +1317,19 @@ class GrafanaCharm(CharmBase):
         datasources_string = yaml.dump(datasources_dict)
         return datasources_string
 
-    def _on_get_admin_password(self, event: ActionEvent) -> None:
-        """Returns the grafana url and password for the admin user as an action response.
 
-        This operation is leader-only.
-        """
+    class GetAdminPWDFailures:
+        waiting_for_leader = "Still waiting for the leader to generate an admin password..."
+        not_reachable = 'Grafana is not reachable yet. Please try again in a few minutes'
+        perhaps_changed_by_admin = ("Admin password may have been changed by an administrator. "
+                                    "To be sure, run this action on the leader unit.")
+        changed_by_admin = "Admin password has been changed by an administrator."
+
+    def _on_get_admin_password(self, event: ActionEvent) -> None:
+        """Returns the grafana url and password for the admin user as an action response."""
         admin_password = self.admin_password
         if not self.unit.is_leader() and admin_password is None:
-            event.fail("Still waiting for the leader to generate an admin password...")
-            return
+            return event.fail(self.GetAdminPWDFailures.waiting_for_leader)
 
         if not admin_password:
             # if we got here this means this unit is leader; so we must have generated a password.
@@ -1333,25 +1337,25 @@ class GrafanaCharm(CharmBase):
             raise RuntimeError()
 
         if not self.grafana_service.is_ready:
-            event.fail("Grafana is not reachable yet. Please try again in a few minutes")
-            return
+            return event.fail(self.GetAdminPWDFailures.not_reachable)
 
         try:
             pw_changed = self.grafana_service.password_has_been_changed(
                 cast(str, self.model.config["admin_user"]), admin_password
             )
-        except GrafanaCommError as e:
-            event.fail(f"Grafana is not reachable yet: {e}. Please try again in a few minutes.")
-            return
+        except GrafanaCommError:
+            logger.exception("failed getting admin password from service")
+            event.log("Unexpected exception encountered while getting admin password from service: "
+                      "see logs for more.")
+            return event.fail(self.GetAdminPWDFailures.not_reachable)
 
         if pw_changed:
             if self.unit.is_leader():
-                msg = "Admin password has been changed by an administrator."
+                msg = self.GetAdminPWDFailures.changed_by_admin
             else:
                 # it takes a little bit of time for grafana to settle on the
                 # authentication data provided by the leader unit
-                msg = ("Admin password may have been changed by an administrator. "
-                       "To be sure, run this action on the leader unit.")
+                msg = self.GetAdminPWDFailures.perhaps_changed_by_admin
 
             event.set_results(
                 {
