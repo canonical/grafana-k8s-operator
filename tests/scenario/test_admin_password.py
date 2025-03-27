@@ -107,8 +107,8 @@ def test_action_grafana_down(ctx, leader):
     state = testing.State(leader=leader, secrets={
         testing.Secret(tracked_content={"password": pwd}, label="admin-password")})
 
+    # AND GIVEN grafana is not ready
     # WHEN we run the get-admin-password action
-    # BUT grafana is not ready
     with grafana_ready(False):
         with pytest.raises(testing.ActionFailed) as failure:
             ctx.run(ctx.on.action('get-admin-password'), state)
