@@ -51,6 +51,7 @@ class SecretStorage(ops.Object):
 
     @property
     def contents(self) -> Optional[Dict[str, str]]:
+        """Get the raw secret contents at its latest revision."""
         # check if secret exists already
         secret = None
         secret_label = self._label
