@@ -1321,13 +1321,14 @@ class GrafanaCharm(CharmBase):
         return datasources_string
 
     class GetAdminPWDFailures:
+        """Possible failure messages for get-admin-password failures."""
         waiting_for_leader = "Still waiting for the leader to generate an admin password..."
         not_reachable = 'Grafana is not reachable yet. Please try again in a few minutes'
         perhaps_changed_by_admin = ("Admin password may have been changed by an administrator. "
                                     "To be sure, run this action on the leader unit.")
         changed_by_admin = "Admin password has been changed by an administrator."
 
-    def _on_get_admin_password(self, event: ActionEvent) -> None:
+    def _on_get_admin_password(self, event: ActionEvent):
         """Returns the grafana url and password for the admin user as an action response."""
         admin_password = self.admin_password
 
@@ -1370,6 +1371,7 @@ class GrafanaCharm(CharmBase):
             event.set_results(
                 {"url": self.external_url, "admin-password": admin_password}
             )
+        return None
 
     @property
     def admin_password(self) -> Optional[str]:
