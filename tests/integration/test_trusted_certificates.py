@@ -31,7 +31,7 @@ async def test_deploy(ops_test, grafana_charm):
     await ops_test.model.deploy(
         "self-signed-certificates",
         application_name="ca",
-        channel="edge",
+        channel="latest/edge",
         trust=True,
     )
 
