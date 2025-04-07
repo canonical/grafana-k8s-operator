@@ -35,7 +35,7 @@ async def test_deploy(ops_test, grafana_charm):
         ops_test.model.deploy(
             "self-signed-certificates",
             application_name="ca",
-            channel="edge",
+            channel="latest/edge",
         ),
     )
     await ops_test.model.add_relation(f"{grafana.name}:certificates", "ca")
