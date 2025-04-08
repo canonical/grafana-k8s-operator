@@ -45,6 +45,7 @@ dev = [
   "ops[testing]",
   "pytest-asyncio",
   "pytest-playwright",
+  "pytest-interface-tester",
   "aiohttp",
   "asyncstdlib",
   "sh",
