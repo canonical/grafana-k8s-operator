@@ -1246,7 +1246,7 @@ class GrafanaDashboardProvider(Object):
 
     def reload_dashboards(self, inject_dropdowns: bool = True) -> None:
         """Reloads dashboards and updates all relations."""
-        self._update_all_dashboards_from_dir(inject_dropdowns)
+        self._update_all_dashboards_from_dir(inject_dropdowns=inject_dropdowns)
 
     def _update_all_dashboards_from_dir(
         self, _: Optional[HookEvent] = None, inject_dropdowns: bool = True
