@@ -1244,9 +1244,9 @@ class GrafanaDashboardProvider(Object):
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
                 self._upset_dashboards_on_relation(dashboard_relation)
 
-    def reload_dashboards(self) -> None:
+    def reload_dashboards(self, inject_dropdowns: bool = True) -> None:
         """Reloads dashboards and updates all relations."""
-        self._update_all_dashboards_from_dir()
+        self._update_all_dashboards_from_dir(inject_dropdowns)
 
     def _update_all_dashboards_from_dir(
         self, _: Optional[HookEvent] = None, inject_dropdowns: bool = True
