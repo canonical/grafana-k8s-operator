@@ -28,7 +28,7 @@ dev = [
   "ruff",
   "codespell",
   # Static
-  "pyright",
+  "pyright<1.1.399", # 1.1.399 vendors typeshed that dropped Python 3.8 support
   # Unit
   "pytest",
   "coverage[toml]",
@@ -45,7 +45,7 @@ dev = [
   "ops[testing]",
   "pytest-asyncio",
   "pytest-playwright",
-  "aiohttp",
+  "aiohttp!=3.11.13",  # Yanked
   "asyncstdlib",
   "sh",
   "tenacity",
