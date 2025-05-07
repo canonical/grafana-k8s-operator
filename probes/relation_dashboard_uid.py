@@ -6,8 +6,6 @@ import re
 
 def show_unit(juju_show_units):
     for show_unit in juju_show_units.values():
-        if show_unit is None:
-            continue
         unit_name = next(iter(show_unit))
         # 1. Extract the relation-info
         relation_info = show_unit[unit_name]["relation-info"]
