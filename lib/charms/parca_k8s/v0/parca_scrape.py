@@ -171,7 +171,7 @@ import ipaddress
 import json
 import logging
 import socket
-from typing import List, Optional, Union
+from typing import List, Optional, Union, cast
 
 import ops
 from cosl import JujuTopology
@@ -185,7 +185,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 
 logger = logging.getLogger(__name__)
@@ -290,7 +290,7 @@ def _validate_relation_by_interface_and_direction(
 
     relation = charm.meta.relations[relation_name]
 
-    actual_relation_interface = relation.interface_name
+    actual_relation_interface = cast(str, relation.interface_name)
     if actual_relation_interface != expected_relation_interface:
         raise RelationInterfaceMismatchError(
             relation_name, expected_relation_interface, actual_relation_interface
@@ -366,7 +366,7 @@ class MonitoringEvents(ops.ObjectEvents):
 class ProfilingEndpointConsumer(ops.Object):
     """Parca based monitoring service."""
 
-    on = MonitoringEvents()
+    on = MonitoringEvents()  # type: ignore
 
     def __init__(self, charm: ops.CharmBase, relation_name: str = DEFAULT_RELATION_NAME):
         """Construct a Parca based monitoring service.
