@@ -41,25 +41,33 @@ storage:
 requires:
   grafana-source:
     interface: grafana_datasource
+    optional: true
   grafana-dashboard:
     interface: grafana_dashboard
+    optional: true
   grafana-auth:
     interface: grafana_auth
+    optional: true
   database:
     interface: db
     limit: 1
+    optional: true
   catalogue:
     interface: catalogue
+    optional: true
   ingress:
     interface: traefik_route
     limit: 1
+    optional: true
     description: Grafana needs "ingress per leader" (not per app and not per unit).
   certificates:
     interface: tls-certificates
     limit: 1
+    optional: true
     description: Certificate and key files for Grafana to use with TLS.
   receive-ca-cert:
     interface: certificate_transfer
+    optional: true
     description: |
       Receive a CA cert for grafana to trust.
       This relation can be used with a local CA to obtain the CA cert that was used to sign proxied
@@ -68,6 +76,7 @@ requires:
   oauth:
     interface: oauth
     limit: 1
+    optional: true
     description: |
       Receive oauth server's info and a set of client credentials.
       This relation can be used to integrate grafana with an oAuth2/OIDC Provider.
@@ -75,24 +84,29 @@ requires:
     description: |
       Enables sending charm traces to a distributed tracing backend such as Tempo.
     limit: 1
+    optional: true
     interface: tracing
   workload-tracing:
     description: |
       Enables sending workload traces to a distributed tracing backend such as Tempo.
     limit: 1
+    optional: true
     interface: tracing
 
 provides:
   profiling-endpoint:
     interface: parca_scrape
+    optional: true
     description: |
       Links to grafana's pprof endpoint. Can be used to integrate with parca to 
       profile the grafana server process.
   metrics-endpoint:
     interface: prometheus_scrape
+    optional: true
     description: Links to grafana's own `/metrics` endpoint.
   grafana-metadata:
     interface: grafana_metadata
+    optional: true
     description: |
       Provides metadata about the grafana instance, such as its URL and ID.
 
