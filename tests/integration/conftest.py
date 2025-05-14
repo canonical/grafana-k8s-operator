@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
+import juju.utils
 import pytest
 from playwright.async_api import Playwright as AsyncPlaywright, BrowserType
 from pytest_operator.plugin import OpsTest
@@ -51,6 +52,15 @@ def timed_memoizer(func):
         return ret
 
     return wrapper
+
+
+@pytest.fixture(scope="module", autouse=True)
+def patch_pylibjuju_series_2404():
+    juju.utils.ALL_SERIES_VERSIONS["noble"] = "24.04"
+
+    yield
+
+    del juju.utils.ALL_SERIES_VERSIONS["noble"]
 
 
 @pytest.fixture(scope="module", autouse=True)
