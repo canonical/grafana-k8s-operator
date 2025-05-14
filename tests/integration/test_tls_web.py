@@ -6,7 +6,7 @@ import asyncio
 import logging
 from pathlib import Path
 from types import SimpleNamespace
-
+import sh
 import pytest
 import yaml
 from helpers import curl, oci_image, unit_address
@@ -24,20 +24,8 @@ grafana_resources = {
 
 @pytest.mark.abort_on_fail
 async def test_deploy(ops_test, grafana_charm):
-    await asyncio.gather(
-        ops_test.model.deploy(
-            grafana_charm,
-            resources=grafana_resources,
-            application_name=grafana.name,
-            num_units=2,
-            trust=True,
-        ),
-        ops_test.model.deploy(
-            "self-signed-certificates",
-            application_name="ca",
-            channel="latest/edge",
-        ),
-    )
+    sh.juju.deploy(grafana_charm, grafana.name, model=ops_test.model.name, trust=True, resource=[f"{k}={v}" for k, v in grafana_resources.items()], num_units=2)
+    sh.juju.deploy("self-signed-certificates", "ca", model=ops_test.model.name, channel="latest/edge")
     await ops_test.model.add_relation(f"{grafana.name}:certificates", "ca")
 
     await asyncio.gather(
@@ -127,10 +115,9 @@ async def test_https_reachable(ops_test: OpsTest, temp_dir):
 @pytest.mark.abort_on_fail
 async def test_https_still_reachable_after_refresh(ops_test: OpsTest, grafana_charm, temp_dir):
     """Make sure grafana's https endpoint is still reachable after an upgrade."""
-    assert ops_test.model
-    grafana_app = ops_test.model.applications[grafana.name]
-    assert grafana_app
-    await grafana_app.refresh(path=grafana_charm)
+    sh.juju.refresh(grafana.name, model=ops_test.model.name, path=grafana_charm,
+                    resource=[f"{k}={v}" for k, v in grafana_resources.items()])
+
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=600, idle_period=30
     )

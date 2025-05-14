@@ -4,7 +4,7 @@
 
 import logging
 from pathlib import Path
-
+import sh
 import pytest
 import yaml
 from helpers import oci_image
