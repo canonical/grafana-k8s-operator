@@ -7,6 +7,7 @@ REQUIRED_DATABASE_FIELDS = {
     "user",
     "password",
 }
+PEER_RELATION = "grafana"
 DATABASE_RELATION = "database"
 DATABASE_PATH = "/var/lib/grafana/grafana.db"
 # https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/generic-oauth

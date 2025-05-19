@@ -66,9 +66,9 @@ from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from grafana import Grafana, GrafanaCommError
 from secret_storage import generate_password
 from litestream import Litestream
-from peer import Peer, PEER_RELATION
+from peer import Peer
 from models import DatasourceConfig, PebbleEnvConfig, TLSConfig, TracingConfig
-from constants import WORKLOAD_PORT, OAUTH_SCOPES, CA_CERT_PATH, GRAFANA_WORKLOAD, DATABASE_RELATION, PROFILING_PORT, OAUTH_GRANT_TYPES, REQUIRED_DATABASE_FIELDS, VALID_AUTHENTICATION_MODES
+from constants import PEER_RELATION, WORKLOAD_PORT, OAUTH_SCOPES, CA_CERT_PATH, GRAFANA_WORKLOAD, DATABASE_RELATION, PROFILING_PORT, OAUTH_GRANT_TYPES, REQUIRED_DATABASE_FIELDS, VALID_AUTHENTICATION_MODES
 
 logger = logging.getLogger()
 
@@ -100,9 +100,9 @@ class GrafanaCharm(CharmBase):
         # -- initialize states --
         self._topology = JujuTopology.from_charm(self)
         self._fqdn = socket.getfqdn()
+        self.peers = Peer(app=self.app, peers=self.model.get_relation(PEER_RELATION))
         self._secret_storage = SecretStorage(self, "admin-password",
                                              default=lambda: {"password": generate_password()})
-        self.peers = Peer(app=self.app, peers=self.model.get_relation(PEER_RELATION))
 
 
         # -- cert_handler

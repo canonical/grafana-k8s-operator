@@ -5,9 +5,6 @@ import json
 from typing import Any, Optional
 from ops import Application, Relation
 
-
-PEER_RELATION = "grafana"
-
 class Peer:
     """A helper class to manage peer relation data."""
 
