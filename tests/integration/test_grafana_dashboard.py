@@ -44,7 +44,6 @@ async def test_deploy(ops_test, grafana_charm, grafana_tester_charm):
     await ops_test.model.wait_for_idle(
         apps=[grafana_app_name],
         status="active",
-        wait_for_at_least_units=1,
         timeout=300,
     )
     await ops_test.model.wait_for_idle(
