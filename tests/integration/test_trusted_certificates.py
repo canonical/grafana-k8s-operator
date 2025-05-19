@@ -57,7 +57,6 @@ async def test_certs_created(ops_test: OpsTest):
         f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."relation-id"\'',
     ]
     retcode, stdout, stderr = await ops_test.run(*cmd)
-    relation_id = stdout.rstrip()
 
     # Get relation cert
     cmd = [
