@@ -63,7 +63,7 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
-from grafana import Grafana, GrafanaCommError, OAUTH_SCOPES
+from grafana import Grafana, GrafanaCommError
 from secret_storage import generate_password
 from litestream import Litestream
 from peer import Peer, PEER_RELATION
