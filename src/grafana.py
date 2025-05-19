@@ -756,7 +756,7 @@ class Grafana:
         Returns:
             :bool: indicating whether the password was changed.
         """
-        url = f"{self._http_client}/api/org"
+        url = f"{self._internal_url}/api/org"
         headers = urllib3.make_headers(basic_auth="{}:{}".format(username, passwd))
 
         try:
@@ -776,7 +776,7 @@ class Grafana:
             Empty :dict: if it is not up, otherwise a dict containing basic API health
         """
         # The /api/health endpoint does not require authentication
-        url = f"{self._http_client}/api/health"
+        url = f"{self._internal_url}/api/health"
 
         try:
             response = self._http_client.request("GET", url, timeout=2.0)
