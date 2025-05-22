@@ -93,13 +93,11 @@ class Litestream:
         layer = self.layer
         try:
             plan = self._container.get_plan()
-            if plan.services != layer.services:
-                self._container.add_layer("litestream", layer, combine=True)
-                if self._container.get_service("litestream").is_running():
-                    self._container.stop("litestream")
-
-                self._container.start("litestream")
-                logger.info("Restarted replication")
+            if plan.services == layer.services:
+                return
+            self._container.add_layer("litestream", layer, combine=True)
+            self._container.restart("litestream")
+            logger.info("litestream replication restarted")
         except ConnectionError:
             logger.error(
                 "Could not restart replication -- Pebble socket does "

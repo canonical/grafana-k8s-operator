@@ -58,13 +58,13 @@ class Grafana:
                 container: Container,
                 is_leader: bool,
                 grafana_config_generator: GrafanaConfig,
-                internal_url: str,
                 pebble_env: PebbleEnvironment,
                 enable_profiling: bool = False,
                 tls_config: Optional[TLSConfig] = None,
                 trusted_ca_certs: Optional[str] = None,
                 dashboards: List[Dict] = [],
                 provision_own_dashboard: bool = False,
+                scheme: str = "http",
                 ) -> None:
         """A class to bring up and check a Grafana server."""
         self._container = container
@@ -78,7 +78,7 @@ class Grafana:
         self._provision_own_dashboard = provision_own_dashboard
         self._current_config_hash = None
         self._current_datasources_hash = None
-        self._scheme = "https" if internal_url.startswith("https://") else "http"
+        self._scheme =  scheme
 
 
     @property
@@ -129,7 +129,7 @@ class Grafana:
             {
                 "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
                 # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
-                "GF_SERVER_ROOT_URL": self._external_url,
+                "GF_SERVER_ROOT_URL": self._pebble_env.external_url,
                 "GF_SERVER_ENFORCE_DOMAIN": "false",
                 # When traefik provides TLS termination then traefik is https, but grafana is http.
                 # We need to set GF_SERVER_PROTOCOL.
@@ -411,10 +411,7 @@ class Grafana:
         if self._layer:
             try:
                 self._container.add_layer(GRAFANA_WORKLOAD, self._layer, combine=True)
-                if self._container.get_service(GRAFANA_WORKLOAD).is_running():
-                    self._container.stop(GRAFANA_WORKLOAD)
-
-                self._container.start(GRAFANA_WORKLOAD)
+                self._container.restart(GRAFANA_WORKLOAD)
                 logger.info("Restarted grafana-k8s")
 
                 if self._poll_container(self._container.can_connect):

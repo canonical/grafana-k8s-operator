@@ -7,10 +7,10 @@ import logging
 import unittest
 from typing import Dict
 from unittest.mock import patch
-from pytest import fixture
+from pytest import fixture, mark
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops.model import ActiveStatus
-from ops.testing import Model, Relation
+from ops.testing import Model, Relation, CharmEvents
 
 
 logger = logging.getLogger(__name__)
@@ -32,12 +32,21 @@ def is_service_running(charm) -> bool:
     service = charm.model.unit.get_container(CONTAINER_NAME).get_service(SERVICE_NAME)
     return service.is_running()
 
-def test_url_without_path(ctx, base_state_with_model):
+@mark.parametrize(
+    "event",
+    (
+        CharmEvents.update_status(),
+        CharmEvents.start(),
+        CharmEvents.install(),
+        CharmEvents.config_changed(),
+    ),
+)
+def test_url_without_path(ctx, base_state_with_model, event):
     """The root url and subpath env vars should not be set when no subpath is present."""
     # GIVEN a charm
 
     # WHEN any event is fired
-    with ctx(ctx.on.update_status(), base_state_with_model) as mgr:
+    with ctx(event, base_state_with_model) as mgr:
         mgr.run()
         charm = mgr.charm
         # THEN root url and subpath envs are defined

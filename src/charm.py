@@ -196,12 +196,12 @@ class GrafanaCharm(CharmBase):
                                         container=self.unit.get_container("grafana"),
                                         is_leader= self.unit.is_leader(),
                                         grafana_config_generator=self._grafana_config,
-                                        internal_url=self.internal_url,
                                         pebble_env=self._pebble_env,
                                         tls_config = self._tls_config,
                                         trusted_ca_certs = self._trusted_ca_certs,
                                         dashboards = self.dashboard_consumer.dashboards,
-                                        provision_own_dashboard = self._provision_own_dashboard
+                                        provision_own_dashboard = self._provision_own_dashboard,
+                                        scheme=self._scheme,
                                         )
         self._litestream = Litestream(self.unit.get_container("litestream"),
                                       is_leader= self.unit.is_leader(),

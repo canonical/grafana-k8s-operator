@@ -5,9 +5,9 @@ from dataclasses import replace
 import json
 from unittest.mock import patch
 
-from scenario import PeerRelation
+from pytest import mark
 import yaml
-from ops.testing import Relation, Context, Model, Network, BindAddress, Address
+from ops.testing import Relation, Context, Model, Network, BindAddress, Address, CharmEvents, PeerRelation
 
 import src.grafana_client as grafana_client
 from src.constants import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH
@@ -129,8 +129,8 @@ def test_dashboard_path_is_initialized(ctx, base_state, peer_relation):
     metrics_rel = Relation("metrics-endpoint", remote_app_name="prometheus")
     state = replace(base_state, relations={peer_relation, grafana_source_rel, metrics_rel})
 
-    # WHEN running any relation event
-    with ctx(ctx.on.config_changed(), state) as mgr:
+    # WHEN running a relation changed event
+    with ctx(ctx.on.relation_changed(metrics_rel), state) as mgr:
         mgr.run()
         charm = mgr.charm
         # THEN dashboards config file is created
@@ -185,19 +185,36 @@ def test_datasource_timeout_value_is_overridden_by_config_if_smaller(ctx, base_s
         expected_source_data[0]["jsonData"]["timeout"] = 300
         assert yaml.safe_load(config).get("datasources") == expected_source_data
 
-def test_workload_version_is_set(ctx:Context, base_state):
+@mark.parametrize(
+    "event",
+    (
+        CharmEvents.update_status(),
+        CharmEvents.start(),
+        CharmEvents.install(),
+        CharmEvents.config_changed(),
+    ),
+)
+def test_workload_version_is_set(ctx:Context, base_state, event):
     # GIVEN a running workload container
     # WHEN running any event
-    out = ctx.run(ctx.on.update_status(), base_state)
+    out = ctx.run(event, base_state)
     # THEN we get the workload version set
     assert out.workload_version == "0.1.0"
 
-
+@mark.parametrize(
+    "event",
+    (
+        CharmEvents.update_status(),
+        CharmEvents.start(),
+        CharmEvents.install(),
+        CharmEvents.config_changed(),
+    ),
+)
 @patch.object(grafana_client.GrafanaClient, "build_info", new={"version": "1.0.0"})
-def test_bare_charm_has_no_subpath_set_in_layer(ctx, base_state):
+def test_bare_charm_has_no_subpath_set_in_layer(ctx, base_state, event):
     # GIVEN a running workload container
     # WHEN running any event
-    with ctx(ctx.on.update_status(), base_state) as mgr:
+    with ctx(event, base_state) as mgr:
         mgr.run()
         charm = mgr.charm
         # THEN in the grafana pebble layer, GF_SERVER_ROOT_URL is set
@@ -302,13 +319,22 @@ def test_primary_sets_correct_peer_data(ctx, base_state):
         replica_address = charm.peers.get_peer_data("replica_primary")
         assert unit_ip == replica_address
 
+@mark.parametrize(
+    "event",
+    (
+        CharmEvents.update_status(),
+        CharmEvents.start(),
+        CharmEvents.install(),
+        CharmEvents.config_changed(),
+    ),
+)
 @patch("socket.getfqdn", lambda: "2.3.4.5")
-def test_replicas_get_correct_environment_variables(ctx, base_state):
+def test_replicas_get_correct_environment_variables(ctx, base_state, event):
     # GIVEN a grafana app with 2 units
     updated_peer_relation = PeerRelation("grafana", local_app_data={"replica_primary": json.dumps("1.2.3.4")})
     state = replace(base_state, planned_units=2, leader=False, relations={updated_peer_relation})
     # WHEN any event is fired on the non-leader unit
-    with ctx(ctx.on.update_status(), state) as mgr:
+    with ctx(event, state) as mgr:
         mgr.run()
         charm = mgr.charm
         # THEN LITESTREAM_UPSTREAM_URL gets set in litestream pebble service
