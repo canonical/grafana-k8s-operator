@@ -14,6 +14,8 @@ from helpers import (
     oci_image,
 )
 
+# pyright: reportAttributeAccessIssue=false
+
 logger = logging.getLogger(__name__)
 
 tester_resources = {
@@ -31,9 +33,20 @@ prometheus_app_name = "prometheus"
 
 @pytest.mark.abort_on_fail
 async def test_deploy(ops_test, grafana_charm):
-    sh.juju.deploy(grafana_charm, grafana_app_name, model=ops_test.model.name, trust=True,
-                    resource=[f"{k}={v}" for k, v in grafana_resources.items()])
-    sh.juju.deploy("prometheus-k8s", prometheus_app_name, channel="edge", trust=True, model=ops_test.model.name)
+    sh.juju.deploy(
+        grafana_charm,
+        grafana_app_name,
+        model=ops_test.model.name,
+        trust=True,
+        resource=[f"{k}={v}" for k, v in grafana_resources.items()],
+    )
+    sh.juju.deploy(
+        "prometheus-k8s",
+        prometheus_app_name,
+        channel="edge",
+        trust=True,
+        model=ops_test.model.name,
+    )
     await ops_test.model.wait_for_idle(
         apps=[grafana_app_name, prometheus_app_name],
         status="active",

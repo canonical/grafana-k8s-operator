@@ -10,6 +10,8 @@ import yaml
 from helpers import oci_image
 from pytest_operator.plugin import OpsTest
 
+# pyright: reportAttributeAccessIssue = false
+
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
@@ -22,9 +24,16 @@ grafana_resources = {
 @pytest.mark.skip_if_deployed
 @pytest.mark.abort_on_fail
 async def test_deploy(ops_test, grafana_charm):
-    sh.juju.deploy(grafana_charm, "grafana", model=ops_test.model.name, trust=True,
-                   resource=[f"{k}={v}" for k, v in grafana_resources.items()])
-    sh.juju.deploy("self-signed-certificates", "ca", model=ops_test.model.name, channel="latest/edge")
+    sh.juju.deploy(
+        grafana_charm,
+        "grafana",
+        model=ops_test.model.name,
+        trust=True,
+        resource=[f"{k}={v}" for k, v in grafana_resources.items()],
+    )
+    sh.juju.deploy(
+        "self-signed-certificates", "ca", model=ops_test.model.name, channel="latest/edge"
+    )
 
     await ops_test.model.add_relation("grafana:receive-ca-cert", "ca")
     await ops_test.model.wait_for_idle(
@@ -82,6 +91,7 @@ async def test_certs_created(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_certs_available_after_refresh(ops_test: OpsTest, grafana_charm):
     """Make sure trusted certs are available after update."""
+    assert ops_test.model
     sh.juju.refresh("grafana", model=ops_test.model.name, path=grafana_charm)
 
     await ops_test.model.wait_for_idle(
