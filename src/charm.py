@@ -526,8 +526,7 @@ class GrafanaCharm(CharmBase):
 
     def _on_collect_unit_status(self, e: CollectStatusEvent):
         e.add_status(ActiveStatus())
-        if self.resource_patch.get_status().name != "active":
-            e.add_status(self.resource_patch.get_status())
+        e.add_status(self.resource_patch.get_status())
 
 
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
