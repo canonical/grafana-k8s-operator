@@ -5,7 +5,7 @@ import json
 from typing import Any, Optional
 from ops import Application, Relation
 
-class Peer:
+class PeerData:
     """A helper class to manage peer relation data."""
 
     def __init__(self, app:Application, peers: Optional[Relation] = None):

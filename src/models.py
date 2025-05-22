@@ -4,8 +4,7 @@
 """Data models class."""
 
 import dataclasses
-from typing import Callable, List
-from cosl import JujuTopology
+from typing import Callable, List, Optional
 
 @dataclasses.dataclass
 class TLSConfig:
@@ -15,12 +14,6 @@ class TLSConfig:
     ca: str
 
 @dataclasses.dataclass
-class TracingConfig:
-    """Grafana tracing config."""
-    endpoint: str
-    juju_topology: JujuTopology
-
-@dataclasses.dataclass
 class DatasourceConfig:
     """Grafana datasource config."""
     datasources: Callable[[], List[dict]]
@@ -28,11 +21,16 @@ class DatasourceConfig:
     query_timeout: int = 0
 
 @dataclasses.dataclass
-class PebbleEnvConfig:
+class PebbleEnvironment:
     """Grafana pebble service environment config."""
+    external_url: str
     log_level:str = "info"
     allow_embedding: bool = False
     allow_anonymous_access: bool = False
     enable_auto_assign_org: bool = True
+    enable_profiling: bool = False
+    tracing_resource_attributes: Optional[str] = None
+    admin_user: Optional[str] = None
+    admin_password: Optional[str] = None
 
 

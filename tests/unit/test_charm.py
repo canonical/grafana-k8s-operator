@@ -9,7 +9,7 @@ from scenario import PeerRelation
 import yaml
 from ops.testing import Relation, Context, Model, Network, BindAddress, Address
 
-import src.grafana as grafana_client
+import src.grafana_client as grafana_client
 from src.constants import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH
 
 MINIMAL_DATASOURCES_CONFIG = {
@@ -193,7 +193,7 @@ def test_workload_version_is_set(ctx:Context, base_state):
     assert out.workload_version == "0.1.0"
 
 
-@patch.object(grafana_client.Grafana, "build_info", new={"version": "1.0.0"})
+@patch.object(grafana_client.GrafanaClient, "build_info", new={"version": "1.0.0"})
 def test_bare_charm_has_no_subpath_set_in_layer(ctx, base_state):
     # GIVEN a running workload container
     # WHEN running any event
@@ -204,7 +204,7 @@ def test_bare_charm_has_no_subpath_set_in_layer(ctx, base_state):
         pebble_layer = charm._grafana_service._layer
         assert pebble_layer.to_dict()["services"]["grafana"]["environment"]["GF_SERVER_ROOT_URL"] == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
 
-@patch.object(grafana_client.Grafana, "build_info", new={"version": "1.0.0"})
+@patch.object(grafana_client.GrafanaClient, "build_info", new={"version": "1.0.0"})
 @patch.multiple("charm.TraefikRouteRequirer", external_host="1.2.3.4", scheme="http")
 def test_ingress_relation_sets_options_and_rel_data(ctx:Context, base_state, peer_relation):
     # GIVEN an ingress relation

@@ -72,7 +72,6 @@ requires:
       Receive a CA cert for grafana to trust.
       This relation can be used with a local CA to obtain the CA cert that was used to sign proxied
       endpoints.
-    limit: 1
   oauth:
     interface: oauth
     limit: 1

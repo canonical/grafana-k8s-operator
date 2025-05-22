@@ -63,12 +63,24 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
-from grafana import Grafana, GrafanaCommError
+from grafana import Grafana
+from grafana_client import GrafanaClient, GrafanaCommError
+from grafana_config import GrafanaConfig
 from secret_storage import generate_password
 from litestream import Litestream
-from peer import Peer
-from models import DatasourceConfig, PebbleEnvConfig, TLSConfig, TracingConfig
-from constants import PEER_RELATION, WORKLOAD_PORT, OAUTH_SCOPES, CA_CERT_PATH, GRAFANA_WORKLOAD, DATABASE_RELATION, PROFILING_PORT, OAUTH_GRANT_TYPES, REQUIRED_DATABASE_FIELDS, VALID_AUTHENTICATION_MODES
+from peer import PeerData
+from models import DatasourceConfig, PebbleEnvironment, TLSConfig
+from constants import (
+    PEER_RELATION,
+    WORKLOAD_PORT,
+    OAUTH_SCOPES,
+    CA_CERT_PATH,
+    GRAFANA_WORKLOAD,
+    DATABASE_RELATION,
+    PROFILING_PORT,
+    OAUTH_GRANT_TYPES,
+    REQUIRED_DATABASE_FIELDS,
+    VALID_AUTHENTICATION_MODES)
 
 logger = logging.getLogger()
 
@@ -100,17 +112,18 @@ class GrafanaCharm(CharmBase):
         # -- initialize states --
         self._topology = JujuTopology.from_charm(self)
         self._fqdn = socket.getfqdn()
-        self.peers = Peer(app=self.app, peers=self.model.get_relation(PEER_RELATION))
+        self.peers = PeerData(app=self.app, peers=self.model.get_relation(PEER_RELATION))
         self._secret_storage = SecretStorage(self, "admin-password",
                                              default=lambda: {"password": generate_password()})
 
 
         # -- cert_handler
+        # Assuming FQDN is always part of the SANs DNS.
         self.cert_handler = CertHandler(
             charm=self,
             key="grafana-server-cert",
             peer_relation_name="replicas",
-            sans=[socket.getfqdn()],
+            sans=[self._fqdn],
         )
 
         # -- trusted_cert_transfer
@@ -168,24 +181,23 @@ class GrafanaCharm(CharmBase):
             refresh_event=self.on.grafana_pebble_ready,  # pyright: ignore
         )
 
-
-
-        # Assuming FQDN is always part of the SANs DNS.
+        self._grafana_client = GrafanaClient(self.internal_url)
+        self._grafana_config = GrafanaConfig(
+                                            peers = self.peers,
+                                            datasources_config=self._datasource_config,
+                                            oauth_config = self._oauth_config,
+                                            auth_env_config = lambda: self._auth_env_vars,
+                                            db_config=lambda: self._db_config,
+                                            enable_reporting = bool(self.config["reporting_enabled"]),
+                                            enable_external_db=self._enable_external_db,
+                                            tracing_endpoint=self._workload_tracing_endpoint,
+                                            )
         self._grafana_service = Grafana(
                                         container=self.unit.get_container("grafana"),
                                         is_leader= self.unit.is_leader(),
-                                        peers = self.peers,
+                                        grafana_config_generator=self._grafana_config,
                                         internal_url=self.internal_url,
-                                        external_url = self.external_url,
-                                        datasources_config=self._datasource_config,
-                                        pebble_env_config=self._pebble_env_config,
-                                        tracing_config=self._tracing_config,
-                                        oauth_config = self._oauth_config,
-                                        enable_profiling=bool(self.model.relations.get("profiling-endpoint")),
-                                        enable_reporting = bool(self.config["reporting_enabled"]),
-                                        enable_external_db=self._enable_external_db,
-                                        admin_password = self.admin_password,
-                                        admin_user = str(self.model.config["admin_user"]),
+                                        pebble_env=self._pebble_env,
                                         tls_config = self._tls_config,
                                         trusted_ca_certs = self._trusted_ca_certs,
                                         dashboards = self.dashboard_consumer.dashboards,
@@ -200,7 +212,8 @@ class GrafanaCharm(CharmBase):
             self._on_get_admin_password,
         )
 
-        # FIXME: we need to observe these events as they contain the required data
+        # FIXME: we still need to observe these events as they contain the required data
+        # update the charm lib to work with the reconcile approach
         self.framework.observe(self.on[DATABASE_RELATION].relation_changed, self._on_database_changed)
         self.framework.observe(self.on[DATABASE_RELATION].relation_broken, self._on_database_broken)
         self.framework.observe(
@@ -209,6 +222,7 @@ class GrafanaCharm(CharmBase):
         )
 
         # FIXME: we still need to call reconcile since the lib updates peer data on specific events
+        # update the charm lib to work with the reconcile approach
         self.framework.observe(
             self.source_consumer.on.sources_changed,  # pyright: ignore
             self._on_grafana_source_changed,
@@ -356,11 +370,10 @@ class GrafanaCharm(CharmBase):
 
     # TRACING PROPERTIES
     @property
-    def _tracing_config(self) -> Optional[TracingConfig]:
+    def _workload_tracing_endpoint(self) -> Optional[str]:
         if self.workload_tracing.is_ready():
             endpoint = self.workload_tracing.get_endpoint("otlp_grpc")
-            if endpoint:
-                return TracingConfig(endpoint=endpoint, juju_topology=self._topology)
+            return endpoint
         return None
 
     @property
@@ -372,12 +385,22 @@ class GrafanaCharm(CharmBase):
         )
 
     @property
-    def _pebble_env_config(self) -> PebbleEnvConfig:
-        return PebbleEnvConfig(
+    def _pebble_env(self) -> PebbleEnvironment:
+        topology = self._topology
+        tracing_resource_attrs = ((f"juju_application={topology.application},juju_model={topology.model}" + \
+                                f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}") \
+                            if self._workload_tracing_endpoint
+                            else None)
+        return PebbleEnvironment(
+            external_url=self.external_url,
             log_level=str(self.model.config["log_level"]),
             allow_embedding=bool(self.model.config["allow_embedding"]),
             allow_anonymous_access=bool(self.model.config["allow_anonymous_access"]),
             enable_auto_assign_org=bool(self.model.config["enable_auto_assign_org"]),
+            enable_profiling=bool(self.model.relations.get("profiling-endpoint")),
+            tracing_resource_attributes=tracing_resource_attrs,
+            admin_password = self.admin_password,
+            admin_user = str(self.model.config["admin_user"]),
         )
 
     @property
@@ -396,6 +419,15 @@ class GrafanaCharm(CharmBase):
         return len(rel.units) > 0 if rel is not None else False
 
     @property
+    def _db_config(self) -> Optional[Dict[str, str]]:
+        if self._enable_external_db:
+            peer_data = self.peers.get_peer_data("database")
+            if not peer_data:
+                return None
+            return peer_data
+        return None
+
+    @property
     def _oauth_client_config(self) -> OauthClientConfig:
         return OauthClientConfig(
             os.path.join(self.external_url, "login/generic_oauth"),
@@ -408,6 +440,10 @@ class GrafanaCharm(CharmBase):
         if self.oauth.is_client_created():
             return self.oauth.get_provider_info()
         return None
+
+    @property
+    def _auth_env_vars(self):
+        return self.peers.get_peer_data("auth_conf_env_vars")
 
     @property
     def _tls_config(self) -> Optional[TLSConfig]:
@@ -563,11 +599,11 @@ class GrafanaCharm(CharmBase):
             # this should never happen. No Way Jose.
             raise RuntimeError()
 
-        if not self._grafana_service.is_ready:
+        if not self._grafana_client.is_ready:
             return event.fail(self.GetAdminPWDFailures.not_reachable)
 
         try:
-            pw_changed = self._grafana_service.password_has_been_changed(
+            pw_changed = self._grafana_client.password_has_been_changed(
                 cast(str, self.model.config["admin_user"]), admin_password
             )
         except GrafanaCommError:

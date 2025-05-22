@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 """Replication class."""
 import logging
+from typing import List
 from ops import Container
 import socket
 from ops.pebble import (
@@ -9,7 +10,7 @@ from ops.pebble import (
     Layer,
 )
 import yaml
-from peer import Peer
+from peer import PeerData
 from constants import DATABASE_PATH
 
 logger = logging.getLogger()
@@ -21,7 +22,7 @@ class Litestream:
     def __init__(self,
                 container: Container,
                 is_leader: bool,
-                peers: Peer,):
+                peers: PeerData,):
         self._container=container
         self._is_leader = is_leader
         self._fqdn = socket.getfqdn()
@@ -34,13 +35,9 @@ class Litestream:
 
         if self._is_leader:
             self._peers.set_peer_data("replica_primary", socket.gethostbyname(self._fqdn))
-            config["LITESTREAM_ADDR"] = "{}:{}".format(
-                socket.gethostbyname(self._fqdn), "9876"
-            )
+            config["LITESTREAM_ADDR"] = f"{socket.gethostbyname(self._fqdn)}:{9876}"
         else:
-            config["LITESTREAM_UPSTREAM_URL"] = "{}:{}".format(
-                self._peers.get_peer_data("replica_primary"), "9876"
-            )
+            config["LITESTREAM_UPSTREAM_URL"] = f"{self._peers.get_peer_data('replica_primary')}:{9876}"
 
         layer = Layer(
             {
@@ -67,18 +64,16 @@ class Litestream:
     def reconcile(self):
         """Unconditional control logic."""
         if self._container.can_connect():
-            if self._reconcile_config():
+            changes = []
+            self._reconcile_config(changes)
+            if any(changes):
                 self.restart_litestream()
 
 
-    def _reconcile_config(self) -> bool:
-        restart = False
+    def _reconcile_config(self, changes:List):
 
-        if (
-                self._container.get_plan().services
-                != self.layer.services
-        ):
-            restart = True
+        if self._container.get_plan().services != self.layer.services:
+            changes.append(True)
 
         litestream_config = {"addr": ":9876", "dbs": [{"path": DATABASE_PATH}]}
 
@@ -88,7 +83,6 @@ class Litestream:
             )  # type: ignore
 
         self._container.push("/etc/litestream.yml", yaml.dump(litestream_config), make_dirs=True)
-        return restart
 
     def restart_litestream(self) -> None:
         """Restart the pebble container.

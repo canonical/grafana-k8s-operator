@@ -16,16 +16,10 @@
 import time
 from pathlib import Path
 import os
-import configparser
 import hashlib
-from io import StringIO
-import json
 import logging
 from typing import Callable, Dict, List, Optional, cast
 from ops import Container
-from peer import Peer
-from urllib3 import exceptions
-import urllib3
 import re
 from ops.pebble import (
     APIError,
@@ -36,19 +30,25 @@ from ops.pebble import (
     PathError,
     ProtocolError,
 )
-import yaml
-from charms.hydra.v0.oauth import (
-    OauthProviderConfig
+from models import PebbleEnvironment, TLSConfig
+from constants import (
+    GRAFANA_KEY_PATH,
+    DATABASE_PATH,
+    CA_CERT_PATH,
+    GRAFANA_CRT_PATH,
+    OAUTH_SCOPES,
+    PROFILING_PORT,
+    GRAFANA_WORKLOAD,
+    CONFIG_PATH,
+    WORKLOAD_PORT,
+    PROVISIONING_PATH,
+    DATASOURCES_PATH,
+    DASHBOARDS_DIR,
+    TRUSTED_CA_CERT_PATH
 )
-from models import DatasourceConfig, PebbleEnvConfig, TLSConfig, TracingConfig
-from constants import GRAFANA_KEY_PATH, DATABASE_PATH, CA_CERT_PATH, GRAFANA_CRT_PATH, OAUTH_SCOPES, PROFILING_PORT, GRAFANA_WORKLOAD, CONFIG_PATH, WORKLOAD_PORT, PROVISIONING_PATH, DATASOURCES_PATH, DASHBOARDS_DIR, TRUSTED_CA_CERT_PATH
+from grafana_config import GrafanaConfig
 
 logger = logging.getLogger()
-
-
-
-class GrafanaCommError(Exception):
-    """Raised when comm fails unexpectedly."""
 
 
 class Grafana:
@@ -57,18 +57,10 @@ class Grafana:
     def __init__(self,
                 container: Container,
                 is_leader: bool,
-                peers: Peer,
+                grafana_config_generator: GrafanaConfig,
                 internal_url: str,
-                external_url: str,
-                datasources_config: DatasourceConfig,
-                pebble_env_config: PebbleEnvConfig,
-                tracing_config: Optional[TracingConfig] = None,
-                oauth_config: Optional[OauthProviderConfig] = None,
+                pebble_env: PebbleEnvironment,
                 enable_profiling: bool = False,
-                enable_reporting: bool = True,
-                enable_external_db:  bool = False,
-                admin_user: Optional[str] = None,
-                admin_password: Optional[str] = None,
                 tls_config: Optional[TLSConfig] = None,
                 trusted_ca_certs: Optional[str] = None,
                 dashboards: List[Dict] = [],
@@ -77,25 +69,15 @@ class Grafana:
         """A class to bring up and check a Grafana server."""
         self._container = container
         self._is_leader = is_leader
-        self._peers = peers
-        self._internal_url = internal_url
-        self._external_url = external_url
-        self._pebble_env_config = pebble_env_config
-        self._datasources_config = datasources_config
-        self._tracing_config = tracing_config
+        self._grafana_config_generator = grafana_config_generator
+        self._pebble_env = pebble_env
         self._enable_profiling = enable_profiling
-        self._enable_reporting = enable_reporting
-        self._enable_external_db = enable_external_db
-        self._oauth_config = oauth_config
-        self._admin_user = admin_user
-        self._admin_password = admin_password
         self._tls_config = tls_config
         self._trusted_ca_certs = trusted_ca_certs
         self._dashboards = dashboards
         self._provision_own_dashboard = provision_own_dashboard
-        self._http_client = urllib3.PoolManager()
-        self._grafana_config_ini_hash = None
-        self._grafana_datasources_hash = None
+        self._current_config_hash = None
+        self._current_datasources_hash = None
         self._scheme = "https" if internal_url.startswith("https://") else "http"
 
 
@@ -117,29 +99,6 @@ class Grafana:
         return result.group(1)
 
 
-    def _get_hash_for_file(self, file: str) -> str:
-        """Tries to connect to the container and hash a file.
-
-        Args:
-            file: a `str` filepath to read
-        """
-        try:
-            content = self._container.pull(file)
-            hash = hashlib.sha256(str(content.read()).encode("utf-8")).hexdigest()
-            return hash
-        except (FileNotFoundError, ProtocolError, PathError) as e:
-            logger.warning(
-                "Could not read configuration from the Grafana workload container: {}".format(
-                    e
-                )
-            )
-
-        return ""
-
-    @property
-    def _auth_env_vars(self):
-        return self._peers.get_peer_data("auth_conf_env_vars")
-
     @property
     def _layer(self) -> Layer:
         """Construct the pebble layer information.
@@ -160,8 +119,9 @@ class Grafana:
             }
         )
 
-        if self._auth_env_vars:
-            extra_info.update(self._auth_env_vars)
+        auth_env_config = self._grafana_config_generator.auth_env_config
+        if auth_env_config:
+            extra_info.update(auth_env_config)
 
         # For stripPrefix middleware to work correctly, we need to set serve_from_sub_path and
         # root_url in a particular way.
@@ -192,7 +152,7 @@ class Grafana:
                 }
             )
 
-        oauth_provider_info = self._oauth_config
+        oauth_provider_info = self._grafana_config_generator.oauth_config
         if oauth_provider_info:
             if oauth_provider_info:
                 extra_info.update(
@@ -215,12 +175,11 @@ class Grafana:
                     }
                 )
 
-        if self._tracing_config:
-            topology = self._tracing_config.juju_topology
+        tracing_resource_attrs = self._pebble_env.tracing_resource_attributes
+        if tracing_resource_attrs:
             extra_info.update(
                 {
-                    "OTEL_RESOURCE_ATTRIBUTES": f"juju_application={topology.application},juju_model={topology.model}"
-                                                + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
+                    "OTEL_RESOURCE_ATTRIBUTES": tracing_resource_attrs
                 }
             )
 
@@ -239,8 +198,8 @@ class Grafana:
         # This Grafana instance will inherit them automatically from the replication primary (the leader).
         if self._is_leader:
             # self.admin_password is guaranteed str if this unit is leader
-            extra_info["GF_SECURITY_ADMIN_PASSWORD"] = cast(str, self._admin_password)
-            extra_info["GF_SECURITY_ADMIN_USER"] = cast(str, self._admin_user)
+            extra_info["GF_SECURITY_ADMIN_PASSWORD"] = cast(str, self._pebble_env.admin_password)
+            extra_info["GF_SECURITY_ADMIN_USER"] = cast(str, self._pebble_env.admin_user)
 
         layer = Layer(
             {
@@ -254,15 +213,15 @@ class Grafana:
                         "startup": "enabled",
                         "environment": {
                             "GF_SERVER_HTTP_PORT": str(WORKLOAD_PORT),
-                            "GF_LOG_LEVEL": self._pebble_env_config.log_level,
+                            "GF_LOG_LEVEL": self._pebble_env.log_level,
                             "GF_PLUGINS_ENABLE_ALPHA": "true",
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
-                            "GF_SECURITY_ALLOW_EMBEDDING": str(self._pebble_env_config.allow_embedding).lower(),
+                            "GF_SECURITY_ALLOW_EMBEDDING": str(self._pebble_env.allow_embedding).lower(),
                             "GF_AUTH_ANONYMOUS_ENABLED": str(
-                                self._pebble_env_config.allow_anonymous_access
+                                self._pebble_env.allow_anonymous_access
                             ).lower(),
                             "GF_USERS_AUTO_ASSIGN_ORG": str(
-                               self._pebble_env_config.enable_auto_assign_org
+                               self._pebble_env.enable_auto_assign_org
                             ).lower(),
                             **extra_info,
                         },
@@ -274,54 +233,44 @@ class Grafana:
         return layer
 
     @property
-    def grafana_config_ini_hash(self) -> str:
+    def current_config_hash(self) -> str:
         """Returns the hash for the Grafana ini file."""
-        return self._grafana_config_ini_hash or self._get_hash_for_file(CONFIG_PATH)
+        return self._current_config_hash or self._get_hash_for_file(CONFIG_PATH)
 
-    @grafana_config_ini_hash.setter
-    def grafana_config_ini_hash(self, hash: str) -> None:
+    @current_config_hash.setter
+    def current_config_hash(self, hash: str) -> None:
         """Sets the Grafana config ini hash."""
-        self._grafana_config_ini_hash = hash
+        self._current_config_hash = hash
 
     @property
-    def grafana_datasources_hash(self) -> str:
-        """Returns the hash for the Grafana ini file."""
-        return self._grafana_datasources_hash or self._get_hash_for_file(DATASOURCES_PATH)
+    def current_datasources_hash(self) -> str:
+        """Returns the hash for the Grafana datasources file."""
+        return self._current_datasources_hash or self._get_hash_for_file(DATASOURCES_PATH)
 
-    @grafana_datasources_hash.setter
-    def grafana_datasources_hash(self, hash: str) -> None:
-        """Sets the Grafana config ini hash."""
-        self._grafana_datasources_hash = hash
+    @current_datasources_hash.setter
+    def current_datasources_hash(self, hash: str) -> None:
+        """Sets the Grafana datasources config hash."""
+        self._current_datasources_hash = hash
 
-    @property
-    def _db_config(self) -> Optional[Dict[str, str]]:
-        if self._enable_external_db:
-            peer_data = self._peers.get_peer_data("database")
-            if not peer_data:
-                return None
-            return peer_data
-        return None
 
     def reconcile(self):
         """Unconditional control logic."""
         if self._container.can_connect():
-            self._reconcile_provisioning_dirs()
+            self._provision_dirs()
             # updates to existing grafana dashboards don't require a grafana restart
             self._reconcile_dashboards()
-
-            if any(
-                    (self._reconcile_tls_config(),
-                    self._reconcile_trusted_ca(),
-                    self._reconcile_config(),
-                    self._reconcile_ds_config(),
-                    self._reconcile_dashboards_config(),
-                    self._reconcile_pebble_plan(),
-                    )
-                   ):
+            changes = []
+            self._reconcile_tls_config(changes)
+            self._reconcile_trusted_ca(changes)
+            self._reconcile_config(changes)
+            self._reconcile_ds_config(changes)
+            self._reconcile_dashboards_config(changes)
+            self._reconcile_pebble_plan(changes)
+            if any(changes):
                 self._restart_grafana()
 
 
-    def _reconcile_provisioning_dirs(self):
+    def _provision_dirs(self):
         for d in ("plugins", "notifiers", "alerting", "dashboards"):
             path = Path(PROVISIONING_PATH) / d
             if not self._container.exists(path):
@@ -358,36 +307,18 @@ class Grafana:
         # provision a self-monitoring dashboard
         self._reconcile_own_dashboard()
 
-    def _reconcile_dashboards_config(self) -> bool:
+    def _reconcile_dashboards_config(self, changes:List):
         """Initialise the provisioning of Grafana dashboards."""
         logger.info("Initializing dashboard provisioning path")
 
-        dashboard_config = {
-            "apiVersion": 1,
-            "providers": [
-                {
-                    "name": "Default",
-                    "updateIntervalSeconds": "5",
-                    "type": "file",
-                    "options": {"path": DASHBOARDS_DIR},
-                }
-            ],
-        }
+        config_path = os.path.join(DASHBOARDS_DIR, "default.yaml")
+        config = self._grafana_config_generator.generate_dashboard_config()
 
-        default_config = os.path.join(DASHBOARDS_DIR, "default.yaml")
-        default_config_string = yaml.dump(dashboard_config)
+        if not self._container.exists(config_path):
+            self._update_config_file(config_path, config)
+            changes.append(True)
 
-        if not self._container.exists(default_config):
-            try:
-                self._container.push(default_config, default_config_string, make_dirs=True)
-                return True
-            except ConnectionError:
-                logger.warning(
-                    "Could not push default dashboard configuration. Pebble shutting down?"
-                )
-        return False
-
-    def _reconcile_trusted_ca(self) -> bool:
+    def _reconcile_trusted_ca(self, changes: List):
         """This function receives the trusted certificates from the certificate_transfer integration.
 
         Grafana needs to restart to use newly received certificates. Certificates attached to the
@@ -395,7 +326,6 @@ class Grafana:
         This function is needed because relation events are not emitted on upgrade, and because we
         do not have (nor do we want) persistent storage for certs.
         """
-        any_change = False
         if self._trusted_ca_certs:
             current = (
                     self._container.pull(TRUSTED_CA_CERT_PATH).read()
@@ -403,21 +333,18 @@ class Grafana:
                     else ""
                 )
             if current == self._trusted_ca_certs:
-                return any_change
+                return
 
-            any_change = True
+            changes.append(True)
             self._container.push(TRUSTED_CA_CERT_PATH, self._trusted_ca_certs, make_dirs=True)
             self._container.exec(["update-ca-certificates", "--fresh"]).wait()
         else:
             if self._container.exists(TRUSTED_CA_CERT_PATH):
-                any_change = True
+                changes.append(True)
                 self._container.remove_path(TRUSTED_CA_CERT_PATH, recursive=True)
 
-        return any_change
 
-
-    def _reconcile_tls_config(self) -> bool:
-        any_change = False
+    def _reconcile_tls_config(self, changes: List):
         for cert, cert_path in (
             (self._tls_config.certificate if self._tls_config else None, GRAFANA_CRT_PATH),
             (self._tls_config.key if self._tls_config else None, GRAFANA_KEY_PATH),
@@ -431,50 +358,45 @@ class Grafana:
                 )
                 if current == cert:
                     continue
-                any_change = True
+                changes.append(True)
                 self._container.push(cert_path, cert ,make_dirs=True)
             else:
                 if self._container.exists(cert_path):
-                    any_change = True
+                    changes.append(True)
                     self._container.remove_path(cert_path,recursive=True)
 
         self._container.exec(["update-ca-certificates", "--fresh"]).wait()
-        return any_change
 
-    def _reconcile_config(self) -> bool:
+    def _reconcile_config(self, changes: List):
         logger.debug("Handling grafana-k8s configuration change")
-        restart = False
 
-         # Generate a new base config and see if it differs from what we have.
+        # Generate a new base config and see if it differs from what we have.
         # If it does, store it and signal that we should restart Grafana
-        grafana_config_ini = self._generate_grafana_config()
-        config_ini_hash = hashlib.sha256(str(grafana_config_ini).encode("utf-8")).hexdigest()
-        if not self.grafana_config_ini_hash == config_ini_hash:
-            self.grafana_config_ini_hash = config_ini_hash
-            self._update_config_file(CONFIG_PATH, grafana_config_ini)
+        config = self._grafana_config_generator.generate_grafana_config()
+        print("CONFIGGG", config)
+        config_hash = hashlib.sha256(str(config).encode("utf-8")).hexdigest()
+        if self.current_config_hash != config_hash:
+            self.current_config_hash = config_hash
+            self._update_config_file(CONFIG_PATH, config)
             logger.info("Updated Grafana's base configuration")
+            changes.append(True)
 
-            restart = True
-        return restart
-
-    def _reconcile_ds_config(self) -> bool:
+    def _reconcile_ds_config(self, changes:List):
         """Check whether datasources need to be (re)provisioned."""
-        grafana_datasources = self._generate_datasource_config()
+        grafana_datasources = self._grafana_config_generator.generate_datasource_config()
         datasources_hash = hashlib.sha256(str(grafana_datasources).encode("utf-8")).hexdigest()
-        if not self.grafana_datasources_hash == datasources_hash:
-            self.grafana_datasources_hash = datasources_hash
+        if not self.current_datasources_hash == datasources_hash:
+            self.current_datasources_hash = datasources_hash
             self._update_config_file(DATASOURCES_PATH, grafana_datasources)
             logger.info("Updated Grafana's datasource configuration")
 
             # Non-leaders will get updates from litestream
             if self._is_leader:
-                return True
-        return False
+                changes.append(True)
 
-    def _reconcile_pebble_plan(self) -> bool:
+    def _reconcile_pebble_plan(self, changes:List):
         if self._container.get_plan().services != self._layer.services:
-            return True
-        return False
+            changes.append(True)
 
     def _restart_grafana(self) -> None:
         """Restart the pebble container.
@@ -553,49 +475,7 @@ class Grafana:
 
         return False
 
-    def _generate_datasource_config(self) -> str:
-        """Template out a Grafana datasource config.
 
-        Template using the sources (and removed sources) the consumer knows about, and dump it to
-        YAML.
-
-        Returns:
-            A string-dumped YAML config for the datasources
-        """
-        # Boilerplate for the config file
-        datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
-
-        for source_info in self._datasources_config.datasources():
-            source = {
-                "orgId": "1",
-                "access": "proxy",
-                "isDefault": "false",
-                "name": source_info["source_name"],
-                "type": source_info["source_type"],
-                "url": source_info["url"],
-            }
-            if source_info.get("extra_fields", None):
-                source["jsonData"] = source_info.get("extra_fields")
-            if source_info.get("secure_extra_fields", None):
-                source["secureJsonData"] = source_info.get("secure_extra_fields")
-
-            # set timeout for querying this data source
-            timeout = int(source.get("jsonData", {}).get("timeout", 0))
-            configured_timeout = self._datasources_config.query_timeout
-            if timeout < configured_timeout:
-                json_data = source.get("jsonData", {})
-                json_data.update({"timeout": configured_timeout})
-                source["jsonData"] = json_data
-
-            datasources_dict["datasources"].append(source)  # type: ignore[attr-defined]
-
-        # Also get a list of all the sources which have previously been purged and add them
-        for name in self._datasources_config.datasources_to_delete():
-            source = {"orgId": 1, "name": name}
-            datasources_dict["deleteDatasources"].append(source)  # type: ignore[attr-defined]
-
-        datasources_string = yaml.dump(datasources_dict)
-        return datasources_string
 
     def _update_config_file(self, config_path: str, config: str) -> None:
         """Write an updated Grafana configuration file to the Pebble container if necessary.
@@ -610,110 +490,6 @@ class Grafana:
             logger.error(
                 "Could not push config. Pebble refused connection. Shutting down?"
             )
-
-    def _generate_grafana_config(self) -> str:
-        """Generate a database configuration for Grafana.
-
-        For now, this only creates database information, since everything else
-        can be set in ENV variables, but leave for expansion later so we can
-        hide auth secrets
-        """
-        configs = [self._generate_tracing_config(), self._generate_analytics_config(), self._generate_database_config()]
-        if not self._enable_external_db:
-            with StringIO() as data:
-                config_ini = configparser.ConfigParser()
-                config_ini["database"] = {
-                    "type": "sqlite3",
-                    "path": DATABASE_PATH,
-                }
-                config_ini.write(data)
-                data.seek(0)
-                configs.append(data.read())
-        return "\n".join(filter(bool, configs))
-
-    def _generate_tracing_config(self) -> str:
-        """Generate tracing configuration.
-
-        Returns:
-            A string containing the required tracing information to be stubbed into the config
-            file.
-        """
-        if self._tracing_config is None:
-            return ""
-
-        tracing_endpoint = self._tracing_config.endpoint
-        config_ini = configparser.ConfigParser()
-        config_ini["tracing.opentelemetry"] = {
-            "sampler_type": "probabilistic",
-            "sampler_param": "0.01",
-        }
-        # ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini#L1505
-        config_ini["tracing.opentelemetry.otlp"] = {
-            "address": tracing_endpoint,
-        }
-
-        # This is silly, but a ConfigParser() handles this nicer than
-        # raw string manipulation
-        data = StringIO()
-        config_ini.write(data)
-        ret = data.getvalue()
-        return ret
-
-    def _generate_analytics_config(self) -> str:
-        """Generate analytics configuration.
-
-        Returns:
-            A string containing the analytics config to be stubbed into the config file.
-        """
-        if self._enable_reporting:
-            return ""
-        config_ini = configparser.ConfigParser()
-        # Ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#analytics
-        config_ini["analytics"] = {
-            "reporting_enabled": "false",
-            "check_for_updates": "false",
-            "check_for_plugin_updates": "false",
-        }
-
-        data = StringIO()
-        config_ini.write(data)
-        ret = data.getvalue()
-        return ret
-
-    def _generate_database_config(self) -> str:
-        """Generate a database configuration.
-
-        Returns:
-            A string containing the required database information to be stubbed into the config
-            file.
-        """
-        config_ini = configparser.ConfigParser()
-        db_type = "mysql"
-        db_config = self._db_config
-        if not db_config:
-            return ""
-
-        db_url = "{0}://{1}:{2}@{3}/{4}".format(
-            db_type,
-            db_config.get("user"),
-            db_config.get("password"),
-            db_config.get("host"),
-            db_config.get("name"),
-        )
-        config_ini["database"] = {
-            "type": db_type,
-            "host": db_config.get("host", ""),
-            "name": db_config.get("name", ""),
-            "user": db_config.get("user", ""),
-            "password": db_config.get("password", ""),
-            "url": db_url,
-        }
-
-        # This is still silly
-        data = StringIO()
-        config_ini.write(data)
-        ret = data.getvalue()
-        return ret
 
     def _reconcile_own_dashboard(self) -> None:
         """If all the prerequisites are enabled, provision a self-monitoring dashboard.
@@ -738,60 +514,22 @@ class Grafana:
                 self._container.remove_path(dashboard_path)
                 logger.debug("Removed dashboard %s", dashboard_path)
 
-    @property
-    def is_ready(self) -> bool:
-        """Checks whether the Grafana server is up and running yet.
 
-        Returns:
-            :bool: indicating whether the server is ready
+    def _get_hash_for_file(self, file: str) -> str:
+        """Tries to connect to the container and hash a file.
+
+        Args:
+            file: a `str` filepath to read
         """
-        return True if self.build_info.get("database", None) == "ok" else False
-
-    def password_has_been_changed(self, username: str, passwd: str) -> bool:
-        """Checks whether the admin password has been changed from default generated.
-
-        Raises:
-            GrafanaCommError, if http request fails for any reason.
-
-        Returns:
-            :bool: indicating whether the password was changed.
-        """
-        url = f"{self._internal_url}/api/org"
-        headers = urllib3.make_headers(basic_auth="{}:{}".format(username, passwd))
-
         try:
-            res = self._http_client.request("GET", url, headers=headers, timeout=2.0)
-            return True if "invalid username" in res.data.decode("utf8") else False
-        except exceptions.HTTPError as e:
-            # We do not want to blindly return "True" for unexpected exceptions such as:
-            # - urllib3.exceptions.NewConnectionError: [Errno 111] Connection refused
-            # - urllib3.exceptions.MaxRetryError
-            raise GrafanaCommError("Unable to determine if password has been changed") from e
+            content = self._container.pull(file)
+            hash = hashlib.sha256(str(content.read()).encode("utf-8")).hexdigest()
+            return hash
+        except (FileNotFoundError, ProtocolError, PathError) as e:
+            logger.warning(
+                "Could not read configuration from the Grafana workload container: {}".format(
+                    e
+                )
+            )
 
-    @property
-    def build_info(self) -> dict:
-        """A convenience method which queries the API to see whether Grafana is really ready.
-
-        Returns:
-            Empty :dict: if it is not up, otherwise a dict containing basic API health
-        """
-        # The /api/health endpoint does not require authentication
-        url = f"{self._internal_url}/api/health"
-
-        try:
-            response = self._http_client.request("GET", url, timeout=2.0)
-        except exceptions.MaxRetryError:
-            return {}
-
-        decoded = response.data.decode("utf-8")
-        try:
-            # Occasionally we get an empty response, that, without the try-except block, would have
-            # resulted in:
-            # json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
-            info = json.loads(decoded)
-        except json.decoder.JSONDecodeError:
-            return {}
-
-        if info["database"] == "ok":
-            return info
-        return {}
+        return ""
