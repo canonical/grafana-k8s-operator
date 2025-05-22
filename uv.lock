@@ -1286,7 +1286,7 @@ requires-dist = [
     { name = "jinja2", specifier = "<3" },
     { name = "jsonschema" },
     { name = "juju", marker = "extra == 'dev'", specifier = ">=3.0,<=3.3.0" },
-    { name = "lightkube", specifier = ">=0.11" },
+    { name = "lightkube", specifier = "==0.17.0" },
     { name = "markupsafe", specifier = "==2.0.1" },
     { name = "minio", marker = "extra == 'dev'" },
     { name = "oauth-tools", marker = "extra == 'dev'", git = "https://github.com/canonical/iam-bundle?rev=oauth_tools-v0.1.2" },
@@ -1825,7 +1825,7 @@ wheels = [
 
 [[package]]
 name = "lightkube"
-version = "0.17.1"
+version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
