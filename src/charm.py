@@ -183,7 +183,6 @@ class GrafanaCharm(CharmBase):
 
         self._grafana_client = GrafanaClient(self.internal_url)
         self._grafana_config = GrafanaConfig(
-                                            peers = self.peers,
                                             datasources_config=self._datasource_config,
                                             oauth_config = self._oauth_config,
                                             auth_env_config = lambda: self._auth_env_vars,

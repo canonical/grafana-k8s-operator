@@ -11,13 +11,11 @@ from charms.hydra.v0.oauth import (
 from constants import DATABASE_PATH, DASHBOARDS_DIR
 import configparser
 from io import StringIO
-from peer import PeerData
 
 class GrafanaConfig:
     """Grafana config generator."""
 
     def __init__(self,
-                peers: PeerData,
                 datasources_config: DatasourceConfig,
                 oauth_config: Optional[OauthProviderConfig] = None,
                 auth_env_config: Callable[[],Any] = lambda: {},
@@ -26,7 +24,6 @@ class GrafanaConfig:
                 enable_external_db: bool = False,
                 tracing_endpoint: Optional[str] = None,
                  ):
-        self._peers = peers
         self._datasources_config = datasources_config
         self._oauth_config = oauth_config
         self._auth_env_config = auth_env_config
