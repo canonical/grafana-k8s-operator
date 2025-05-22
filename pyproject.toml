@@ -38,7 +38,6 @@ dev = [
   # Integration
   "juju<=3.3.0,>=3.0",
   "websockets<14.0",
-  "lightkube",
   "minio",
   "oauth-tools",
   "pytest-operator>=0.39",
