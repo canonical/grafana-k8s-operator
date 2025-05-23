@@ -13,7 +13,7 @@ dependencies = [
   "cryptography",
   "jinja2<3",
   "markupsafe==2.0.1", # https://github.com/pallets/markupsafe/issues/371
-  "lightkube==0.17.0",
+  "lightkube",
   # lib/charms/grafana_k8s/v0/grafana_dashboard.py
   # lib/charms/temo_k8s/v1/charm_tracing.py
   "cosl",
