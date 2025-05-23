@@ -132,10 +132,10 @@ platforms:
 
 parts:
   charm:
-    charm-binary-python-packages: [cryptography, jsonschema, pydantic, pydantic-core, maturin]
-    build-packages: [git]
-    plugin: uv
     source: .
+    plugin: uv
+    build-packages: [git]
+    build-snaps: [astral-uv]
     override-build: |
       craftctl default
       git describe --always > $CRAFT_PART_INSTALL/version
