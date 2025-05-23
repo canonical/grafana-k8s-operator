@@ -1,8 +1,8 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from unittest.mock import patch
-from tests.unit.test_charm import BaseTestCharm
+from dataclasses import replace
+from ops.testing import Relation, Secret
 
 OAUTH_CLIENT_ID = "grafana_client_id"
 OAUTH_CLIENT_SECRET = "s3cR#T"
@@ -17,31 +17,23 @@ OAUTH_PROVIDER_INFO = {
 }
 
 
-class TestOauth(BaseTestCharm):
-    def test_config_is_updated_with_oauth_relation_data(self):
-        self.harness.set_leader(True)
-        self.harness.container_pebble_ready("grafana")
+def test_config_is_updated_with_oauth_relation_data(ctx, base_state, peer_relation):
+    # GIVEN an oauth relation AND an oauth secret
+    oauth_secret = Secret({"secret": OAUTH_CLIENT_SECRET})
+    oauth_rel = Relation("oauth", remote_app_name="hydra", remote_app_data={
+            "client_id": OAUTH_CLIENT_ID,
+            "client_secret_id": oauth_secret.id,
+            **OAUTH_PROVIDER_INFO,
+        })
+    state = replace(base_state, relations={peer_relation, oauth_rel}, secrets={oauth_secret})
 
-        # add oauth relation with provider endpoints details
-        rel_id = self.harness.add_relation("oauth", "hydra")
-        self.harness.add_relation_unit(rel_id, "hydra/0")
-        secret_id = self.harness.add_model_secret("hydra", {"secret": OAUTH_CLIENT_SECRET})
-        self.harness.grant_secret(secret_id, "grafana-k8s")
-        self.harness.update_relation_data(
-            rel_id,
-            "hydra",
-            {
-                "client_id": OAUTH_CLIENT_ID,
-                "client_secret_id": secret_id,
-                **OAUTH_PROVIDER_INFO,
-            },
-        )
-
-        services = (
-            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
-        )
+    # WHEN a relation_changed event fires
+    with ctx(ctx.on.relation_changed(oauth_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        # THEN we get oauth env vars set in the workload pebble layer
+        services = charm.unit.get_container("grafana").get_plan().services["grafana"].to_dict()
         env = services["environment"]  # type: ignore
-
         expected_env = {
             "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
             "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
@@ -54,20 +46,20 @@ class TestOauth(BaseTestCharm):
             "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
             "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
         }
-        all(self.assertEqual(env[k], v) for k, v in expected_env.items())
+        for k, v in expected_env.items():
+            assert env[k] == v
 
-    def test_config_with_empty_oauth_relation_data(self):
-        self.harness.set_leader(True)
-        self.harness.container_pebble_ready("grafana")
-
-        rel_id = self.harness.add_relation("oauth", "hydra")
-        self.harness.add_relation_unit(rel_id, "hydra/0")
-
-        services = (
-            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
-        )
+def test_config_with_empty_oauth_relation_data(ctx, base_state, peer_relation):
+    # GIVEN an oauth relation with NO app data
+    oauth_rel = Relation("oauth", remote_app_name="hydra")
+    state = replace(base_state, relations={peer_relation, oauth_rel})
+    # WHEN a relation_changed event fires
+    with ctx(ctx.on.relation_changed(oauth_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        services = charm.unit.get_container("grafana").get_plan().services["grafana"].to_dict()
+        # THEN we get no oauth env vars
         env = services["environment"]  # type: ignore
-
         oauth_env = {
             "GF_AUTH_GENERIC_OAUTH_ENABLED",
             "GF_AUTH_GENERIC_OAUTH_NAME",
@@ -80,42 +72,26 @@ class TestOauth(BaseTestCharm):
             "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN",
             "GF_FEATURE_TOGGLES_ENABLE",
         }
-        all(self.assertNotIn(k, env) for k in oauth_env)
+        for k in oauth_env:
+             assert k not in env
 
-    # The oauth library tries to access the relation databag
-    # when the relation is departing. This causes harness to throw an
-    # error, a behavior not implemented in juju. This will be fixed
-    # once https://github.com/canonical/operator/issues/940 is merged
-    def test_config_is_updated_with_oauth_relation_data_removed(self):
-        patcher = patch("charms.hydra.v0.oauth.OAuthRequirer.is_client_created")
-        self.mock_resolve_dir = patcher.start()
-        self.mock_resolve_dir.return_value = False
-        self.addCleanup(patcher.stop)
-        self.harness.set_leader(True)
-        self.harness.container_pebble_ready("grafana")
+def test_config_is_updated_with_oauth_relation_data_removed(ctx, base_state, peer_relation):
+    # GIVEN an oauth relation AND an oauth secret
+    oauth_secret = Secret({"secret": OAUTH_CLIENT_SECRET})
+    oauth_rel = Relation("oauth", remote_app_name="hydra", remote_app_data={
+            "client_id": OAUTH_CLIENT_ID,
+            "client_secret_id": oauth_secret.id,
+            **OAUTH_PROVIDER_INFO,
+        })
+    state = replace(base_state, relations={peer_relation, oauth_rel}, secrets={oauth_secret})
 
-        # add oauth relation with provider endpoints details
-        rel_id = self.harness.add_relation("oauth", "hydra")
-        self.harness.add_relation_unit(rel_id, "hydra/0")
-        secret_id = self.harness.add_model_secret("hydra", {"secret": OAUTH_CLIENT_SECRET})
-        self.harness.grant_secret(secret_id, "grafana-k8s")
-        self.harness.update_relation_data(
-            rel_id,
-            "hydra",
-            {
-                "client_id": OAUTH_CLIENT_ID,
-                "client_secret_id": secret_id,
-                **OAUTH_PROVIDER_INFO,
-            },
-        )
-        self.mock_resolve_dir.return_value = True
-        rel_id = self.harness.remove_relation(rel_id)
+    # WHEN a relation_broken event fires
+    with ctx(ctx.on.relation_broken(oauth_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        services = charm.unit.get_container("grafana").get_plan().services["grafana"].to_dict()
 
-        services = (
-            self.harness.charm.containers["workload"].get_plan().services["grafana"].to_dict()
-        )
         env = services["environment"]  # type: ignore
-
         oauth_env = {
             "GF_AUTH_GENERIC_OAUTH_ENABLED",
             "GF_AUTH_GENERIC_OAUTH_NAME",
@@ -128,4 +104,6 @@ class TestOauth(BaseTestCharm):
             "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN",
             "GF_FEATURE_TOGGLES_ENABLE",
         }
-        all(self.assertNotIn(k, env) for k in oauth_env)
+        # THEN oauth env vars are not set
+        for k in oauth_env:
+            assert k not in env

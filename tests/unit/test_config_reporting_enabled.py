@@ -1,16 +1,10 @@
-from ops.testing import State, Container
+from dataclasses import replace
 from configparser import ConfigParser
 
 
-containers = [
-    Container(name="grafana", can_connect=True),
-    Container(name="litestream", can_connect=True),
-]
-
-
-def test_reporting_enabled(ctx):
+def test_reporting_enabled(ctx, base_state):
     # GIVEN the "reporting_enabled" config option is set to True
-    state = State(leader=True, config={"reporting_enabled": True}, containers=containers)
+    state = replace(base_state, config={"reporting_enabled": True})
 
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
@@ -24,9 +18,9 @@ def test_reporting_enabled(ctx):
     assert "analytics" not in config
 
 
-def test_reporting_disabled(ctx):
+def test_reporting_disabled(ctx, base_state):
     # GIVEN the "reporting_enabled" config option is set to False
-    state = State(leader=True, config={"reporting_enabled": False}, containers=containers)
+    state = replace(base_state, config={"reporting_enabled": False})
 
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
