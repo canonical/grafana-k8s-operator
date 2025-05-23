@@ -27,6 +27,7 @@ async def test_config_values_are_retained_after_pod_upgraded(ops_test, grafana_c
 
     # set some custom configs to later check they persisted across the test
     config = {"log_level": "error", "admin_user": "jimmy"}
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
     await ops_test.model.applications[app_name].set_config(config)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
