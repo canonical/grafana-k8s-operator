@@ -13,7 +13,7 @@ dependencies = [
   "cryptography",
   "jinja2<3",
   "markupsafe==2.0.1", # https://github.com/pallets/markupsafe/issues/371
-  "lightkube",
+  "lightkube>=0.11",
   # lib/charms/grafana_k8s/v0/grafana_dashboard.py
   # lib/charms/temo_k8s/v1/charm_tracing.py
   "cosl",
@@ -38,6 +38,7 @@ dev = [
   # Integration
   "juju<=3.3.0,>=3.0",
   "websockets<14.0",
+  "lightkube",
   "minio",
   "oauth-tools",
   "pytest-operator>=0.39",

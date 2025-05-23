@@ -133,11 +133,14 @@ platforms:
 parts:
   charm:
     charm-binary-python-packages: [cryptography, jsonschema, pydantic, pydantic-core, maturin]
-    build-packages: [git]
+    # include rustc and cargo to compile pydantic
+    build-packages: [git, rustc, cargo]
     build-snaps: [astral-uv]
     override-build: |
+      uv export --frozen --no-hashes --format=requirements-txt -o requirements.txt
       git describe --always > version
       craftctl default
+    charm-requirements: [requirements.txt]
   static-sqlite3:
     plugin: dump
     source: .
