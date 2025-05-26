@@ -67,9 +67,13 @@ def litestream_container():
     )
 
 @pytest.fixture
-def base_state(grafana_container, litestream_container, peer_relation):
+def containers(grafana_container, litestream_container):
+    return {grafana_container, litestream_container}
+
+@pytest.fixture
+def base_state(containers, peer_relation):
     return State(
         leader=True,
-        containers={grafana_container, litestream_container},
+        containers=containers,
         relations={peer_relation},
     )

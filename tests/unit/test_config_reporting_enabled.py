@@ -1,10 +1,10 @@
-from dataclasses import replace
 from configparser import ConfigParser
+from ops.testing import State
 
 
-def test_reporting_enabled(ctx, base_state):
+def test_reporting_enabled(ctx, containers):
     # GIVEN the "reporting_enabled" config option is set to True
-    state = replace(base_state, config={"reporting_enabled": True})
+    state = State(leader=True, config={"reporting_enabled": True}, containers=containers)
 
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
@@ -18,9 +18,9 @@ def test_reporting_enabled(ctx, base_state):
     assert "analytics" not in config
 
 
-def test_reporting_disabled(ctx, base_state):
+def test_reporting_disabled(ctx, containers):
     # GIVEN the "reporting_enabled" config option is set to False
-    state = replace(base_state, config={"reporting_enabled": False})
+    state = State(leader=True, config={"reporting_enabled": False}, containers=containers)
 
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)

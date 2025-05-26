@@ -22,12 +22,6 @@ class PeerData:
             return self._peers.data
         return None
 
-    @property
-    def has_peers(self) -> bool:
-        """Check whether there are any other Grafanas as peers."""
-        return len(self._peers.units) > 0 if self._peers is not None else False
-
-
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
         if self._peers:

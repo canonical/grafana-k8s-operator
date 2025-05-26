@@ -7,7 +7,15 @@ from unittest.mock import patch
 
 from pytest import mark
 import yaml
-from ops.testing import Relation, Context, Model, Network, BindAddress, Address, CharmEvents, PeerRelation
+from ops.testing import (Relation,
+                        Context,
+                        Model,
+                        Network,
+                        BindAddress,
+                        Address,
+                        CharmEvents,
+                        PeerRelation,
+                        State)
 
 import src.grafana_client as grafana_client
 from src.constants import CONFIG_PATH, DATASOURCES_PATH, PROVISIONING_PATH
@@ -69,6 +77,18 @@ url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
 
 """
 
+@mark.parametrize("leader", (False, True))
+def test_peer_relation_guards(ctx:Context, leader, containers):
+    # GIVEN no peer relation
+    state = State(leader=leader, containers=containers)
+
+    # WHEN an install event is fired
+    with ctx(ctx.on.install(), state) as mgr:
+        # THEN no exceptions are raised
+        mgr.run()
+        charm = mgr.charm
+        # AND there is no peer data
+        assert charm.peers.data is None
 
 
 def test_datasource_config_is_updated_by_raw_grafana_source_relation(ctx:Context, base_state, peer_relation: PeerRelation):
