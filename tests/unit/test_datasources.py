@@ -1,20 +1,14 @@
 import json
 
 from ops import CharmBase, Framework
-from ops.testing import Container, State
-from scenario import Relation, PeerRelation, Context
+from ops.testing import State, Relation, Context
 from unittest.mock import patch
 
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 
-containers = [
-    Container(name="grafana", can_connect=True),
-    Container(name="litestream", can_connect=True),
-]
-
 
 @patch("socket.getfqdn", new=lambda *args: "fqdn")
-def test_datasource_sharing(ctx):
+def test_datasource_sharing(ctx, peer_relation, containers):
     # GIVEN a datasource relation with two remote units
     datasource = Relation(
         "grafana-source",
@@ -30,7 +24,7 @@ def test_datasource_sharing(ctx):
         },
     )
     state = State(
-        leader=True, containers=containers, relations={datasource, PeerRelation("grafana")}
+        leader=True, containers=containers, relations={datasource, peer_relation}
     )
 
     # WHEN relation-changed fires for a datasource relation

@@ -57,7 +57,6 @@ async def test_certs_created(ops_test: OpsTest):
         f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."relation-id"\'',
     ]
     retcode, stdout, stderr = await ops_test.run(*cmd)
-    relation_id = stdout.rstrip()
 
     # Get relation cert
     cmd = [
@@ -69,7 +68,7 @@ async def test_certs_created(ops_test: OpsTest):
     relation_cert = stdout.rstrip()
 
     # Get pushed cert
-    received_cert_path = f"/usr/local/share/ca-certificates/trusted-ca-cert-{relation_id}-ca.crt"
+    received_cert_path = "/usr/local/share/ca-certificates/trusted-ca-cert.crt"
     rc, stdout, stderr = await ops_test.juju(
         "ssh", "--container", "grafana", unit_name, "cat", f"{received_cert_path}"
     )
