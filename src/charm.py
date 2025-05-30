@@ -68,7 +68,7 @@ from grafana_client import GrafanaClient, GrafanaCommError
 from grafana_config import GrafanaConfig
 from secret_storage import generate_password
 from litestream import Litestream
-from peer import PeerData
+from relation import Relation
 from models import DatasourceConfig, PebbleEnvironment, TLSConfig
 from constants import (
     PEER_RELATION,
@@ -112,7 +112,7 @@ class GrafanaCharm(CharmBase):
         # -- initialize states --
         self._topology = JujuTopology.from_charm(self)
         self._fqdn = socket.getfqdn()
-        self.peers = PeerData(app=self.app, peers=self.model.get_relation(PEER_RELATION))
+        self.peers = Relation(app=self.app, relation=self.model.get_relation(PEER_RELATION))
         self._secret_storage = SecretStorage(self, "admin-password",
                                              default=lambda: {"password": generate_password()})
 
@@ -420,7 +420,7 @@ class GrafanaCharm(CharmBase):
     @property
     def _db_config(self) -> Optional[Dict[str, str]]:
         if self._enable_external_db:
-            peer_data = self.peers.get_peer_data("database")
+            peer_data = self.peers.get_app_data("database")
             if not peer_data:
                 return None
             return peer_data
@@ -442,7 +442,7 @@ class GrafanaCharm(CharmBase):
 
     @property
     def _auth_env_vars(self):
-        return self.peers.get_peer_data("auth_conf_env_vars")
+        return self.peers.get_app_data("auth_conf_env_vars")
 
     @property
     def _tls_config(self) -> Optional[TLSConfig]:
@@ -555,7 +555,7 @@ class GrafanaCharm(CharmBase):
 
         # add the new database relation data to the datastore
         db_info = {field: value for field, value in database_fields.items() if value}
-        self.peers.set_peer_data("database", db_info)
+        self.peers.set_app_data("database", db_info)
         self._grafana_service.reconcile()
 
     def _on_database_broken(self, event: RelationBrokenEvent) -> None:
@@ -572,7 +572,7 @@ class GrafanaCharm(CharmBase):
             return
 
         # remove the existing database info from datastore
-        self.peers.set_peer_data("database", {})
+        self.peers.set_app_data("database", {})
         logger.info("Removing the grafana-k8s database backend config")
         # Cleanup the config file
         self._grafana_service.reconcile()
@@ -643,10 +643,10 @@ class GrafanaCharm(CharmBase):
         """
         if not self.unit.is_leader():
             return
-        if not self.peers.get_peer_data("auth_conf_env_vars"):
+        if not self.peers.get_app_data("auth_conf_env_vars"):
             env_vars = self._generate_auth_env_vars(event.auth)  # type: ignore[attr-defined]
             if env_vars:
-                self.peers.set_peer_data("auth_conf_env_vars", env_vars)
+                self.peers.set_app_data("auth_conf_env_vars", env_vars)
                 self._grafana_service.reconcile()
 
     def _on_grafana_source_changed(self, _) -> None:

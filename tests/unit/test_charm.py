@@ -336,7 +336,7 @@ def test_primary_sets_correct_peer_data(ctx, base_state):
         assert unit_binding
         unit_ip = str(unit_binding.network.bind_address)
         # THEN the leader unit set peer data replica_primary
-        replica_address = charm.peers.get_peer_data("replica_primary")
+        replica_address = charm.peers.get_app_data("replica_primary")
         assert unit_ip == replica_address
 
 @mark.parametrize(

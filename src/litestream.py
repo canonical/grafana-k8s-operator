@@ -10,7 +10,7 @@ from ops.pebble import (
     Layer,
 )
 import yaml
-from peer import PeerData
+from relation import Relation
 from constants import DATABASE_PATH
 
 logger = logging.getLogger()
@@ -22,7 +22,7 @@ class Litestream:
     def __init__(self,
                 container: Container,
                 is_leader: bool,
-                peers: PeerData,):
+                peers: Relation,):
         self._container=container
         self._is_leader = is_leader
         self._fqdn = socket.getfqdn()
@@ -34,10 +34,10 @@ class Litestream:
         config = {}
 
         if self._is_leader:
-            self._peers.set_peer_data("replica_primary", socket.gethostbyname(self._fqdn))
+            self._peers.set_app_data("replica_primary", socket.gethostbyname(self._fqdn))
             config["LITESTREAM_ADDR"] = f"{socket.gethostbyname(self._fqdn)}:{9876}"
         else:
-            config["LITESTREAM_UPSTREAM_URL"] = f"{self._peers.get_peer_data('replica_primary')}:{9876}"
+            config["LITESTREAM_UPSTREAM_URL"] = f"{self._peers.get_app_data('replica_primary')}:{9876}"
 
         layer = Layer(
             {
