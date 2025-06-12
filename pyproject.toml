@@ -49,6 +49,7 @@ dev = [
   "asyncstdlib",
   "sh",
   "tenacity",
+  "jubilant",
 ]
 
 # Testing tools configuration

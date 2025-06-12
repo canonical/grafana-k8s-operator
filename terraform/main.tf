@@ -1,12 +1,15 @@
 resource "juju_application" "grafana" {
-  name  = var.app_name
-  model = var.model_name
-  trust = true
+  name               = var.app_name
+  config             = var.config
+  constraints        = var.constraints
+  model              = var.model
+  storage_directives = var.storage_directives
+  trust              = true
+  units              = var.units
+
   charm {
     name     = "grafana-k8s"
     channel  = var.channel
     revision = var.revision
   }
-  units  = var.units
-  config = var.config
 }
