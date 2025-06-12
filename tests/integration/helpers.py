@@ -12,9 +12,7 @@ from asyncstdlib import functools
 from pytest_operator.plugin import OpsTest
 from urllib.parse import urlparse
 from workload import Grafana
-from juju.application import Application
 from juju.unit import Unit
-from minio import Minio
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
