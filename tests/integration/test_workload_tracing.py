@@ -13,6 +13,7 @@ from helpers import oci_image
 from minio import Minio
 from requests import request
 from tenacity import retry, stop_after_attempt, wait_fixed
+from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,9 @@ async def check_traces_from_app(tempo_ip: str, app: str):
 
 
 @pytest.mark.abort_on_fail
-async def test_workload_tracing_is_present(juju: jubilant.Juju, grafana_charm: str):
+async def test_workload_tracing_is_present(ops_test: OpsTest, grafana_charm: str):
+    assert ops_test.model
+    juju = jubilant.Juju(model=ops_test.model.name)
     minio_user = "accesskey"
     minio_pass = "secretkey"
     minio_bucket = "tempo"
