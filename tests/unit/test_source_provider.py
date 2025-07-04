@@ -200,3 +200,31 @@ class TestDashboardProviderNoRefreshEvent(unittest.TestCase):
         self.harness.begin_with_initial_hooks()
 
         self.harness.container_pebble_ready("grafana-tester")
+
+
+class ProviderNoUnitDataCharm(CharmBase):
+    _stored = StoredState()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+        self.provider = GrafanaSourceProvider(
+            self,
+            source_type="foobar",
+            source_port="9090",
+            auto_set_unit_data=False,
+            refresh_event=self.on.grafana_tester_pebble_ready,
+        )
+
+
+class TestSourceProviderNoUnitData(unittest.TestCase):
+    def setUp(self):
+        self.harness = Harness(ProviderNoUnitDataCharm, meta=CONSUMER_META)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
+        self.harness.begin()
+
+    def test_provider_unit_does_not_set_source_uri(self):
+        rel_id = self.harness.add_relation("grafana-source", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
+        self.assertNotIn("grafana_source_host", data)

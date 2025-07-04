@@ -163,7 +163,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 27
+LIBPATCH = 28
 
 logger = logging.getLogger(__name__)
 
@@ -343,6 +343,7 @@ class GrafanaSourceProvider(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         extra_fields: Optional[dict] = None,
         secure_extra_fields: Optional[dict] = None,
+        auto_set_unit_data: bool = True,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -385,6 +386,9 @@ class GrafanaSourceProvider(Object):
                 for some datasources in the `jsonData` field
             secure_extra_fields: a :dict: which is used for additional information required
                 for some datasources in the `secureJsonData`
+            auto_set_unit_data: toggle whether the datasource URL will be automatically published
+                over unit databag whenever a 'refresh event' occurs or `update_source()` is called.
+                App data will still always be set by the leader.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
@@ -421,11 +425,14 @@ class GrafanaSourceProvider(Object):
             )
 
         self._source_port = source_port
+        self._auto_set_unit_data = auto_set_unit_data
+
         self._source_url = self._sanitize_source_url(source_url)
 
         self.framework.observe(events.relation_joined, self._set_sources_from_event)
-        for ev in refresh_event:
-            self.framework.observe(ev, self._set_unit_details)
+        if auto_set_unit_data:
+            for ev in refresh_event:
+                self.framework.observe(ev, self._set_unit_details)
 
     def _sanitize_source_url(self, source_url: Optional[str]) -> Optional[str]:
         if source_url and not re.match(r"^\w+://", source_url):
@@ -484,7 +491,8 @@ class GrafanaSourceProvider(Object):
 
     def _set_sources(self, rel: Relation):
         """Inform the consumer about the source configuration."""
-        self._set_unit_details(rel)
+        if self._auto_set_unit_data:
+            self._set_unit_details(rel)
 
         if not self._charm.unit.is_leader():
             return
