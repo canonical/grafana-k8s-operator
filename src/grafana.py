@@ -13,6 +13,7 @@
 #  limitations under the License.
 
 """A module used for interacting with a running Grafana instance."""
+
 import time
 from pathlib import Path
 import os
@@ -44,7 +45,7 @@ from constants import (
     PROVISIONING_PATH,
     DATASOURCES_PATH,
     DASHBOARDS_DIR,
-    TRUSTED_CA_CERT_PATH
+    TRUSTED_CA_CERT_PATH,
 )
 from grafana_config import GrafanaConfig
 
@@ -54,18 +55,19 @@ logger = logging.getLogger()
 class Grafana:
     """Grafana workload."""
 
-    def __init__(self,
-                container: Container,
-                is_leader: bool,
-                grafana_config_generator: GrafanaConfig,
-                pebble_env: PebbleEnvironment,
-                enable_profiling: bool = False,
-                tls_config: Optional[TLSConfig] = None,
-                trusted_ca_certs: Optional[str] = None,
-                dashboards: List[Dict] = [],
-                provision_own_dashboard: bool = False,
-                scheme: str = "http",
-                ) -> None:
+    def __init__(
+        self,
+        container: Container,
+        is_leader: bool,
+        grafana_config_generator: GrafanaConfig,
+        pebble_env: PebbleEnvironment,
+        enable_profiling: bool = False,
+        tls_config: Optional[TLSConfig] = None,
+        trusted_ca_certs: Optional[str] = None,
+        dashboards: List[Dict] = [],
+        provision_own_dashboard: bool = False,
+        scheme: str = "http",
+    ) -> None:
         """A class to bring up and check a Grafana server."""
         self._container = container
         self._is_leader = is_leader
@@ -78,8 +80,7 @@ class Grafana:
         self._provision_own_dashboard = provision_own_dashboard
         self._current_config_hash = None
         self._current_datasources_hash = None
-        self._scheme =  scheme
-
+        self._scheme = scheme
 
     @property
     def grafana_version(self) -> str:
@@ -97,7 +98,6 @@ class Grafana:
         if not result:
             return ""
         return result.group(1)
-
 
     @property
     def _layer(self) -> Layer:
@@ -177,11 +177,7 @@ class Grafana:
 
         tracing_resource_attrs = self._pebble_env.tracing_resource_attributes
         if tracing_resource_attrs:
-            extra_info.update(
-                {
-                    "OTEL_RESOURCE_ATTRIBUTES": tracing_resource_attrs
-                }
-            )
+            extra_info.update({"OTEL_RESOURCE_ATTRIBUTES": tracing_resource_attrs})
 
         # if we have any profiling relations, switch on profiling
         if self._enable_profiling:
@@ -216,12 +212,14 @@ class Grafana:
                             "GF_LOG_LEVEL": self._pebble_env.log_level,
                             "GF_PLUGINS_ENABLE_ALPHA": "true",
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
-                            "GF_SECURITY_ALLOW_EMBEDDING": str(self._pebble_env.allow_embedding).lower(),
+                            "GF_SECURITY_ALLOW_EMBEDDING": str(
+                                self._pebble_env.allow_embedding
+                            ).lower(),
                             "GF_AUTH_ANONYMOUS_ENABLED": str(
                                 self._pebble_env.allow_anonymous_access
                             ).lower(),
                             "GF_USERS_AUTO_ASSIGN_ORG": str(
-                               self._pebble_env.enable_auto_assign_org
+                                self._pebble_env.enable_auto_assign_org
                             ).lower(),
                             **extra_info,
                         },
@@ -252,7 +250,6 @@ class Grafana:
         """Sets the Grafana datasources config hash."""
         self._current_datasources_hash = hash
 
-
     def reconcile(self):
         """Unconditional control logic."""
         if self._container.can_connect():
@@ -269,7 +266,6 @@ class Grafana:
             if any(changes):
                 self._restart_grafana()
 
-
     def _provision_dirs(self):
         for d in ("plugins", "notifiers", "alerting", "dashboards"):
             path = Path(PROVISIONING_PATH) / d
@@ -279,7 +275,9 @@ class Grafana:
     def _reconcile_dashboards(self):
         dashboards_file_to_be_kept = {}
         try:
-            for dashboard_file in self._container.list_files(DASHBOARDS_DIR, pattern="juju_*.json"):
+            for dashboard_file in self._container.list_files(
+                DASHBOARDS_DIR, pattern="juju_*.json"
+            ):
                 dashboards_file_to_be_kept[dashboard_file.path] = False
 
             for dashboard in self._dashboards:
@@ -307,7 +305,7 @@ class Grafana:
         # provision a self-monitoring dashboard
         self._reconcile_own_dashboard()
 
-    def _reconcile_dashboards_config(self, changes:List):
+    def _reconcile_dashboards_config(self, changes: List):
         """Initialise the provisioning of Grafana dashboards."""
         logger.info("Initializing dashboard provisioning path")
 
@@ -328,10 +326,10 @@ class Grafana:
         """
         if self._trusted_ca_certs:
             current = (
-                    self._container.pull(TRUSTED_CA_CERT_PATH).read()
-                    if self._container.exists(TRUSTED_CA_CERT_PATH)
-                    else ""
-                )
+                self._container.pull(TRUSTED_CA_CERT_PATH).read()
+                if self._container.exists(TRUSTED_CA_CERT_PATH)
+                else ""
+            )
             if current == self._trusted_ca_certs:
                 return
 
@@ -342,7 +340,6 @@ class Grafana:
             if self._container.exists(TRUSTED_CA_CERT_PATH):
                 changes.append(True)
                 self._container.remove_path(TRUSTED_CA_CERT_PATH, recursive=True)
-
 
     def _reconcile_tls_config(self, changes: List):
         for cert, cert_path in (
@@ -359,11 +356,11 @@ class Grafana:
                 if current == cert:
                     continue
                 changes.append(True)
-                self._container.push(cert_path, cert ,make_dirs=True)
+                self._container.push(cert_path, cert, make_dirs=True)
             else:
                 if self._container.exists(cert_path):
                     changes.append(True)
-                    self._container.remove_path(cert_path,recursive=True)
+                    self._container.remove_path(cert_path, recursive=True)
 
         self._container.exec(["update-ca-certificates", "--fresh"]).wait()
 
@@ -381,7 +378,7 @@ class Grafana:
             logger.info("Updated Grafana's base configuration")
             changes.append(True)
 
-    def _reconcile_ds_config(self, changes:List):
+    def _reconcile_ds_config(self, changes: List):
         """Check whether datasources need to be (re)provisioned."""
         grafana_datasources = self._grafana_config_generator.generate_datasource_config()
         datasources_hash = hashlib.sha256(str(grafana_datasources).encode("utf-8")).hexdigest()
@@ -394,7 +391,7 @@ class Grafana:
             if self._is_leader:
                 changes.append(True)
 
-    def _reconcile_pebble_plan(self, changes:List):
+    def _reconcile_pebble_plan(self, changes: List):
         if self._container.get_plan().services != self._layer.services:
             changes.append(True)
 
@@ -430,7 +427,9 @@ class Grafana:
             except ExecError as e:
                 # debug because, on initial container startup when Grafana has an open lock and is
                 # populating, this comes up with ERRCODE: 26
-                logger.debug("Could not apply journal_mode pragma. Exit code: {}".format(e.exit_code))
+                logger.debug(
+                    "Could not apply journal_mode pragma. Exit code: {}".format(e.exit_code)
+                )
             except ConnectionError:
                 logger.error(
                     "Could not restart grafana-k8s -- Pebble socket does "
@@ -449,7 +448,7 @@ class Grafana:
         )
 
     def _poll_container(
-            self, func: Callable[[], bool], timeout: float = 2.0, delay: float = 0.1
+        self, func: Callable[[], bool], timeout: float = 2.0, delay: float = 0.1
     ) -> bool:
         """Try to poll the container to work around Container.is_connect() being point-in-time.
 
@@ -472,8 +471,6 @@ class Grafana:
 
         return False
 
-
-
     def _update_config_file(self, config_path: str, config: str) -> None:
         """Write an updated Grafana configuration file to the Pebble container if necessary.
 
@@ -484,9 +481,7 @@ class Grafana:
         try:
             self._container.push(config_path, config, make_dirs=True)
         except ConnectionError:
-            logger.error(
-                "Could not push config. Pebble refused connection. Shutting down?"
-            )
+            logger.error("Could not push config. Pebble refused connection. Shutting down?")
 
     def _reconcile_own_dashboard(self) -> None:
         """If all the prerequisites are enabled, provision a self-monitoring dashboard.
@@ -511,7 +506,6 @@ class Grafana:
                 self._container.remove_path(dashboard_path)
                 logger.debug("Removed dashboard %s", dashboard_path)
 
-
     def _get_hash_for_file(self, file: str) -> str:
         """Tries to connect to the container and hash a file.
 
@@ -524,9 +518,7 @@ class Grafana:
             return hash
         except (FileNotFoundError, ProtocolError, PathError) as e:
             logger.warning(
-                "Could not read configuration from the Grafana workload container: {}".format(
-                    e
-                )
+                "Could not read configuration from the Grafana workload container: {}".format(e)
             )
 
         return ""

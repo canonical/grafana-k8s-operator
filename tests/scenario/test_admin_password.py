@@ -67,20 +67,22 @@ def test_can_get_password(ctx):
     assert len(state_out.secrets) == 1
     secret = list(state_out.secrets)[0]
     assert pwd, "password is empty"
-    assert secret.latest_content['password'] == pwd
+    assert secret.latest_content["password"] == pwd
 
 
 @pytest.mark.parametrize("leader", (True, False))
 def test_action_happy_path(ctx, leader):
     # GIVEN a grafana unit with the secret created already
     pwd = "abcde"
-    state = testing.State(leader=leader, secrets={
-        testing.Secret(tracked_content={"password": pwd}, label="admin-password")})
+    state = testing.State(
+        leader=leader,
+        secrets={testing.Secret(tracked_content={"password": pwd}, label="admin-password")},
+    )
 
     # WHEN we run the get-admin-password action
     with grafana_ready(True):
         with password_changed(False):
-            ctx.run(ctx.on.action('get-admin-password'), state)
+            ctx.run(ctx.on.action("get-admin-password"), state)
 
     # THEN the secret's password matches the pre-existing password
     assert ctx.action_results["admin-password"] == pwd
@@ -94,7 +96,7 @@ def test_action_no_secret_yet_follower(ctx):
     with password_changed(False):
         with grafana_ready(True):
             with pytest.raises(testing.ActionFailed) as failure:
-                ctx.run(ctx.on.action('get-admin-password'), state)
+                ctx.run(ctx.on.action("get-admin-password"), state)
 
     # THEN the action fails with this message
     assert failure.value.message == GrafanaCharm.GetAdminPWDFailures.waiting_for_leader
@@ -104,14 +106,16 @@ def test_action_no_secret_yet_follower(ctx):
 def test_action_grafana_down(ctx, leader):
     # GIVEN a grafana unit, leader or not, with the secret ready
     pwd = "abcde"
-    state = testing.State(leader=leader, secrets={
-        testing.Secret(tracked_content={"password": pwd}, label="admin-password")})
+    state = testing.State(
+        leader=leader,
+        secrets={testing.Secret(tracked_content={"password": pwd}, label="admin-password")},
+    )
 
     # AND GIVEN grafana is not ready
     # WHEN we run the get-admin-password action
     with grafana_ready(False):
         with pytest.raises(testing.ActionFailed) as failure:
-            ctx.run(ctx.on.action('get-admin-password'), state)
+            ctx.run(ctx.on.action("get-admin-password"), state)
 
     # THEN the action fails with this message
     assert failure.value.message == GrafanaCharm.GetAdminPWDFailures.not_reachable
@@ -121,17 +125,25 @@ def test_action_grafana_down(ctx, leader):
 def test_action_password_changed(ctx, leader):
     # GIVEN a grafana unit with the secret created already
     pwd = "abcde"
-    state = testing.State(leader=leader, secrets={
-        testing.Secret(tracked_content={"password": pwd}, label="admin-password")})
+    state = testing.State(
+        leader=leader,
+        secrets={testing.Secret(tracked_content={"password": pwd}, label="admin-password")},
+    )
 
     # AND GIVEN the admin password was changed behind the scenes
     # WHEN we run the get-admin-password action
     with password_changed(True):
         with grafana_ready(True):
-            ctx.run(ctx.on.action('get-admin-password'), state)
+            ctx.run(ctx.on.action("get-admin-password"), state)
 
     # THEN we obtain an error message
     if leader:
-        assert ctx.action_results["admin-password"] == GrafanaCharm.GetAdminPWDFailures.changed_by_admin
+        assert (
+            ctx.action_results["admin-password"]
+            == GrafanaCharm.GetAdminPWDFailures.changed_by_admin
+        )
     else:
-        assert ctx.action_results["admin-password"] == GrafanaCharm.GetAdminPWDFailures.perhaps_changed_by_admin
+        assert (
+            ctx.action_results["admin-password"]
+            == GrafanaCharm.GetAdminPWDFailures.perhaps_changed_by_admin
+        )

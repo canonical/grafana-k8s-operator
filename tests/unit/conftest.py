@@ -13,8 +13,10 @@ from grafana import Grafana
 
 GRAFANA_FQDN = "grafana-k8s-0.testmodel.svc.cluster.local"
 
+
 def tautology(*_, **__) -> bool:
     return True
+
 
 @pytest.fixture(autouse=True, scope="session")
 def disable_charm_tracing():
@@ -46,16 +48,16 @@ def ctx():
     for p in patches:
         p.__exit__(None, None, None)
 
+
 @pytest.fixture
 def peer_relation():
     return PeerRelation("grafana")
 
+
 @pytest.fixture(scope="function")
 def grafana_container():
     return Container(
-        "grafana",
-        can_connect=True,
-        execs={Exec(("update-ca-certificates", "--fresh"))}
+        "grafana", can_connect=True, execs={Exec(("update-ca-certificates", "--fresh"))}
     )
 
 
@@ -66,9 +68,11 @@ def litestream_container():
         can_connect=True,
     )
 
+
 @pytest.fixture
 def containers(grafana_container, litestream_container):
     return {grafana_container, litestream_container}
+
 
 @pytest.fixture
 def base_state(containers, peer_relation):

@@ -1,14 +1,16 @@
 # Copyright 2025 Canonical
 # See LICENSE file for licensing details.
 """Relation class."""
+
 import json
 from typing import Any, Optional
 import ops
 
+
 class Relation:
     """A helper class to manage relation data."""
 
-    def __init__(self, app:ops.Application, relation: Optional[ops.Relation]):
+    def __init__(self, app: ops.Application, relation: Optional[ops.Relation]):
         self._relation = relation
         self._app = app
 

@@ -5,25 +5,25 @@
 import yaml
 from models import DatasourceConfig
 from typing import Callable, Optional, Dict, Any
-from charms.hydra.v0.oauth import (
-    OauthProviderConfig
-)
+from charms.hydra.v0.oauth import OauthProviderConfig
 from constants import DATABASE_PATH, DASHBOARDS_DIR
 import configparser
 from io import StringIO
 
+
 class GrafanaConfig:
     """Grafana config generator."""
 
-    def __init__(self,
-                datasources_config: DatasourceConfig,
-                oauth_config: Optional[OauthProviderConfig] = None,
-                auth_env_config: Callable[[],Any] = lambda: {},
-                db_config: Callable[[],Optional[Dict[str, str]]]  = lambda: None,
-                enable_reporting: bool = True,
-                enable_external_db: bool = False,
-                tracing_endpoint: Optional[str] = None,
-                 ):
+    def __init__(
+        self,
+        datasources_config: DatasourceConfig,
+        oauth_config: Optional[OauthProviderConfig] = None,
+        auth_env_config: Callable[[], Any] = lambda: {},
+        db_config: Callable[[], Optional[Dict[str, str]]] = lambda: None,
+        enable_reporting: bool = True,
+        enable_external_db: bool = False,
+        tracing_endpoint: Optional[str] = None,
+    ):
         self._datasources_config = datasources_config
         self._oauth_config = oauth_config
         self._auth_env_config = auth_env_config
@@ -31,7 +31,6 @@ class GrafanaConfig:
         self._enable_reporting = enable_reporting
         self._enable_external_db = enable_external_db
         self._tracing_endpoint = tracing_endpoint
-
 
     @property
     def oauth_config(self) -> Optional[OauthProviderConfig]:
@@ -45,7 +44,11 @@ class GrafanaConfig:
 
     def generate_grafana_config(self) -> str:
         """Generate a configuration for Grafana."""
-        configs = [self._generate_tracing_config(), self._generate_analytics_config(), self._generate_database_config()]
+        configs = [
+            self._generate_tracing_config(),
+            self._generate_analytics_config(),
+            self._generate_database_config(),
+        ]
         if not self._enable_external_db:
             with StringIO() as data:
                 config_ini = configparser.ConfigParser()
@@ -117,7 +120,6 @@ class GrafanaConfig:
         }
         return yaml.dump(dashboard_config)
 
-
     def _generate_tracing_config(self) -> str:
         """Generate tracing configuration.
 
@@ -145,7 +147,6 @@ class GrafanaConfig:
         ret = data.getvalue()
         return ret
 
-
     def _generate_analytics_config(self) -> str:
         """Generate analytics configuration.
 
@@ -166,7 +167,6 @@ class GrafanaConfig:
         config_ini.write(data)
         ret = data.getvalue()
         return ret
-
 
     def _generate_database_config(self) -> str:
         """Generate a database configuration.

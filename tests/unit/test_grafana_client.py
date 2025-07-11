@@ -6,6 +6,7 @@ from unittest.mock import patch
 import urllib3
 from src.grafana_client import GrafanaClient
 
+
 @patch("src.grafana_client.urllib3.PoolManager.request")
 def test_grafana_client_returns_valid_data(request, ctx, base_state):
     # GIVEN a mocked http request
@@ -59,6 +60,7 @@ def test_grafana_client_becomes_ready(request, ctx, base_state):
     # THEN is_ready is True
     assert is_ready
 
+
 @patch("src.grafana_client.urllib3.PoolManager.request")
 def test_grafana_client_is_unready(request, ctx, base_state):
     request.return_value.data = bytes(
@@ -75,4 +77,3 @@ def test_grafana_client_is_unready(request, ctx, base_state):
     # THEN is_ready is False
     assert is_ready is not None
     assert not is_ready
-

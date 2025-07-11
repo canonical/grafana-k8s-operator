@@ -50,7 +50,7 @@ from charms.grafana_k8s.v0.grafana_source import (
 from charms.hydra.v0.oauth import (
     ClientConfig as OauthClientConfig,
     OAuthRequirer,
-    OauthProviderConfig
+    OauthProviderConfig,
 )
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     KubernetesComputeResourcesPatch,
@@ -80,9 +80,11 @@ from constants import (
     PROFILING_PORT,
     OAUTH_GRANT_TYPES,
     REQUIRED_DATABASE_FIELDS,
-    VALID_AUTHENTICATION_MODES)
+    VALID_AUTHENTICATION_MODES,
+)
 
 logger = logging.getLogger()
+
 
 @trace_charm(
     tracing_endpoint="charm_tracing_endpoint",
@@ -113,9 +115,9 @@ class GrafanaCharm(CharmBase):
         self._topology = JujuTopology.from_charm(self)
         self._fqdn = socket.getfqdn()
         self.peers = Relation(app=self.app, relation=self.model.get_relation(PEER_RELATION))
-        self._secret_storage = SecretStorage(self, "admin-password",
-                                             default=lambda: {"password": generate_password()})
-
+        self._secret_storage = SecretStorage(
+            self, "admin-password", default=lambda: {"password": generate_password()}
+        )
 
         # -- cert_handler
         # Assuming FQDN is always part of the SANs DNS.
@@ -165,7 +167,6 @@ class GrafanaCharm(CharmBase):
         # -- grafana_dashboard relation observations
         self.dashboard_consumer = GrafanaDashboardConsumer(self, "grafana-dashboard")
 
-
         # -- k8s resource patch
         self.resource_patch = KubernetesComputeResourcesPatch(
             self, GRAFANA_WORKLOAD, resource_reqs_func=self._resource_reqs_from_config
@@ -183,28 +184,30 @@ class GrafanaCharm(CharmBase):
 
         self._grafana_client = GrafanaClient(self.internal_url)
         self._grafana_config = GrafanaConfig(
-                                            datasources_config=self._datasource_config,
-                                            oauth_config = self._oauth_config,
-                                            auth_env_config = lambda: self._auth_env_vars,
-                                            db_config=lambda: self._db_config,
-                                            enable_reporting = bool(self.config["reporting_enabled"]),
-                                            enable_external_db=self._enable_external_db,
-                                            tracing_endpoint=self._workload_tracing_endpoint,
-                                            )
+            datasources_config=self._datasource_config,
+            oauth_config=self._oauth_config,
+            auth_env_config=lambda: self._auth_env_vars,
+            db_config=lambda: self._db_config,
+            enable_reporting=bool(self.config["reporting_enabled"]),
+            enable_external_db=self._enable_external_db,
+            tracing_endpoint=self._workload_tracing_endpoint,
+        )
         self._grafana_service = Grafana(
-                                        container=self.unit.get_container("grafana"),
-                                        is_leader= self.unit.is_leader(),
-                                        grafana_config_generator=self._grafana_config,
-                                        pebble_env=self._pebble_env,
-                                        tls_config = self._tls_config,
-                                        trusted_ca_certs = self._trusted_ca_certs,
-                                        dashboards = self.dashboard_consumer.dashboards,
-                                        provision_own_dashboard = self._provision_own_dashboard,
-                                        scheme=self._scheme,
-                                        )
-        self._litestream = Litestream(self.unit.get_container("litestream"),
-                                      is_leader= self.unit.is_leader(),
-                                        peers = self.peers)
+            container=self.unit.get_container("grafana"),
+            is_leader=self.unit.is_leader(),
+            grafana_config_generator=self._grafana_config,
+            pebble_env=self._pebble_env,
+            tls_config=self._tls_config,
+            trusted_ca_certs=self._trusted_ca_certs,
+            dashboards=self.dashboard_consumer.dashboards,
+            provision_own_dashboard=self._provision_own_dashboard,
+            scheme=self._scheme,
+        )
+        self._litestream = Litestream(
+            self.unit.get_container("litestream"),
+            is_leader=self.unit.is_leader(),
+            peers=self.peers,
+        )
 
         self.framework.observe(
             self.on.get_admin_password_action,  # pyright: ignore
@@ -213,8 +216,12 @@ class GrafanaCharm(CharmBase):
 
         # FIXME: we still need to observe these events as they contain the required data
         # update the charm lib to work with the reconcile approach
-        self.framework.observe(self.on[DATABASE_RELATION].relation_changed, self._on_database_changed)
-        self.framework.observe(self.on[DATABASE_RELATION].relation_broken, self._on_database_broken)
+        self.framework.observe(
+            self.on[DATABASE_RELATION].relation_changed, self._on_database_changed
+        )
+        self.framework.observe(
+            self.on[DATABASE_RELATION].relation_broken, self._on_database_broken
+        )
         self.framework.observe(
             self.grafana_auth_requirer.on.auth_conf_available,  # pyright: ignore
             self._on_grafana_auth_conf_available,
@@ -232,7 +239,6 @@ class GrafanaCharm(CharmBase):
         )
 
         self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
-
 
         self._reconcile()
 
@@ -325,7 +331,6 @@ class GrafanaCharm(CharmBase):
         job = {"static_configs": [{"targets": [f"*:{PROFILING_PORT}"]}], "scheme": self._scheme}
         return [job]
 
-
     @property
     def _trusted_ca_certs(self) -> Optional[str]:
         certs = []
@@ -342,7 +347,6 @@ class GrafanaCharm(CharmBase):
         if len(certs) > 0:
             return "\n".join(certs)
         return None
-
 
     @property
     def unique_name(self):
@@ -378,18 +382,22 @@ class GrafanaCharm(CharmBase):
     @property
     def _datasource_config(self) -> DatasourceConfig:
         return DatasourceConfig(
-            datasources=lambda : self.source_consumer.sources,
-            datasources_to_delete=lambda : self.source_consumer.sources_to_delete,
+            datasources=lambda: self.source_consumer.sources,
+            datasources_to_delete=lambda: self.source_consumer.sources_to_delete,
             query_timeout=int(self.model.config.get("datasource_query_timeout", 0)),
         )
 
     @property
     def _pebble_env(self) -> PebbleEnvironment:
         topology = self._topology
-        tracing_resource_attrs = ((f"juju_application={topology.application},juju_model={topology.model}" + \
-                                f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}") \
-                            if self._workload_tracing_endpoint
-                            else None)
+        tracing_resource_attrs = (
+            (
+                f"juju_application={topology.application},juju_model={topology.model}"
+                + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}"
+            )
+            if self._workload_tracing_endpoint
+            else None
+        )
         return PebbleEnvironment(
             external_url=self.external_url,
             log_level=str(self.model.config["log_level"]),
@@ -398,8 +406,8 @@ class GrafanaCharm(CharmBase):
             enable_auto_assign_org=bool(self.model.config["enable_auto_assign_org"]),
             enable_profiling=bool(self.model.relations.get("profiling-endpoint")),
             tracing_resource_attributes=tracing_resource_attrs,
-            admin_password = self.admin_password,
-            admin_user = str(self.model.config["admin_user"]),
+            admin_password=self.admin_password,
+            admin_user=str(self.model.config["admin_user"]),
         )
 
     @property
@@ -407,9 +415,7 @@ class GrafanaCharm(CharmBase):
         source_related_apps = [rel.app for rel in self.model.relations["grafana-source"]]
         scrape_related_apps = [rel.app for rel in self.model.relations["metrics-endpoint"]]
 
-        return any(
-            source for source in source_related_apps if source in scrape_related_apps
-        )
+        return any(source for source in source_related_apps if source in scrape_related_apps)
 
     @property
     def _enable_external_db(self) -> bool:
@@ -449,9 +455,9 @@ class GrafanaCharm(CharmBase):
         cert_handler = self.cert_handler
         if cert_handler.available:
             return TLSConfig(
-                certificate=cert_handler.server_cert, #type: ignore
-                key=cert_handler.private_key, #type: ignore
-                ca = cert_handler.ca_cert, #type: ignore
+                certificate=cert_handler.server_cert,  # type: ignore
+                key=cert_handler.private_key,  # type: ignore
+                ca=cert_handler.ca_cert,  # type: ignore
             )
         return None
 
@@ -461,7 +467,7 @@ class GrafanaCharm(CharmBase):
         contents = self._secret_storage.contents
         if not contents:
             return None
-        return contents.get('password')
+        return contents.get("password")
 
     def _reconcile(self):
         """Unconditional control logic."""
@@ -474,7 +480,6 @@ class GrafanaCharm(CharmBase):
         self._grafana_service.reconcile()
         self._litestream.reconcile()
         self._reconcile_tls_config()
-
 
     def _reconcile_tls_config(self) -> None:
         """Update the TLS certificates for the charm container."""
@@ -528,7 +533,6 @@ class GrafanaCharm(CharmBase):
         e.add_status(ActiveStatus())
         e.add_status(self.resource_patch.get_status())
 
-
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
         """Sets configuration information for database connection.
 
@@ -579,10 +583,13 @@ class GrafanaCharm(CharmBase):
 
     class GetAdminPWDFailures:
         """Possible failure messages for get-admin-password failures."""
+
         waiting_for_leader = "Still waiting for the leader to generate an admin password..."
-        not_reachable = 'Grafana is not reachable yet. Please try again in a few minutes'
-        perhaps_changed_by_admin = ("Admin password may have been changed by an administrator. "
-                                    "To be sure, run this action on the leader unit.")
+        not_reachable = "Grafana is not reachable yet. Please try again in a few minutes"
+        perhaps_changed_by_admin = (
+            "Admin password may have been changed by an administrator. "
+            "To be sure, run this action on the leader unit."
+        )
         changed_by_admin = "Admin password has been changed by an administrator."
 
     def _on_get_admin_password(self, event: ActionEvent):
@@ -606,8 +613,10 @@ class GrafanaCharm(CharmBase):
             )
         except GrafanaCommError:
             logger.exception("failed getting admin password from service")
-            event.log("Unexpected exception encountered while getting admin password from service: "
-                      "see logs for more.")
+            event.log(
+                "Unexpected exception encountered while getting admin password from service: "
+                "see logs for more."
+            )
             return event.fail(self.GetAdminPWDFailures.not_reachable)
 
         if pw_changed:
@@ -625,9 +634,7 @@ class GrafanaCharm(CharmBase):
                 }
             )
         else:
-            event.set_results(
-                {"url": self.external_url, "admin-password": admin_password}
-            )
+            event.set_results({"url": self.external_url, "admin-password": admin_password})
         return None
 
     def _on_grafana_auth_conf_available(self, event: AuthRequirerCharmEvents):
@@ -673,7 +680,9 @@ class GrafanaCharm(CharmBase):
 
     def _set_ports(self):
         """Open necessary (and close no longer needed) workload ports."""
-        planned_ports = {Port(protocol="tcp", port=WORKLOAD_PORT)} if self.unit.is_leader() else set()
+        planned_ports = (
+            {Port(protocol="tcp", port=WORKLOAD_PORT)} if self.unit.is_leader() else set()
+        )
         actual_ports = self.unit.opened_ports()
 
         # Ports may change across an upgrade, so need to sync
@@ -689,6 +698,7 @@ class GrafanaCharm(CharmBase):
         limits = {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}
         requests = {"cpu": "0.25", "memory": "200Mi"}
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
+
 
 if __name__ == "__main__":
     main(GrafanaCharm, use_juju_for_storage=True)

@@ -1,4 +1,5 @@
 """Tests that assert GrafanaCharm is wired up correctly to be a grafana-metadata provider."""
+
 from dataclasses import replace
 from unittest.mock import patch, PropertyMock
 
@@ -28,10 +29,7 @@ def test_provider_sender_sends_data_on_relation_joined(ctx, base_state, peer_rel
     state = replace(base_state, relations={relation, peer_relation})
 
     # Act
-    with ctx(
-            ctx.on.relation_joined(relation),
-            state=state
-    ) as manager:
+    with ctx(ctx.on.relation_joined(relation), state=state) as manager:
         charm = manager.charm
         state_out = manager.run()
         expected = {
@@ -44,17 +42,16 @@ def test_provider_sender_sends_data_on_relation_joined(ctx, base_state, peer_rel
 
 
 @patch("charm.GrafanaCharm.external_url", PropertyMock(return_value=GRAFANA_INGRESS_URL))
-def test_provider_sender_sends_data_with_ingress_url_on_relation_joined(ctx, base_state, peer_relation):
+def test_provider_sender_sends_data_with_ingress_url_on_relation_joined(
+    ctx, base_state, peer_relation
+):
     """Tests that a charm using GrafanaMetadataProvider with an external url sends the correct data."""
     # Arrange
     relation = Relation(RELATION_NAME, INTERFACE_NAME)
     state = replace(base_state, relations={relation, peer_relation})
 
     # Act
-    with ctx(
-            ctx.on.relation_joined(relation),
-            state=state
-    ) as manager:
+    with ctx(ctx.on.relation_joined(relation), state=state) as manager:
         charm = manager.charm
         state_out = manager.run()
         expected = {
@@ -74,10 +71,7 @@ def test_provider_sends_data_on_leader_elected(ctx, base_state, peer_relation):
     state = replace(base_state, relations={relation, peer_relation})
 
     # Act
-    with ctx(
-            ctx.on.leader_elected(),
-            state=state
-    ) as manager:
+    with ctx(ctx.on.leader_elected(), state=state) as manager:
         charm = manager.charm
         state_out = manager.run()
         expected = {
