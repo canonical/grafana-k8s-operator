@@ -1,6 +1,7 @@
 # Copyright 2025 Canonical
 # See LICENSE file for licensing details.
 """Replication class."""
+
 import logging
 from typing import List
 from ops import Container
@@ -19,11 +20,13 @@ logger = logging.getLogger()
 class Litestream:
     """Listream workload."""
 
-    def __init__(self,
-                container: Container,
-                is_leader: bool,
-                peers: Relation,):
-        self._container=container
+    def __init__(
+        self,
+        container: Container,
+        is_leader: bool,
+        peers: Relation,
+    ):
+        self._container = container
         self._is_leader = is_leader
         self._fqdn = socket.getfqdn()
         self._peers = peers
@@ -37,7 +40,9 @@ class Litestream:
             self._peers.set_app_data("replica_primary", socket.gethostbyname(self._fqdn))
             config["LITESTREAM_ADDR"] = f"{socket.gethostbyname(self._fqdn)}:{9876}"
         else:
-            config["LITESTREAM_UPSTREAM_URL"] = f"{self._peers.get_app_data('replica_primary')}:{9876}"
+            config["LITESTREAM_UPSTREAM_URL"] = (
+                f"{self._peers.get_app_data('replica_primary')}:{9876}"
+            )
 
         layer = Layer(
             {
@@ -59,8 +64,6 @@ class Litestream:
 
         return layer
 
-
-
     def reconcile(self):
         """Unconditional control logic."""
         if self._container.can_connect():
@@ -69,9 +72,7 @@ class Litestream:
             if any(changes):
                 self.restart_litestream()
 
-
-    def _reconcile_config(self, changes:List):
-
+    def _reconcile_config(self, changes: List):
         if self._container.get_plan().services != self.layer.services:
             changes.append(True)
 
@@ -103,4 +104,3 @@ class Litestream:
                 "Could not restart replication -- Pebble socket does "
                 "not exist or is not responsive"
             )
-

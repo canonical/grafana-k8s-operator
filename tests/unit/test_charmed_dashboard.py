@@ -34,5 +34,5 @@ class CharmedDashboardTest(unittest.TestCase):
         self.assertListEqual(dashboard["tags"], ["charm: something-else"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -6,8 +6,11 @@ import pytest
 from ops import CharmBase
 from ops.testing import Context, Relation, State
 
-from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider, GrafanaMetadataRequirer, \
-    GrafanaMetadataAppData
+from charms.grafana_k8s.v0.grafana_metadata import (
+    GrafanaMetadataProvider,
+    GrafanaMetadataRequirer,
+    GrafanaMetadataAppData,
+)
 
 RELATION_NAME = "app-data-relation"
 INTERFACE_NAME = "app-data-interface"
@@ -56,7 +59,9 @@ class GrafanaMetadataRequirerCharm(CharmBase):
 
     def __init__(self, framework):
         super().__init__(framework)
-        self.relation_requirer = GrafanaMetadataRequirer(self.model.relations, relation_name=RELATION_NAME)
+        self.relation_requirer = GrafanaMetadataRequirer(
+            self.model.relations, relation_name=RELATION_NAME
+        )
 
 
 @pytest.fixture()
@@ -75,14 +80,19 @@ def test_grafana_metadata_provider_sends_data_correctly(data, grafana_metadata_p
     # Act
     with grafana_metadata_provider_context(
         # construct a charm using an event that won't trigger anything here
-        grafana_metadata_provider_context.on.update_status(), state=state
+        grafana_metadata_provider_context.on.update_status(),
+        state=state,
     ) as manager:
         manager.charm.relation_provider.publish(**data.model_dump())
 
         # Assert
         # Convert local_app_data to TempoApiAppData for comparison
-        grafana_metadata_relation_out = manager.ops.state.get_relation(grafana_metadata_relation.id)
-        actual = GrafanaMetadataAppData.model_validate(dict(grafana_metadata_relation_out.local_app_data))
+        grafana_metadata_relation_out = manager.ops.state.get_relation(
+            grafana_metadata_relation.id
+        )
+        actual = GrafanaMetadataAppData.model_validate(
+            dict(grafana_metadata_relation_out.local_app_data)
+        )
         assert actual == data
 
 
@@ -120,7 +130,9 @@ def test_grafana_metadata_provider_sends_data_correctly(data, grafana_metadata_p
         ),
     ],
 )
-def test_grafana_metadata_requirer_get_data(relations, expected_data, grafana_metadata_requirer_context):
+def test_grafana_metadata_requirer_get_data(
+    relations, expected_data, grafana_metadata_requirer_context
+):
     """Tests that GrafanaMetadataRequirer.get_data() returns correctly."""
     state = State(
         relations=relations,
@@ -136,7 +148,9 @@ def test_grafana_metadata_requirer_get_data(relations, expected_data, grafana_me
         assert are_app_data_equal(data, expected_data)
 
 
-def are_app_data_equal(data1: Union[GrafanaMetadataAppData, None], data2: Union[GrafanaMetadataAppData, None]):
+def are_app_data_equal(
+    data1: Union[GrafanaMetadataAppData, None], data2: Union[GrafanaMetadataAppData, None]
+):
     """Compare two GrafanaMetadataRequirer objects, tolerating when one or both is None."""
     if data1 is None and data2 is None:
         return True

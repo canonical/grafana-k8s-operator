@@ -38,7 +38,6 @@ class GrafanaClient:
         self._http_client = urllib3.PoolManager()
         self._timeout = 2.0
 
-
     @property
     def is_ready(self) -> bool:
         """Checks whether the Grafana server is up and running yet.
@@ -47,7 +46,6 @@ class GrafanaClient:
             :bool: indicating whether the server is ready
         """
         return True if self.build_info.get("database", None) == "ok" else False
-
 
     @property
     def build_info(self) -> dict:

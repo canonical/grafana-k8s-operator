@@ -18,19 +18,21 @@ logger = logging.getLogger(__name__)
 CONTAINER_NAME = "grafana"
 SERVICE_NAME = "grafana"
 
+
 @fixture
 def base_state_with_model(base_state):
     return replace(base_state, model=Model(name="testmodel"))
 
+
 def get_pebble_env(charm) -> Dict[str, str]:
-    service = (
-        charm.unit.get_container(CONTAINER_NAME).get_plan().services["grafana"].to_dict()
-    )
+    service = charm.unit.get_container(CONTAINER_NAME).get_plan().services["grafana"].to_dict()
     return service["environment"]  # type: ignore
+
 
 def is_service_running(charm) -> bool:
     service = charm.model.unit.get_container(CONTAINER_NAME).get_service(SERVICE_NAME)
     return service.is_running()
+
 
 @mark.parametrize(
     "event",
@@ -51,8 +53,12 @@ def test_url_without_path(ctx, base_state_with_model, event):
         charm = mgr.charm
         # THEN root url and subpath envs are defined
         assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
-        assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
+        assert (
+            get_pebble_env(charm)["GF_SERVER_ROOT_URL"]
+            == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
+        )
         assert is_service_running(charm)
+
 
 def test_external_url_precedence(ctx, base_state_with_model, peer_relation):
     """Precedence is [ingress] > [fqdn]."""
@@ -68,7 +74,10 @@ def test_external_url_precedence(ctx, base_state_with_model, peer_relation):
 
             # THEN root url is fqdn and the subpath env is defined
             assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
-            assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://1.2.3.4/testmodel-grafana-k8s"
+            assert (
+                get_pebble_env(charm)["GF_SERVER_ROOT_URL"]
+                == "http://1.2.3.4/testmodel-grafana-k8s"
+            )
             assert is_service_running(charm)
 
         # WHEN the web_external_url config option is set
@@ -79,7 +88,10 @@ def test_external_url_precedence(ctx, base_state_with_model, peer_relation):
             charm = mgr.charm
             # THEN root url is not affected
             assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
-            assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://1.2.3.4/testmodel-grafana-k8s"
+            assert (
+                get_pebble_env(charm)["GF_SERVER_ROOT_URL"]
+                == "http://1.2.3.4/testmodel-grafana-k8s"
+            )
             assert is_service_running(charm)
 
         # WHEN the web_external_url config option is cleared
@@ -90,7 +102,10 @@ def test_external_url_precedence(ctx, base_state_with_model, peer_relation):
             charm = mgr.charm
             # THEN root url is still not affected
             assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
-            assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://1.2.3.4/testmodel-grafana-k8s"
+            assert (
+                get_pebble_env(charm)["GF_SERVER_ROOT_URL"]
+                == "http://1.2.3.4/testmodel-grafana-k8s"
+            )
 
     # WHEN the traefik relation is removed
     with patch.object(TraefikRouteRequirer, "external_host", new=""):
@@ -99,7 +114,10 @@ def test_external_url_precedence(ctx, base_state_with_model, peer_relation):
             charm = mgr.charm
             # THEN root url and subpath envs are undefined (because fqdn is a bare hostname)
             assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
-            assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
+            assert (
+                get_pebble_env(charm)["GF_SERVER_ROOT_URL"]
+                == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
+            )
             assert is_service_running(charm)
 
 

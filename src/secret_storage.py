@@ -24,11 +24,13 @@ def generate_password() -> str:
 class SecretStorage(ops.Object):
     """Class to manage the creation of a peer-shared secret to store simple key-value pairs."""
 
-    def __init__(self, charm: ops.CharmBase,
-                 label: str,
-                 default: Callable[[], Dict[str, str]],
-                 description: Optional[str] = None,
-                 ):
+    def __init__(
+        self,
+        charm: ops.CharmBase,
+        label: str,
+        default: Callable[[], Dict[str, str]],
+        description: Optional[str] = None,
+    ):
         super().__init__(charm, label)
         self._label = label
         self._charm = charm
@@ -63,9 +65,7 @@ class SecretStorage(ops.Object):
             logger.info(f"leader: creating and priming {secret_label} secret")
             content = self._default()
             self._charm.app.add_secret(
-                content =content,
-                label=secret_label,
-                description=self._description
+                content=content, label=secret_label, description=self._description
             )
             return content
 

@@ -23,9 +23,7 @@ def test_datasource_sharing(ctx, peer_relation, containers):
             )
         },
     )
-    state = State(
-        leader=True, containers=containers, relations={datasource, peer_relation}
-    )
+    state = State(leader=True, containers=containers, relations={datasource, peer_relation})
 
     # WHEN relation-changed fires for a datasource relation
     out = ctx.run(ctx.on.relation_changed(datasource), state)
