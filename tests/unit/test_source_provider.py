@@ -220,10 +220,10 @@ class TestSourceProviderNoUnitData(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(ProviderNoUnitDataCharm, meta=CONSUMER_META)
         self.addCleanup(self.harness.cleanup)
-        self.harness.set_leader(True)
+        self.harness.set_leader(False)
         self.harness.begin()
 
-    def test_provider_unit_does_not_set_source_uri(self):
+    def test_ingressed_provider_follower_unit_does_not_set_source_uri(self):
         rel_id = self.harness.add_relation("grafana-source", "provider")
         self.harness.add_relation_unit(rel_id, "provider/0")
         data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
