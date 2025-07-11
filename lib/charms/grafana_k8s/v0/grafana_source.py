@@ -343,7 +343,7 @@ class GrafanaSourceProvider(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         extra_fields: Optional[dict] = None,
         secure_extra_fields: Optional[dict] = None,
-        auto_set_unit_data: bool = True,
+        is_ingressed: bool = True,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -386,9 +386,9 @@ class GrafanaSourceProvider(Object):
                 for some datasources in the `jsonData` field
             secure_extra_fields: a :dict: which is used for additional information required
                 for some datasources in the `secureJsonData`
-            auto_set_unit_data: toggle whether the datasource URL will be automatically published
-                over unit databag whenever a 'refresh event' occurs or `update_source()` is called.
-                App data will still always be set by the leader.
+            is_ingressed: whether this application is behind an ingress. If set to True, then only
+                the leader unit will be listed as a datasource in grafana. If False, each
+                follower unit will show up as a datasource as well.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
@@ -425,12 +425,15 @@ class GrafanaSourceProvider(Object):
             )
 
         self._source_port = source_port
-        self._auto_set_unit_data = auto_set_unit_data
+
+        # If there's no ingress, then each unit is a datasource.
+        # If there is an ingress, then only the leader is a datasource.
+        self._this_unit_is_datasource = (not is_ingressed) or charm.unit.is_leader()
 
         self._source_url = self._sanitize_source_url(source_url)
 
         self.framework.observe(events.relation_joined, self._set_sources_from_event)
-        if auto_set_unit_data:
+        if self._this_unit_is_datasource:
             for ev in refresh_event:
                 self.framework.observe(ev, self._set_unit_details)
 
@@ -491,7 +494,7 @@ class GrafanaSourceProvider(Object):
 
     def _set_sources(self, rel: Relation):
         """Inform the consumer about the source configuration."""
-        if self._auto_set_unit_data:
+        if self._this_unit_is_datasource:
             self._set_unit_details(rel)
 
         if not self._charm.unit.is_leader():
