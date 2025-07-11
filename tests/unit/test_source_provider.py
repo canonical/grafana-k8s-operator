@@ -211,7 +211,7 @@ class ProviderNoUnitDataCharm(CharmBase):
             self,
             source_type="foobar",
             source_port="9090",
-            auto_set_unit_data=False,
+            is_ingressed=True,  # in practice, this would be something like self.ingress.is_ready()
             refresh_event=self.on.grafana_tester_pebble_ready,
         )
 
