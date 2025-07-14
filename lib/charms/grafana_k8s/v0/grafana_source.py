@@ -343,7 +343,7 @@ class GrafanaSourceProvider(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         extra_fields: Optional[dict] = None,
         secure_extra_fields: Optional[dict] = None,
-        is_ingressed: bool = True,
+        is_ingressed: bool = False,
     ) -> None:
         """Construct a Grafana charm client.
 
