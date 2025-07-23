@@ -343,7 +343,7 @@ class GrafanaSourceProvider(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         extra_fields: Optional[dict] = None,
         secure_extra_fields: Optional[dict] = None,
-        is_ingressed: bool = False,
+        is_ingress_per_app: bool = False,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -386,7 +386,7 @@ class GrafanaSourceProvider(Object):
                 for some datasources in the `jsonData` field
             secure_extra_fields: a :dict: which is used for additional information required
                 for some datasources in the `secureJsonData`
-            is_ingressed: whether this application is behind an ingress. If set to True, then only
+            is_ingress_per_app: whether this application is behind an ingress, specifically ingress-per-app. If set to True, then only
                 the leader unit will be listed as a datasource in grafana. If False, each
                 follower unit will show up as a datasource as well.
         """
@@ -428,7 +428,7 @@ class GrafanaSourceProvider(Object):
 
         # If there's no ingress, then each unit is a datasource.
         # If there is an ingress, then only the leader is a datasource.
-        self._this_unit_is_datasource = (not is_ingressed) or charm.unit.is_leader()
+        self._this_unit_is_datasource = (not is_ingress_per_app) or charm.unit.is_leader()
 
         self._source_url = self._sanitize_source_url(source_url)
 

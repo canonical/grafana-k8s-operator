@@ -196,7 +196,7 @@ class TestFollowerSourceProvider(unittest.TestCase):
         self.harness.charm.provider = GrafanaSourceProvider(  # type: ignore
             self.harness.charm,
             source_type="foobar",
-            is_ingressed=True,
+            is_ingress_per_app=True,
             source_url="http://1.2.3.4/v1",
             refresh_event=self.harness.charm.on.grafana_tester_pebble_ready,
         )
