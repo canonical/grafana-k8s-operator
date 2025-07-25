@@ -433,9 +433,10 @@ class GrafanaSourceProvider(Object):
         self._source_url = self._sanitize_source_url(source_url)
 
         self.framework.observe(events.relation_joined, self._set_sources_from_event)
-        if self._this_unit_is_datasource:
-            for ev in refresh_event:
-                self.framework.observe(ev, self._set_unit_details)
+        self.framework.observe(events.relation_changed, self._set_sources_from_event)
+        self.framework.observe(events.relation_departed, self._set_sources_from_event)
+        for ev in refresh_event:
+            self.framework.observe(ev, self._set_unit_details)
 
     def _sanitize_source_url(self, source_url: Optional[str]) -> Optional[str]:
         if source_url and not re.match(r"^\w+://", source_url):
@@ -494,8 +495,7 @@ class GrafanaSourceProvider(Object):
 
     def _set_sources(self, rel: Relation):
         """Inform the consumer about the source configuration."""
-        if self._this_unit_is_datasource:
-            self._set_unit_details(rel)
+        self._set_unit_details(rel)
 
         if not self._charm.unit.is_leader():
             return
@@ -527,11 +527,15 @@ class GrafanaSourceProvider(Object):
         unit relation data for the Prometheus consumer.
         """
         for relation in self._charm.model.relations[self._relation_name]:
-            url = self._source_url or "http://{}:{}".format(socket.getfqdn(), self._source_port)
-            if self._source_type == "mimir":
-                url = f"{url}/prometheus"
-
-            relation.data[self._charm.unit]["grafana_source_host"] = url
+            if self._this_unit_is_datasource:
+                url = self._source_url or "http://{}:{}".format(
+                    socket.getfqdn(), self._source_port
+                )
+                if self._source_type == "mimir":
+                    url = f"{url}/prometheus"
+                relation.data[self._charm.unit]["grafana_source_host"] = url
+            else:
+                relation.data[self._charm.unit]["grafana_source_host"] = ""
 
 
 class GrafanaSourceConsumer(Object):
@@ -606,9 +610,41 @@ class GrafanaSourceConsumer(Object):
                 if source:
                     sources[rel.id] = source
 
+            to_delete = self._sources_to_delete(sources)
             self.set_peer_data("sources", sources)
-
+            self.set_peer_data("sources_to_delete", to_delete)
         self.on.sources_changed.emit()  # pyright: ignore
+
+    def _sources_to_delete(self, new_sources: Dict) -> List:
+        """Return a list of sources to delete.
+
+        To ensure the Grafana datastore is updated when stale datasources exist, we compare the old
+        sources to the new ones. Any old sources which do not exist in the new sources are
+        scheduled for deletion in addition to any other sources already scheduled for deletion.
+        """
+        old_sources = self.get_peer_data("sources")
+        old_to_delete = self.get_peer_data("sources_to_delete")
+        new_to_delete = []
+        if old_to_delete:
+            new_to_delete.extend(old_to_delete)
+
+        if not old_sources:
+            return new_to_delete
+
+        for rel_id in new_sources:
+            old_source_names = (
+                [something["source_name"] for something in old_sources[str(rel_id)]]
+                if str(rel_id) in old_sources
+                else []
+            )
+            new_source_names = [something["source_name"] for something in new_sources[rel_id]]
+            # Get strings in old_source_names that are not in new_source_names
+            new_to_delete_for_rel = [
+                name for name in old_source_names if name not in new_source_names
+            ]
+            new_to_delete.extend(new_to_delete_for_rel)
+
+        return new_to_delete
 
     def _on_grafana_peer_changed(self, _: RelationChangedEvent) -> None:
         """Emit source events on peer events so secondary charm data updates."""

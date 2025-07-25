@@ -267,6 +267,34 @@ class TestSourceConsumer(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.source_events, 4)
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 2)
 
+    def test_consumer_handles_missing_grafana_source_host(self):
+        # GIVEN a grafana-source relation with 2 provider units
+        self.harness.set_leader(True)
+        rel_id = self.harness.add_relation("grafana-source", "prometheus")
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.add_relation_unit(rel_id, "prometheus/1")
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"grafana_source_data": json.dumps(SOURCE_DATA)}
+        )
+        # WHEN they both publish a grafana_source_host
+        self.harness.update_relation_data(
+            rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
+        )
+        self.harness.update_relation_data(
+            rel_id, "prometheus/1", {"grafana_source_host": "1.2.3.4:9090"}
+        )
+        # THEN there are no sources to delete
+        self.assertFalse(self.harness.charm.grafana_consumer.get_peer_data("sources_to_delete"))
+
+        # WHEN one unit, no longer publishes its grafana_source_host, e.g. on ingress ready event
+        self.harness.update_relation_data(rel_id, "prometheus/1", {"grafana_source_host": ""})
+        # THEN it's source_name is added to sources_to_delete
+        expected_sources_to_delete = f"{generate_source_name(SOURCE_DATA)}_1"
+        self.assertTrue(
+            self.harness.charm.grafana_consumer.get_peer_data("sources_to_delete"),
+            expected_sources_to_delete,
+        )
+
     def test_consumer_handles_source_removal(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources), 0)
         self.assertEqual(self.harness.charm._stored.source_events, 0)
