@@ -373,7 +373,6 @@ class Grafana:
         # Generate a new base config and see if it differs from what we have.
         # If it does, store it and signal that we should restart Grafana
         config = self._grafana_config_generator.generate_grafana_config()
-        print("CONFIGGG", config)
         config_hash = hashlib.sha256(str(config).encode("utf-8")).hexdigest()
         if self.current_config_hash != config_hash:
             self.current_config_hash = config_hash
