@@ -435,6 +435,7 @@ class GrafanaSourceProvider(Object):
         self.framework.observe(events.relation_joined, self._set_sources_from_event)
         self.framework.observe(events.relation_changed, self._set_sources_from_event)
         self.framework.observe(events.relation_departed, self._set_sources_from_event)
+        self.framework.observe(events.relation_broken, self._set_sources_from_event)
         for ev in refresh_event:
             self.framework.observe(ev, self._set_unit_details)
 
@@ -638,7 +639,6 @@ class GrafanaSourceConsumer(Object):
                 else []
             )
             new_source_names = [something["source_name"] for something in new_sources[rel_id]]
-            # Get strings in old_source_names that are not in new_source_names
             new_to_delete_for_rel = [
                 name for name in old_source_names if name not in new_source_names
             ]
