@@ -57,7 +57,6 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     ResourceRequirements,
     adjust_resource_requirements,
 )
-from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
@@ -70,6 +69,10 @@ from secret_storage import generate_password
 from litestream import Litestream
 from relation import Relation
 from models import DatasourceConfig, PebbleEnvironment, TLSConfig
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    CertificateRequestAttributes,
+    TLSCertificatesRequiresV4,
+)
 from constants import (
     PEER_RELATION,
     WORKLOAD_PORT,
@@ -89,7 +92,7 @@ logger = logging.getLogger()
     server_cert="server_cert",
     extra_types=[
         AuthRequirer,
-        CertHandler,
+        TLSCertificatesRequiresV4,
         GrafanaDashboardConsumer,
         GrafanaSourceConsumer,
         KubernetesComputeResourcesPatch,
@@ -117,13 +120,18 @@ class GrafanaCharm(CharmBase):
                                              default=lambda: {"password": generate_password()})
 
 
-        # -- cert_handler
-        # Assuming FQDN is always part of the SANs DNS.
-        self.cert_handler = CertHandler(
+        # -- certificates
+        self._csr_attributes = CertificateRequestAttributes(
+            # the `common_name` field is required but limited to 64 characters.
+            # since it's overridden by sans, we can use a short,
+            # constrained value like app name.
+            common_name=self.app.name,
+            sans_dns=frozenset((self._fqdn,)),
+        )
+        self._cert_requirer = TLSCertificatesRequiresV4(
             charm=self,
-            key="grafana-server-cert",
-            peer_relation_name="replicas",
-            sans=[self._fqdn],
+            relationship_name="certificates",
+            certificate_requests=[self._csr_attributes],
         )
 
         # -- trusted_cert_transfer
@@ -140,7 +148,6 @@ class GrafanaCharm(CharmBase):
             refresh_event=[
                 self.on.grafana_pebble_ready,  # pyright: ignore
                 self.on.update_status,
-                self.cert_handler.on.cert_changed,  # pyright: ignore
             ],
         )
         self.charm_tracing = TracingEndpointRequirer(
@@ -238,7 +245,7 @@ class GrafanaCharm(CharmBase):
 
     @property
     def _scheme(self) -> str:
-        return "https" if self.cert_handler.server_cert else "http"
+        return "https" if self._tls_available else "http"
 
     @property
     def internal_url(self) -> str:
@@ -446,14 +453,19 @@ class GrafanaCharm(CharmBase):
 
     @property
     def _tls_config(self) -> Optional[TLSConfig]:
-        cert_handler = self.cert_handler
-        if cert_handler.available:
-            return TLSConfig(
-                certificate=cert_handler.server_cert, #type: ignore
-                key=cert_handler.private_key, #type: ignore
-                ca = cert_handler.ca_cert, #type: ignore
-            )
-        return None
+        certificates, key = self._cert_requirer.get_assigned_certificate(
+            certificate_request=self._csr_attributes
+        )
+        if not (key and certificates):
+            return None
+        return TLSConfig(
+            certificate=certificates.certificate.raw,
+            ca=certificates.ca.raw,
+            key=key.raw)
+
+    @property
+    def _tls_available(self) -> bool:
+        return bool(self._tls_config)
 
     @property
     def admin_password(self) -> Optional[str]:
@@ -489,6 +501,7 @@ class GrafanaCharm(CharmBase):
 
     def _reconcile_relations(self):
         self._reconcile_ingress()
+        self.metrics_endpoint.set_scrape_job_spec()
         self.source_consumer.upgrade_keys()
         self.dashboard_consumer.update_dashboards()
         self.oauth.update_client_config(client_config=self._oauth_client_config)

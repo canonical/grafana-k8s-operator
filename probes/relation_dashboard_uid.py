@@ -3,33 +3,39 @@ import json
 import lzma
 import re
 
+GRAFANA = "grafana-k8s"
+
 
 def show_unit(juju_show_units):
     for show_unit in juju_show_units.values():
-        unit_name = next(iter(show_unit))
-        # 1. Extract the relation-info
-        relation_info = show_unit[unit_name]["relation-info"]
-        # 2. Extract the "grafana" endpoint relations
-        grafana_endpoints = [
-            relation for relation in relation_info if relation["endpoint"] == "grafana"
-        ]
+        # Iterate over all units if checking live status
+        for unit_name, unit in show_unit.items():
+            # Check applies to grafana unit(s) only
+            if GRAFANA in unit['charm']:
+                # 1. Extract the relation-info
+                relation_info = unit["relation-info"]
+                # 2. Extract the "grafana" endpoint relations
+                grafana_endpoints = [
+                    relation for relation in relation_info if relation["endpoint"] == "grafana"
+                ]
+                assert len(grafana_endpoints) > 0, (
+                    f"No relations for the 'grafana' endpoint found on unit {unit_name}."
+                )
 
-        assert len(grafana_endpoints) > 0
-
-        for grafana_endpoint in grafana_endpoints:
-            # 3. Extract the application data
-            app_data = grafana_endpoint["application-data"]
-            relation_id = grafana_endpoint["relation-id"]
-            # 4. Convert dashboard data to JSON and decode
-            dashboards = json.loads(app_data["dashboards"])
-            for id in dashboards:
-                for meta in dashboards[id]:
-                    decoded_uid = _uid_from_encoded_dashboard(meta["content"])
-                    # 5. Check if the top-level UID exist and is not empty
-                    if not _is_valid_format(decoded_uid):
-                        raise Exception(
-                            f"Invalid dashboard UID ({id}) for relation-id ({relation_id})"
-                        )
+                for grafana_endpoint in grafana_endpoints:
+                    # 3. Extract the application data
+                    app_data = grafana_endpoint["application-data"]
+                    relation_id = grafana_endpoint["relation-id"]
+                    # 4. Convert dashboard data to JSON and decode
+                    dashboards = json.loads(app_data["dashboards"])
+                    for id in dashboards:
+                        for meta in dashboards[id]:
+                            decoded_uid = _uid_from_encoded_dashboard(meta["content"])
+                            # 5. Check if the top-level UID exist and is not empty
+                            if not _is_valid_format(decoded_uid):
+                                raise Exception(
+                                    f"Invalid dashboard UID ({id}) for relation-id ({relation_id})"
+                                )
 
 
 def _uid_from_encoded_dashboard(data: bytes) -> str:

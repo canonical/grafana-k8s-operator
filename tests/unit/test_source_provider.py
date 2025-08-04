@@ -183,6 +183,46 @@ class TestSourceProviderWithIngress(unittest.TestCase):
         self.assertEqual(data["grafana_source_host"], "http://1.2.3.4/v1")
 
 
+class TestFollowerSourceProvider(unittest.TestCase):
+    def setUp(self):
+        self.harness = Harness(ProviderCharmWithIngress, meta=CONSUMER_META)
+        self.addCleanup(self.harness.cleanup)
+        # no leadership!
+        self.harness.begin()
+
+    def test_not_ingressed_does_not_share_uri(self):
+        # Test that, if the application is ingressed, then follower units won't
+        # share their datasource URI.
+        self.harness.charm.provider = GrafanaSourceProvider(  # type: ignore
+            self.harness.charm,
+            source_type="foobar",
+            is_ingress_per_app=True,
+            source_url="http://1.2.3.4/v1",
+            refresh_event=self.harness.charm.on.grafana_tester_pebble_ready,
+        )
+        rel_id = self.harness.add_relation("grafana-source", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
+        self.assertNotIn("grafana_source_host", data)
+
+    def test_ingressed_shares_uri(self):
+        # Test that, if the application is not ingressed (the default behaviour),
+        # then follower units won't share their datasource URI.
+        self.harness.charm.provider = GrafanaSourceProvider(  # type: ignore
+            self.harness.charm,
+            source_type="foobar",
+            source_url="http://1.2.3.4/v1",
+            refresh_event=self.harness.charm.on.grafana_tester_pebble_ready,
+        )
+        rel_id = self.harness.add_relation("grafana-source", "provider")
+        self.harness.add_relation_unit(rel_id, "provider/0")
+        data = self.harness.get_relation_data(rel_id, self.harness.charm.unit.name)
+        self.assertIn("grafana_source_host", data)
+        self.assertEqual(data["grafana_source_host"], "http://1.2.3.4/v1")
+
+
+
+
 class ProviderCharmNoRefreshEvent(CharmBase):
     _stored = StoredState()
 
