@@ -21,12 +21,12 @@ class FooCharm(CharmBase):
     def __init__(self, framework):
         super().__init__(framework)
 
-        grafana_mnetadata = GrafanaMetadataRequirer(self.model.relations, "grafana-metadata")
+        self.grafana_metadata = GrafanaMetadataRequirer(self.model.relations, "grafana-metadata")
 
         self.framework.observe(self.on["grafana-metadata"].relation_changed, self._on_grafana_metadata_changed)
 
     def _on_grafana_metadata_changed(self):
-        data = grafana_mnetadata.get_data()
+        data = self.grafana_metadata.get_data()
         ...
 ```
 
@@ -75,10 +75,11 @@ provides:
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Union, List
 
-from ops import RelationMapping, Application
-from pydantic import AnyHttpUrl, BaseModel, Field
+from ops import RelationMapping, Application, Relation
+from pydantic import AnyHttpUrl, BaseModel, Field, AfterValidator
+from typing_extensions import Annotated
 
 # The unique Charmhub library identifier, never change it
 LIBID = "cee305b7fe0546548cbfe81c3bd20e33"
@@ -88,7 +89,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 PYDEPS = ["pydantic>=2"]
 
@@ -96,15 +97,19 @@ log = logging.getLogger(__name__)
 
 DEFAULT_RELATION_NAME = "grafana-metadata"
 
+# Define a custom type that accepts AnyHttpUrl and string, but converts to AnyHttpUrl and raises an exception if the
+# string is not a valid URL
+AnyHttpUrlOrStrUrl = Annotated[Union[AnyHttpUrl, str], AfterValidator(lambda v: AnyHttpUrl(v))]
+
 
 class GrafanaMetadataAppData(BaseModel):
     """Data model for the grafana-metadata interface."""
 
-    ingress_url: Optional[AnyHttpUrl] = Field(
+    ingress_url: Optional[AnyHttpUrlOrStrUrl] = Field(
         default=None,
         description="The non-internal URL at which this application can be reached.  Typically, this is an ingress URL.",
     )
-    direct_url: AnyHttpUrl = Field(
+    direct_url: AnyHttpUrlOrStrUrl = Field(
         description="The cluster-internal URL at which this application can be reached.  Typically, this is a"
         " Kubernetes FQDN like name.namespace.svc.cluster.local for connecting to the prometheus api"
         " from inside the cluster, with scheme."
@@ -139,9 +144,9 @@ class GrafanaMetadataRequirer:
         self._relation_name = relation_name
 
     @property
-    def relations(self):
+    def relations(self) -> List[Relation]:
         """Return the relation instances for applications related to us on the monitored relation."""
-        return self._charm_relation_mapping.get(self._relation_name, ())
+        return self._charm_relation_mapping.get(self._relation_name, [])
 
     def get_data(self) -> Optional[BaseModel]:
         """Return data for at most one related application, raising if more than one is available.
@@ -196,7 +201,7 @@ class GrafanaMetadataProvider:
         return self._charm_relation_mapping.get(self._relation_name, ())
 
     def publish(
-        self, grafana_uid: str, direct_url: AnyHttpUrl, ingress_url: Optional[AnyHttpUrl] = None
+        self, grafana_uid: str, direct_url: AnyHttpUrlOrStrUrl, ingress_url: Optional[AnyHttpUrlOrStrUrl] = None
     ):
         """Post grafana-metadata to all related applications.
 

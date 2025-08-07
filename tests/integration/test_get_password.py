@@ -4,10 +4,12 @@
 
 import logging
 from pathlib import Path
-
+import sh
 import pytest
 import yaml
 from helpers import oci_image
+
+# pyright: reportAttributeAccessIssue=false
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +37,11 @@ async def test_password_returns_correct_value_after_upgrading(ops_test, grafana_
     pw = (await action.wait()).results["admin-password"]
 
     logger.info("Upgrading charm")
-    await ops_test.model.applications[app_name].refresh(
-        path=grafana_charm, resources=grafana_resources
+    sh.juju.refresh(
+        app_name,
+        model=ops_test.model.name,
+        path=grafana_charm,
+        resource=[f"{k}={v}" for k, v in grafana_resources.items()],
     )
     await ops_test.model.wait_for_idle(
         apps=[app_name], status="active", timeout=300, wait_for_exact_units=1, idle_period=30

@@ -4,7 +4,7 @@
 
 import asyncio
 import logging
-
+import sh
 import pytest
 from helpers import (
     ModelConfigChange,
@@ -13,6 +13,8 @@ from helpers import (
     get_grafana_dashboards,
     oci_image,
 )
+
+# pyright: reportAttributeAccessIssue=false
 
 logger = logging.getLogger(__name__)
 
@@ -31,21 +33,19 @@ prometheus_app_name = "prometheus"
 
 @pytest.mark.abort_on_fail
 async def test_deploy(ops_test, grafana_charm):
-    await asyncio.gather(
-        ops_test.model.deploy(
-            grafana_charm,
-            resources=grafana_resources,
-            application_name=grafana_app_name,
-            trust=True,
-            series="focal",
-        ),
-        ops_test.model.deploy(
-            "prometheus-k8s",
-            channel="edge",
-            trust=True,
-            application_name=prometheus_app_name,
-            series="focal",
-        ),
+    sh.juju.deploy(
+        grafana_charm,
+        grafana_app_name,
+        model=ops_test.model.name,
+        trust=True,
+        resource=[f"{k}={v}" for k, v in grafana_resources.items()],
+    )
+    sh.juju.deploy(
+        "prometheus-k8s",
+        prometheus_app_name,
+        channel="edge",
+        trust=True,
+        model=ops_test.model.name,
     )
     await ops_test.model.wait_for_idle(
         apps=[grafana_app_name, prometheus_app_name],

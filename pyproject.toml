@@ -45,10 +45,11 @@ dev = [
   "ops[testing]",
   "pytest-asyncio",
   "pytest-playwright",
-  "aiohttp",
+  "aiohttp!=3.11.13",  # Yanked
   "asyncstdlib",
   "sh",
   "tenacity",
+  "jubilant",
 ]
 
 # Testing tools configuration
