@@ -9,6 +9,7 @@ import pytest
 import yaml
 from helpers import oci_image
 from pytest_operator.plugin import OpsTest
+import json
 
 # pyright: reportAttributeAccessIssue = false
 
@@ -32,7 +33,7 @@ async def test_deploy(ops_test, grafana_charm):
         resource=[f"{k}={v}" for k, v in grafana_resources.items()],
     )
     sh.juju.deploy(
-        "self-signed-certificates", "ca", model=ops_test.model.name, channel="latest/edge"
+        "self-signed-certificates", "ca", model=ops_test.model.name, channel="1/stable"
     )
 
     await ops_test.model.add_relation("grafana:receive-ca-cert", "ca")
@@ -50,22 +51,22 @@ async def test_certs_created(ops_test: OpsTest):
     """Make sure charm code creates necessary files for cert verification."""
     unit_name = "grafana/0"
 
-    # Get relation ID
-    cmd = [
-        "sh",
-        "-c",
-        f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."relation-id"\'',
-    ]
-    retcode, stdout, stderr = await ops_test.run(*cmd)
+    # # Get relation ID
+    # cmd = [
+    #     "sh",
+    #     "-c",
+    #     f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."relation-id"\'',
+    # ]
+    # retcode, stdout, stderr = await ops_test.run(*cmd)
 
     # Get relation cert
     cmd = [
         "sh",
         "-c",
-        f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."related-units".ca/0.data.ca\'',
+        f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."application-data".certificates\'',
     ]
     retcode, stdout, stderr = await ops_test.run(*cmd)
-    relation_cert = stdout.rstrip()
+    relation_certs = "".join(json.load(stdout.rstrip()))
 
     # Get pushed cert
     received_cert_path = "/usr/local/share/ca-certificates/trusted-ca-cert.crt"
@@ -73,7 +74,7 @@ async def test_certs_created(ops_test: OpsTest):
         "ssh", "--container", "grafana", unit_name, "cat", f"{received_cert_path}"
     )
     # Line ends have to be cleaned for comparison
-    received_cert = stdout.replace("\r\n", "\n").rstrip()
+    received_certs = stdout.replace("\r\n", "\n").rstrip()
 
     # Get trusted certs
     trusted_certs_path = "/etc/ssl/certs/ca-certificates.crt"
@@ -83,8 +84,8 @@ async def test_certs_created(ops_test: OpsTest):
     # Line ends have to be cleaned for comparison
     trusted_certs = stdout.replace("\r\n", "\n").rstrip()
 
-    assert relation_cert == received_cert
-    assert received_cert in trusted_certs
+    assert relation_certs == received_certs
+    assert received_certs in trusted_certs
 
 
 @pytest.mark.abort_on_fail
