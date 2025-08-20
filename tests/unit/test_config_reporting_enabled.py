@@ -1,9 +1,9 @@
-from ops.testing import State, Container
+from ops.testing import State, Container, Exec
 from configparser import ConfigParser
 
 
 containers = [
-    Container(name="grafana", can_connect=True),
+    Container(name="grafana", can_connect=True, execs={Exec(("update-ca-certificates", "--fresh"))}),
     Container(name="litestream", can_connect=True),
 ]
 

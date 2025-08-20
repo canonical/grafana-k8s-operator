@@ -24,7 +24,6 @@ import logging
 import os
 import re
 import socket
-import string
 import subprocess
 import time
 from io import StringIO
@@ -58,10 +57,10 @@ from ops.pebble import (
 from secret_storage import SecretStorage
 
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
-    CertificateAvailableEvent,
-    CertificateRemovedEvent,
-    CertificateTransferRequires,
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
+     CertificatesAvailableEvent,
+     CertificatesRemovedEvent,
+     CertificateTransferRequires,
 )
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
@@ -118,9 +117,8 @@ PROFILING_PORT = 8080
 DATABASE_PATH = "/var/lib/grafana/grafana.db"
 
 # Template for storing trusted certificate in a file.
-TRUSTED_CA_TEMPLATE = string.Template(
-    "/usr/local/share/ca-certificates/trusted-ca-cert-$rel_id-ca.crt"
-)
+TRUSTED_CA_CERT_PATH = "/usr/local/share/ca-certificates/trusted-ca-cert.crt"
+
 # https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/generic-oauth
 OAUTH_SCOPES = "openid email offline_access"
 OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
@@ -311,11 +309,11 @@ class GrafanaCharm(CharmBase):
 
         # -- trusted_cert_transfer observations
         self.framework.observe(
-            self.trusted_cert_transfer.on.certificate_available,
+            self.trusted_cert_transfer.on.certificate_set_updated,
             self._on_trusted_certificate_available,  # pyright: ignore
         )
         self.framework.observe(
-            self.trusted_cert_transfer.on.certificate_removed,
+            self.trusted_cert_transfer.on.certificates_removed,
             self._on_trusted_certificate_removed,  # pyright: ignore
         )
         # oauth relation
@@ -1587,7 +1585,7 @@ class GrafanaCharm(CharmBase):
         container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
 
-    def _on_trusted_certificate_available(self, event: CertificateAvailableEvent):
+    def _on_trusted_certificate_available(self, event: CertificatesAvailableEvent):
         if not self.containers["workload"].can_connect():
             logger.warning("Cannot connect to Pebble. Deferring event.")
             event.defer()
@@ -1603,30 +1601,18 @@ class GrafanaCharm(CharmBase):
         This function is needed because relation events are not emitted on upgrade, and because we
         do not have (nor do we want) persistent storage for certs.
         """
-        if not self.model.get_relation(relation_name=self.trusted_cert_transfer.relationship_name):
-            return
-
-        logger.info(
-            "Pulling trusted ca certificates from %s relation.",
-            self.trusted_cert_transfer.relationship_name,
-        )
         container = self.containers["workload"]
-        for relation in self.model.relations.get(self.trusted_cert_transfer.relationship_name, []):
-            # For some reason, relation.units includes our unit and app. Need to exclude them.
-            for unit in set(relation.units).difference([self.app, self.unit]):
-                # Note: this nested loop handles the case of multi-unit CA, each unit providing
-                # a different ca cert, but that is not currently supported by the lib itself.
-                cert_path = TRUSTED_CA_TEMPLATE.substitute(rel_id=relation.id)
-                if cert := relation.data[unit].get("ca"):
-                    container.push(cert_path, cert, make_dirs=True)
+        if certs := self.trusted_cert_transfer.get_all_certificates():
+            logger.info("Pulling trusted ca certificates from receive-ca-cert relation.")
+            certs = "\n".join(certs)
+            container.push(TRUSTED_CA_CERT_PATH, certs, make_dirs=True)
+
+        else:
+            container.remove_path(TRUSTED_CA_CERT_PATH, recursive=True)
 
         container.exec(["update-ca-certificates", "--fresh"]).wait()
 
-    def _on_trusted_certificate_removed(self, event: CertificateRemovedEvent):
-        # All certificates received from the relation are in separate files marked by the relation id.
-        container = self.containers["workload"]
-        cert_path = TRUSTED_CA_TEMPLATE.substitute(rel_id=event.relation_id)
-        container.remove_path(cert_path, recursive=True)
+    def _on_trusted_certificate_removed(self, event: CertificatesRemovedEvent):
         self.restart_grafana()
 
     @property

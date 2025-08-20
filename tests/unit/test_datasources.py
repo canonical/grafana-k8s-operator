@@ -1,14 +1,14 @@
 import json
 
 from ops import CharmBase, Framework
-from ops.testing import Container, State
+from ops.testing import Container, State, Exec
 from scenario import Relation, PeerRelation, Context
 from unittest.mock import patch
 
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 
 containers = [
-    Container(name="grafana", can_connect=True),
+    Container(name="grafana", can_connect=True, execs={Exec(("update-ca-certificates", "--fresh"))}),
     Container(name="litestream", can_connect=True),
 ]
 
