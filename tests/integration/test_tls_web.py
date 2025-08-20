@@ -6,7 +6,7 @@ import asyncio
 import logging
 from pathlib import Path
 from types import SimpleNamespace
-
+import sh
 import pytest
 import yaml
 from helpers import curl, oci_image, unit_address
@@ -24,20 +24,17 @@ grafana_resources = {
 
 @pytest.mark.abort_on_fail
 async def test_deploy(ops_test, grafana_charm):
-    await asyncio.gather(
-        ops_test.model.deploy(
+    await ops_test.model.deploy(
             grafana_charm,
             resources=grafana_resources,
             application_name=grafana.name,
             num_units=2,
             trust=True,
-        ),
-        ops_test.model.deploy(
-            "self-signed-certificates",
-            application_name="ca",
-            channel="latest/edge",
-        ),
     )
+
+    # python-libjuju supports noble only tarting with v3.5.2, so deploying manually
+    sh.juju.deploy("self-signed-certificates", "ca", channel="1/stable")
+
     await ops_test.model.add_relation(f"{grafana.name}:certificates", "ca")
 
     await asyncio.gather(

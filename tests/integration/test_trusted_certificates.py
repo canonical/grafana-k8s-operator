@@ -2,9 +2,10 @@
 # Copyright 2023 Canonical
 # See LICENSE file for licensing details.
 
+import json
 import logging
 from pathlib import Path
-
+import sh
 import pytest
 import yaml
 from helpers import oci_image
@@ -28,12 +29,8 @@ async def test_deploy(ops_test, grafana_charm):
         application_name="grafana",
         trust=True,
     )
-    await ops_test.model.deploy(
-        "self-signed-certificates",
-        application_name="ca",
-        channel="latest/edge",
-        trust=True,
-    )
+    # python-libjuju supports noble only tarting with v3.5.2, so deploying manually
+    sh.juju.deploy("self-signed-certificates", "ca", channel="1/stable")
 
     await ops_test.model.add_relation("grafana:receive-ca-cert", "ca")
     await ops_test.model.wait_for_idle(
@@ -50,31 +47,22 @@ async def test_certs_created(ops_test: OpsTest):
     """Make sure charm code creates necessary files for cert verification."""
     unit_name = "grafana/0"
 
-    # Get relation ID
-    cmd = [
-        "sh",
-        "-c",
-        f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."relation-id"\'',
-    ]
-    retcode, stdout, stderr = await ops_test.run(*cmd)
-    relation_id = stdout.rstrip()
-
     # Get relation cert
     cmd = [
         "sh",
         "-c",
-        f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."related-units".ca/0.data.ca\'',
+        f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."application-data".certificates\'',
     ]
     retcode, stdout, stderr = await ops_test.run(*cmd)
-    relation_cert = stdout.rstrip()
+    relation_certs = "".join(json.loads(stdout.rstrip()))
 
     # Get pushed cert
-    received_cert_path = f"/usr/local/share/ca-certificates/trusted-ca-cert-{relation_id}-ca.crt"
+    received_cert_path = "/usr/local/share/ca-certificates/trusted-ca-cert.crt"
     rc, stdout, stderr = await ops_test.juju(
         "ssh", "--container", "grafana", unit_name, "cat", f"{received_cert_path}"
     )
     # Line ends have to be cleaned for comparison
-    received_cert = stdout.replace("\r\n", "\n").rstrip()
+    received_certs = stdout.replace("\r\n", "\n").rstrip()
 
     # Get trusted certs
     trusted_certs_path = "/etc/ssl/certs/ca-certificates.crt"
@@ -84,8 +72,8 @@ async def test_certs_created(ops_test: OpsTest):
     # Line ends have to be cleaned for comparison
     trusted_certs = stdout.replace("\r\n", "\n").rstrip()
 
-    assert relation_cert == received_cert
-    assert received_cert in trusted_certs
+    assert relation_certs == received_certs
+    assert received_certs in trusted_certs
 
 
 @pytest.mark.abort_on_fail
