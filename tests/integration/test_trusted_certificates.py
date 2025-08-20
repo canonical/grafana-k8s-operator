@@ -66,7 +66,7 @@ async def test_certs_created(ops_test: OpsTest):
         f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."application-data".certificates\'',
     ]
     retcode, stdout, stderr = await ops_test.run(*cmd)
-    relation_certs = "".join(json.load(stdout.rstrip()))
+    relation_certs = "".join(json.loads(stdout.rstrip()))
 
     # Get pushed cert
     received_cert_path = "/usr/local/share/ca-certificates/trusted-ca-cert.crt"
