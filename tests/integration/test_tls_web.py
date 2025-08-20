@@ -33,7 +33,7 @@ async def test_deploy(ops_test, grafana_charm):
     )
 
     # python-libjuju supports noble only tarting with v3.5.2, so deploying manually
-    sh.juju.deploy("self-signed-certificates", "ca", channel="1/stable")  # type: ignore[reportAttributeAccessIssue]
+    sh.juju.deploy("self-signed-certificates", "ca", channel="1/stable", model=ops_test.model_name)  # type: ignore[reportAttributeAccessIssue]
 
     await ops_test.model.add_relation(f"{grafana.name}:certificates", "ca")
 
