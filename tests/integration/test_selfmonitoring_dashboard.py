@@ -41,7 +41,7 @@ async def test_deploy(ops_test, grafana_charm):
         ),
         ops_test.model.deploy(
             "prometheus-k8s",
-            channel="edge",
+            channel="1/edge",
             trust=True,
             application_name=prometheus_app_name,
             series="focal",
