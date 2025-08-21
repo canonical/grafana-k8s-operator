@@ -64,7 +64,7 @@ async def test_build_and_deploy(
     # The identity bundle 0.2 deploys self-signed-certificates from latest/edge
     # https://github.com/canonical/iam-bundle/blob/track/0.2/bundle.yaml.j2#L44
     # which (currently) uses certificate_transfer v0.
-    sh.juju.refresh(self_signed_certificates_app_name, channel="1/stable", base="ubuntu@24.04", model=ops_test.model_name)  # type:ignore[reportAttributeAccessIssue]
+    sh.juju.refresh(self_signed_certificates_app_name, "--force-base", channel="1/stable", base="ubuntu@24.04", model=ops_test.model_name)  # type:ignore[reportAttributeAccessIssue]
 
     # Deploy grafana
     await ops_test.model.deploy(
