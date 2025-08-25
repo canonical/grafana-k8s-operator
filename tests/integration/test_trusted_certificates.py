@@ -51,14 +51,6 @@ async def test_certs_created(ops_test: OpsTest):
     """Make sure charm code creates necessary files for cert verification."""
     unit_name = "grafana/0"
 
-    # # Get relation ID
-    # cmd = [
-    #     "sh",
-    #     "-c",
-    #     f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."relation-id"\'',
-    # ]
-    # retcode, stdout, stderr = await ops_test.run(*cmd)
-
     # Get relation cert
     cmd = [
         "sh",

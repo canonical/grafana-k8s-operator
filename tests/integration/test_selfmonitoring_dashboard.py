@@ -43,7 +43,7 @@ async def test_deploy(ops_test, grafana_charm):
     sh.juju.deploy(
         "prometheus-k8s",
         prometheus_app_name,
-        channel="edge",
+        channel="2/edge",
         trust=True,
         model=ops_test.model.name,
     )
