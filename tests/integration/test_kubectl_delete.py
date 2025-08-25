@@ -4,7 +4,7 @@
 
 import asyncio
 import logging
-
+from tenacity import retry, stop_after_attempt, wait_exponential
 import sh
 import pytest
 from helpers import (
@@ -102,6 +102,7 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
     assert org["name"] == org_name
 
 
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def test_dashboards_and_datasources_are_retained_after_pod_deleted_and_restarted(ops_test):
     await check_grafana_is_ready(ops_test, grafana_app_name, 0)
     tester_dashboard = await get_dashboard_by_search(

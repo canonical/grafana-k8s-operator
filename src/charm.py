@@ -37,7 +37,7 @@ from ops.model import Port
 from secret_storage import SecretStorage
 
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferRequires,
 )
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
@@ -335,21 +335,9 @@ class GrafanaCharm(CharmBase):
 
     @property
     def _trusted_ca_certs(self) -> Optional[str]:
-        certs = []
-        rel_name = self.trusted_cert_transfer.relationship_name
-        if not self.model.get_relation(relation_name=rel_name):
-            return None
-        for relation in self.model.relations.get(rel_name, []):
-            # For some reason, relation.units includes our unit and app. Need to exclude them.
-            for unit in set(relation.units).difference([self.app, self.unit]):
-                # Note: this nested loop handles the case of multi-unit CA, each unit providing
-                # a different ca cert, but that is not currently supported by the lib itself.
-                if cert := relation.data[unit].get("ca"):
-                    certs.append(cert)
-        if len(certs) > 0:
+        if certs := self.trusted_cert_transfer.get_all_certificates():
             return "\n".join(certs)
         return None
-
 
     @property
     def unique_name(self):
