@@ -35,10 +35,16 @@ async def test_deploy(ops_test, grafana_charm):
     sh.juju.deploy(
         "self-signed-certificates", "ca", model=ops_test.model.name, channel="1/stable"
     )
+    sh.juju.deploy(
+        "prometheus-k8s", "prometheus", model=ops_test.model.name, channel="2/edge"
+    )
+    # Prometheus will be signed by the CA, and grafana will trusting the CA
+    sh.juju.integrate("prometheus:certificates", "ca")
+    sh.juju.integrate("grafana:receive-ca-cert", "ca")
+    sh.juju.integrate("grafana:grafana-source", "prometheus")
 
-    await ops_test.model.add_relation("grafana:receive-ca-cert", "ca")
     await ops_test.model.wait_for_idle(
-        apps=["grafana", "ca"],
+        apps=["grafana", "ca", "prometheus"],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
@@ -91,3 +97,20 @@ async def test_certs_available_after_refresh(ops_test: OpsTest, grafana_charm):
     )
     await ops_test.model.wait_for_idle(status="active")
     await test_certs_created(ops_test)
+
+
+@pytest.mark.abort_on_fail
+async def test_curl_succeeds_without_additional_args(ops_test: OpsTest):
+    """Make sure grafana can query prometheus without x509 errors.
+
+    After the cert is installed in the grafana workload's root store,
+    curling the prometheus datasource url from grafana should work without
+    any extra args to curl.
+
+    A neater approach could have been querying for the datasource health, but
+    that endpoint doesn't work (Not found).
+    https://grafana.com/docs/grafana/v9.5/developers/http_api/data_source/#check-data-source-health
+    """
+    sh.juju("ssh", "--container=grafana", "grafana/0", "apt update")
+    sh.juju("ssh", "--container=grafana", "grafana/0", "apt install -y curl")
+    assert '"status":"success"' in sh.juju("ssh", "--container=grafana", "grafana/0", f"curl https://prometheus-0.prometheus-endpoints.{ops_test.model_name}.svc.cluster.local:9090/api/v1/status/buildinfo")
