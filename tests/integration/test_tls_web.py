@@ -35,7 +35,7 @@ async def test_deploy(ops_test, grafana_charm):
         num_units=2,
     )
     sh.juju.deploy(
-        "self-signed-certificates", "ca", model=ops_test.model.name, channel="latest/edge"
+        "self-signed-certificates", "ca", model=ops_test.model.name, channel="1/stable"
     )
     await ops_test.model.add_relation(f"{grafana.name}:certificates", "ca")
 

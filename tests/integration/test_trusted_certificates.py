@@ -9,6 +9,7 @@ import pytest
 import yaml
 from helpers import oci_image
 from pytest_operator.plugin import OpsTest
+import json
 
 # pyright: reportAttributeAccessIssue = false
 
@@ -27,17 +28,23 @@ async def test_deploy(ops_test, grafana_charm):
     sh.juju.deploy(
         grafana_charm,
         "grafana",
-        model=ops_test.model.name,
+        model=ops_test.model_name,
         trust=True,
         resource=[f"{k}={v}" for k, v in grafana_resources.items()],
     )
     sh.juju.deploy(
-        "self-signed-certificates", "ca", model=ops_test.model.name, channel="latest/edge"
+        "self-signed-certificates", "ca", model=ops_test.model_name, channel="1/stable"
     )
+    sh.juju.deploy(
+        "prometheus-k8s", "prometheus", model=ops_test.model_name, channel="2/edge", trust=True
+    )
+    # Prometheus will be signed by the CA, and grafana will trusting the CA
+    sh.juju.integrate("prometheus:certificates", "ca", model=ops_test.model_name)
+    sh.juju.integrate("grafana:receive-ca-cert", "ca", model=ops_test.model_name)
+    sh.juju.integrate("grafana:grafana-source", "prometheus", model=ops_test.model_name)
 
-    await ops_test.model.add_relation("grafana:receive-ca-cert", "ca")
     await ops_test.model.wait_for_idle(
-        apps=["grafana", "ca"],
+        apps=["grafana", "ca", "prometheus"],
         status="active",
         raise_on_blocked=False,
         raise_on_error=False,
@@ -50,22 +57,14 @@ async def test_certs_created(ops_test: OpsTest):
     """Make sure charm code creates necessary files for cert verification."""
     unit_name = "grafana/0"
 
-    # Get relation ID
-    cmd = [
-        "sh",
-        "-c",
-        f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."relation-id"\'',
-    ]
-    retcode, stdout, stderr = await ops_test.run(*cmd)
-
     # Get relation cert
     cmd = [
         "sh",
         "-c",
-        f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."related-units".ca/0.data.ca\'',
+        f'juju show-unit {unit_name} --format yaml | yq \'.{unit_name}."relation-info".[] | select (.endpoint=="receive-ca-cert") | ."application-data".certificates\'',
     ]
     retcode, stdout, stderr = await ops_test.run(*cmd)
-    relation_cert = stdout.rstrip()
+    relation_certs = "".join(json.loads(stdout.rstrip()))
 
     # Get pushed cert
     received_cert_path = "/usr/local/share/ca-certificates/trusted-ca-cert.crt"
@@ -73,7 +72,7 @@ async def test_certs_created(ops_test: OpsTest):
         "ssh", "--container", "grafana", unit_name, "cat", f"{received_cert_path}"
     )
     # Line ends have to be cleaned for comparison
-    received_cert = stdout.replace("\r\n", "\n").rstrip()
+    received_certs = stdout.replace("\r\n", "\n").rstrip()
 
     # Get trusted certs
     trusted_certs_path = "/etc/ssl/certs/ca-certificates.crt"
@@ -83,18 +82,35 @@ async def test_certs_created(ops_test: OpsTest):
     # Line ends have to be cleaned for comparison
     trusted_certs = stdout.replace("\r\n", "\n").rstrip()
 
-    assert relation_cert == received_cert
-    assert received_cert in trusted_certs
+    assert relation_certs == received_certs
+    assert received_certs in trusted_certs
 
 
 @pytest.mark.abort_on_fail
 async def test_certs_available_after_refresh(ops_test: OpsTest, grafana_charm):
     """Make sure trusted certs are available after update."""
     assert ops_test.model
-    sh.juju.refresh("grafana", model=ops_test.model.name, path=grafana_charm)
+    sh.juju.refresh("grafana", model=ops_test.model_name, path=grafana_charm)
 
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=600, idle_period=30
     )
     await ops_test.model.wait_for_idle(status="active")
     await test_certs_created(ops_test)
+
+
+@pytest.mark.abort_on_fail
+async def test_curl_succeeds_without_additional_args(ops_test: OpsTest):
+    """Make sure grafana can query prometheus without x509 errors.
+
+    After the cert is installed in the grafana workload's root store,
+    curling the prometheus datasource url from grafana should work without
+    any extra args to curl.
+
+    A neater approach could have been querying for the datasource health, but
+    that endpoint doesn't work (Not found).
+    https://grafana.com/docs/grafana/v9.5/developers/http_api/data_source/#check-data-source-health
+    """
+    sh.juju("ssh", f"--model={ops_test.model_name}", "--container=grafana", "grafana/0", "apt update")
+    sh.juju("ssh", f"--model={ops_test.model_name}", "--container=grafana", "grafana/0", "apt install -y curl")
+    assert '"status":"success"' in sh.juju("ssh", f"--model={ops_test.model_name}", "--container=grafana", "grafana/0", f"curl https://prometheus-0.prometheus-endpoints.{ops_test.model_name}.svc.cluster.local:9090/api/v1/status/buildinfo")
