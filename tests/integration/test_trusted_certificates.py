@@ -28,20 +28,20 @@ async def test_deploy(ops_test, grafana_charm):
     sh.juju.deploy(
         grafana_charm,
         "grafana",
-        model=ops_test.model.name,
+        model=ops_test.model_name,
         trust=True,
         resource=[f"{k}={v}" for k, v in grafana_resources.items()],
     )
     sh.juju.deploy(
-        "self-signed-certificates", "ca", model=ops_test.model.name, channel="1/stable"
+        "self-signed-certificates", "ca", model=ops_test.model_name, channel="1/stable"
     )
     sh.juju.deploy(
-        "prometheus-k8s", "prometheus", model=ops_test.model.name, channel="2/edge"
+        "prometheus-k8s", "prometheus", model=ops_test.model_name, channel="2/edge"
     )
     # Prometheus will be signed by the CA, and grafana will trusting the CA
-    sh.juju.integrate("prometheus:certificates", "ca", model=ops_test.model.name)
-    sh.juju.integrate("grafana:receive-ca-cert", "ca", model=ops_test.model.name)
-    sh.juju.integrate("grafana:grafana-source", "prometheus", model=ops_test.model.name)
+    sh.juju.integrate("prometheus:certificates", "ca", model=ops_test.model_name)
+    sh.juju.integrate("grafana:receive-ca-cert", "ca", model=ops_test.model_name)
+    sh.juju.integrate("grafana:grafana-source", "prometheus", model=ops_test.model_name)
 
     await ops_test.model.wait_for_idle(
         apps=["grafana", "ca", "prometheus"],
@@ -90,7 +90,7 @@ async def test_certs_created(ops_test: OpsTest):
 async def test_certs_available_after_refresh(ops_test: OpsTest, grafana_charm):
     """Make sure trusted certs are available after update."""
     assert ops_test.model
-    sh.juju.refresh("grafana", model=ops_test.model.name, path=grafana_charm)
+    sh.juju.refresh("grafana", model=ops_test.model_name, path=grafana_charm)
 
     await ops_test.model.wait_for_idle(
         status="active", raise_on_error=False, timeout=600, idle_period=30
@@ -111,6 +111,6 @@ async def test_curl_succeeds_without_additional_args(ops_test: OpsTest):
     that endpoint doesn't work (Not found).
     https://grafana.com/docs/grafana/v9.5/developers/http_api/data_source/#check-data-source-health
     """
-    sh.juju("ssh", model=ops_test.model.name, "--container=grafana", "grafana/0", "apt update")
-    sh.juju("ssh", model=ops_test.model.name, "--container=grafana", "grafana/0", "apt install -y curl")
-    assert '"status":"success"' in sh.juju("ssh", model=ops_test.model.name, "--container=grafana", "grafana/0", f"curl https://prometheus-0.prometheus-endpoints.{ops_test.model_name}.svc.cluster.local:9090/api/v1/status/buildinfo")
+    sh.juju("ssh", f"--model={ops_test.model_name}", "--container=grafana", "grafana/0", "apt update")
+    sh.juju("ssh", f"--model={ops_test.model_name}", "--container=grafana", "grafana/0", "apt install -y curl")
+    assert '"status":"success"' in sh.juju("ssh", f"--model={ops_test.model_name}", "--container=grafana", "grafana/0", f"curl https://prometheus-0.prometheus-endpoints.{ops_test.model_name}.svc.cluster.local:9090/api/v1/status/buildinfo")
