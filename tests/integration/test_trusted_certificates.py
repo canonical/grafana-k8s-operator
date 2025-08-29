@@ -36,7 +36,7 @@ async def test_deploy(ops_test, grafana_charm):
         "self-signed-certificates", "ca", model=ops_test.model_name, channel="1/stable"
     )
     sh.juju.deploy(
-        "prometheus-k8s", "prometheus", model=ops_test.model_name, channel="2/edge"
+        "prometheus-k8s", "prometheus", model=ops_test.model_name, channel="2/edge", trust=True
     )
     # Prometheus will be signed by the CA, and grafana will trusting the CA
     sh.juju.integrate("prometheus:certificates", "ca", model=ops_test.model_name)
