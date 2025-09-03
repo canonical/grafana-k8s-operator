@@ -544,7 +544,8 @@ def _validate_relation_by_interface_and_direction(
     else:
         raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
 
-# Helper function since charm its still bound to 3.8, remove after minimum version is 3.9.
+# TODO: Remove helper function after minimum Python version is 3.9 and Pathlib supports is_relative_to
+# Github issue: https://github.com/canonical/grafana-k8s-operator/issues/445
 def _is_subpath(path: Path, parent: Path) -> bool:
     """Check if a path is a subpath of parent."""
     try:
@@ -955,7 +956,8 @@ class CharmedDashboard:
         # already rendered there, so we do not want to overwrite it with a uid generated from aggregator's info.
         # We overwrite the uid only if it's not a valid "Path40" uid.
         if not DashboardPath40UID.is_valid(original_uid := dashboard_dict.get("uid", "")):
-            # Replace _is_subpath with dashboard_path.is_relative_to(charm_dir) when minimum Python is set to 3.9
+            # TODO: Replace _is_subpath with dashboard_path.is_relative_to(charm_dir) when minimum Python is set to 3.9
+            # Github issue: https://github.com/canonical/grafana-k8s-operator/issues/445
             rel_path = str(
                 dashboard_path.relative_to(charm_dir)
                 if dashboard_path.is_absolute()
