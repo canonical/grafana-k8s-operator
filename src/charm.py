@@ -26,6 +26,7 @@ from typing import Any, Dict, cast, Optional
 from urllib.parse import urlparse
 
 from cosl import JujuTopology
+from cosl.reconciler import all_events, observe_events
 from ops import ActiveStatus, CollectStatusEvent, main
 from ops.charm import (
     ActionEvent,
@@ -61,7 +62,7 @@ from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
-from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
+from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer, TraefikRouteRequirerReadyEvent
 from grafana import Grafana
 from grafana_client import GrafanaClient, GrafanaCommError
 from grafana_config import GrafanaConfig
@@ -240,8 +241,9 @@ class GrafanaCharm(CharmBase):
 
         self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
 
+        all_events.add(TraefikRouteRequirerReadyEvent)
+        observe_events(self, all_events, self._reconcile)
 
-        self._reconcile()
 
     @property
     def _scheme(self) -> str:
@@ -378,7 +380,6 @@ class GrafanaCharm(CharmBase):
             query_timeout=int(self.model.config.get("datasource_query_timeout", 0)),
         )
 
-    @property
     def _pebble_env(self) -> PebbleEnvironment:
         topology = self._topology
         tracing_resource_attrs = ((f"juju_application={topology.application},juju_model={topology.model}" + \
@@ -559,7 +560,7 @@ class GrafanaCharm(CharmBase):
         self.peers.set_app_data("database", db_info)
         self._grafana_service.reconcile()
 
-    def _on_database_broken(self, event: RelationBrokenEvent) -> None:
+    def _on_database_broken(self, _: RelationBrokenEvent) -> None:
         """Removes database connection info from datastore.
 
         We are guaranteed to only have one DB connection, so clearing
