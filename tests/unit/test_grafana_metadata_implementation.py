@@ -21,11 +21,11 @@ GRAFANA_URL = f"http://{GRAFANA_FQDN}:{WORKLOAD_PORT}/"
 GRAFANA_INGRESS_URL = "http://www.ingress-url.com/"
 
 
-def test_provider_sender_sends_data_on_relation_joined(ctx, base_state, peer_relation):
+def test_provider_sender_sends_data_on_relation_joined(ctx, base_state, peer_relation, database_relation):
     """Tests that a charm using GrafanaMetadataProvider sends the correct data on a relation joined event."""
     # Arrange
     relation = Relation(RELATION_NAME, INTERFACE_NAME)
-    state = replace(base_state, relations={relation, peer_relation})
+    state = replace(base_state, relations={relation, peer_relation, database_relation})
 
     # Act
     with ctx(
@@ -44,11 +44,11 @@ def test_provider_sender_sends_data_on_relation_joined(ctx, base_state, peer_rel
 
 
 @patch("charm.GrafanaCharm.external_url", PropertyMock(return_value=GRAFANA_INGRESS_URL))
-def test_provider_sender_sends_data_with_ingress_url_on_relation_joined(ctx, base_state, peer_relation):
+def test_provider_sender_sends_data_with_ingress_url_on_relation_joined(ctx, base_state, peer_relation, database_relation):
     """Tests that a charm using GrafanaMetadataProvider with an external url sends the correct data."""
     # Arrange
     relation = Relation(RELATION_NAME, INTERFACE_NAME)
-    state = replace(base_state, relations={relation, peer_relation})
+    state = replace(base_state, relations={relation, peer_relation, database_relation})
 
     # Act
     with ctx(
@@ -67,11 +67,11 @@ def test_provider_sender_sends_data_with_ingress_url_on_relation_joined(ctx, bas
     assert state_out.get_relation(relation.id).local_app_data == expected
 
 
-def test_provider_sends_data_on_leader_elected(ctx, base_state, peer_relation):
+def test_provider_sends_data_on_leader_elected(ctx, base_state, peer_relation, database_relation):
     """Tests that a charm using GrafanaMetadataProvider sends data on a leader elected event."""
     # Arrange
     relation = Relation(RELATION_NAME, INTERFACE_NAME)
-    state = replace(base_state, relations={relation, peer_relation})
+    state = replace(base_state, relations={relation, peer_relation, database_relation})
 
     # Act
     with ctx(

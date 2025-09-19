@@ -26,7 +26,7 @@ from typing import Any, Dict, cast, Optional
 from urllib.parse import urlparse
 
 from cosl import JujuTopology
-from ops import ActiveStatus, CollectStatusEvent, main
+from ops import ActiveStatus, CollectStatusEvent, main, BlockedStatus, WaitingStatus
 from ops.charm import (
     ActionEvent,
     CharmBase,
@@ -66,7 +66,6 @@ from grafana import Grafana
 from grafana_client import GrafanaClient, GrafanaCommError
 from grafana_config import GrafanaConfig
 from secret_storage import generate_password
-from litestream import Litestream
 from relation import Relation
 from models import DatasourceConfig, PebbleEnvironment, TLSConfig
 from charms.tls_certificates_interface.v4.tls_certificates import (
@@ -102,8 +101,8 @@ logger = logging.getLogger()
 class GrafanaCharm(CharmBase):
     """Charm to run Grafana on Kubernetes.
 
-    This charm allows for high-availability
-    (as long as a non-sqlite database relation is present).
+    This charm requires a database relation to function and supports high-availability
+    when deployed with multiple units.
 
     Developers of this charm should be aware of the Grafana provisioning docs:
     https://grafana.com/docs/grafana/latest/administration/provisioning/
@@ -209,9 +208,6 @@ class GrafanaCharm(CharmBase):
                                         provision_own_dashboard = self._provision_own_dashboard,
                                         scheme=self._scheme,
                                         )
-        self._litestream = Litestream(self.unit.get_container("litestream"),
-                                      is_leader= self.unit.is_leader(),
-                                        peers = self.peers)
 
         self.framework.observe(
             self.on.get_admin_password_action,  # pyright: ignore
@@ -479,12 +475,16 @@ class GrafanaCharm(CharmBase):
         """Unconditional control logic."""
         self._set_ports()
         self.unit.set_workload_version(self._grafana_service.grafana_version)
+
+        # Require a database relation for Grafana; block or wait until available
+        if self.app.planned_units() > 1 and not self._has_complete_database_relation():
+            return
+
         if not self.resource_patch.is_ready():
             logger.debug("Resource patch not ready yet. Skipping cluster update step.")
             return
         self._reconcile_relations()
         self._grafana_service.reconcile()
-        self._litestream.reconcile()
         self._reconcile_tls_config()
 
 
@@ -540,7 +540,27 @@ class GrafanaCharm(CharmBase):
     def _on_collect_unit_status(self, e: CollectStatusEvent):
         e.add_status(ActiveStatus())
         e.add_status(self.resource_patch.get_status())
+        db_rel = self.model.get_relation(DATABASE_RELATION)
+        if self.app.planned_units() > 1 and db_rel is None:
+            e.add_status(BlockedStatus("missing database relation"))
+        if db_rel is not None and not self._has_complete_database_relation():
+            e.add_status(WaitingStatus("waiting for database provider"))
 
+    def _has_complete_database_relation(self) -> bool:
+        """Check if the database relation has all required fields.
+
+        Returns:
+            True if the database relation exists and has all required fields, False otherwise.
+        """
+        db_rel = self.model.get_relation(DATABASE_RELATION)
+        if db_rel is None:
+            return False
+
+        # Check if all required fields are present
+        for field in REQUIRED_DATABASE_FIELDS:
+            if db_rel.data[db_rel.app].get(field) is None:
+                return False
+        return True
 
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
         """Sets configuration information for database connection.

@@ -2,9 +2,9 @@ from configparser import ConfigParser
 from ops.testing import State
 
 
-def test_reporting_enabled(ctx, containers):
+def test_reporting_enabled(ctx, grafana_container, database_relation, peer_relation):
     # GIVEN the "reporting_enabled" config option is set to True
-    state = State(leader=True, config={"reporting_enabled": True}, containers=containers)
+    state = State(leader=True, config={"reporting_enabled": True}, containers={grafana_container}, relations={database_relation, peer_relation})
 
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)
@@ -18,9 +18,9 @@ def test_reporting_enabled(ctx, containers):
     assert "analytics" not in config
 
 
-def test_reporting_disabled(ctx, containers):
+def test_reporting_disabled(ctx, grafana_container, database_relation, peer_relation):
     # GIVEN the "reporting_enabled" config option is set to False
-    state = State(leader=True, config={"reporting_enabled": False}, containers=containers)
+    state = State(leader=True, config={"reporting_enabled": False}, containers={grafana_container}, relations={database_relation, peer_relation})
 
     # WHEN config-changed fires
     out = ctx.run(ctx.on.config_changed(), state)

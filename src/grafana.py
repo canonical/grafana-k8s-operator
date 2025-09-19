@@ -33,7 +33,6 @@ from ops.pebble import (
 from models import PebbleEnvironment, TLSConfig
 from constants import (
     GRAFANA_KEY_PATH,
-    DATABASE_PATH,
     CA_CERT_PATH,
     GRAFANA_CRT_PATH,
     OAUTH_SCOPES,
@@ -105,10 +104,8 @@ class Grafana:
 
         Ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini
         """
-        # Placeholder for when we add "proper" mysql support for HA
-        extra_info = {
-            "GF_DATABASE_TYPE": "sqlite3",
-        }
+        # Environment variables that will be passed to the Grafana process.
+        extra_info = {}
 
         # Juju Proxy settings
         extra_info.update(
@@ -388,10 +385,7 @@ class Grafana:
             self.current_datasources_hash = datasources_hash
             self._update_config_file(DATASOURCES_PATH, grafana_datasources)
             logger.info("Updated Grafana's datasource configuration")
-
-            # Non-leaders will get updates from litestream
-            if self._is_leader:
-                changes.append(True)
+            changes.append(True)
 
     def _reconcile_pebble_plan(self, changes:List):
         if self._container.get_plan().services != self._layer.services:
@@ -412,19 +406,8 @@ class Grafana:
                 self._container.add_layer(GRAFANA_WORKLOAD, self._layer, combine=True)
                 self._container.restart(GRAFANA_WORKLOAD)
                 logger.info("Restarted grafana-k8s")
-
-                if self._poll_container(self._container.can_connect):
-                    # We should also make sure sqlite is in WAL mode for replication
-                    self._push_sqlite_static()
-
-                    pragma = self._container.exec(
-                        [
-                            "/usr/local/bin/sqlite3",
-                            DATABASE_PATH,
-                            "pragma journal_mode=wal;",
-                        ]
-                    )
-                    pragma.wait()
+                # Wait for the workload container to become reachable again
+                self._poll_container(self._container.can_connect)
 
             except ExecError as e:
                 # debug because, on initial container startup when Grafana has an open lock and is
@@ -437,15 +420,6 @@ class Grafana:
                 )
             except ChangeError as e:
                 logger.error("Could not restart grafana at this time: %s", e)
-
-    def _push_sqlite_static(self):
-        # for ease of mocking in unittests, this is a standalone function
-        self._container.push(
-            "/usr/local/bin/sqlite3",
-            Path("sqlite-static").read_bytes(),
-            permissions=0o755,
-            make_dirs=True,
-        )
 
     def _poll_container(
             self, func: Callable[[], bool], timeout: float = 2.0, delay: float = 0.1

@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from ops import ActiveStatus
-from ops.testing import PeerRelation, Container, State, Exec
+from ops.testing import PeerRelation, Container, State, Exec, Relation
 from charms.tempo_coordinator_k8s.v0.charm_tracing import charm_tracing_disabled
 
 import pytest
@@ -25,7 +25,6 @@ def disable_charm_tracing():
 @pytest.fixture
 def ctx():
     patches = (
-        patch("grafana.Grafana._push_sqlite_static", new=lambda _: None),
         patch("lightkube.core.client.GenericSyncClient"),
         patch("socket.getfqdn", new=lambda *args: GRAFANA_FQDN),
         patch("socket.gethostbyname", new=lambda *args: "1.2.3.4"),
@@ -50,6 +49,16 @@ def ctx():
 def peer_relation():
     return PeerRelation("grafana")
 
+@pytest.fixture
+def database_relation():
+    return Relation("database", remote_app_name="mysql", remote_app_data={
+        "type": "mysql",
+        "host": "1.1.1.1:3306",
+        "name": "mysqldb",
+        "user": "grafana",
+        "password": "grafana",
+    })
+
 @pytest.fixture(scope="function")
 def grafana_container():
     return Container(
@@ -59,21 +68,10 @@ def grafana_container():
     )
 
 
-@pytest.fixture(scope="function")
-def litestream_container():
-    return Container(
-        "litestream",
-        can_connect=True,
-    )
-
 @pytest.fixture
-def containers(grafana_container, litestream_container):
-    return {grafana_container, litestream_container}
-
-@pytest.fixture
-def base_state(containers, peer_relation):
+def base_state(grafana_container, peer_relation, database_relation):
     return State(
         leader=True,
-        containers=containers,
-        relations={peer_relation},
+        containers={grafana_container},
+        relations={peer_relation, database_relation},
     )

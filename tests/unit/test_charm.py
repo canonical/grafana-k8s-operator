@@ -10,9 +10,6 @@ import yaml
 from ops.testing import (Relation,
                         Context,
                         Model,
-                        Network,
-                        BindAddress,
-                        Address,
                         CharmEvents,
                         PeerRelation,
                         State)
@@ -78,9 +75,9 @@ url = mysql://grafana:grafana@1.1.1.1:3306/mysqldb
 """
 
 @mark.parametrize("leader", (False, True))
-def test_peer_relation_guards(ctx:Context, leader, containers):
+def test_peer_relation_guards(ctx:Context, leader, grafana_container):
     # GIVEN no peer relation
-    state = State(leader=leader, containers=containers)
+    state = State(leader=leader, containers={grafana_container})
 
     # WHEN an install event is fired
     with ctx(ctx.on.install(), state) as mgr:
@@ -143,11 +140,11 @@ def test_config_is_updated_with_database_relation(ctx, base_state, peer_relation
         # THEN we get grafana-config.ini updated with config
         assert config.read() == DATABASE_CONFIG_INI
 
-def test_dashboard_path_is_initialized(ctx, base_state, peer_relation):
+def test_dashboard_path_is_initialized(ctx, base_state, peer_relation, database_relation):
     # GIVEN grafana source and metrics relations
     grafana_source_rel = Relation("grafana-source", remote_app_name="prometheus")
     metrics_rel = Relation("metrics-endpoint", remote_app_name="prometheus")
-    state = replace(base_state, relations={peer_relation, grafana_source_rel, metrics_rel})
+    state = replace(base_state, relations={peer_relation, grafana_source_rel, metrics_rel, database_relation})
 
     # WHEN running a relation changed event
     with ctx(ctx.on.relation_changed(metrics_rel), state) as mgr:
@@ -243,12 +240,12 @@ def test_bare_charm_has_no_subpath_set_in_layer(ctx, base_state, event):
 
 @patch.object(grafana_client.GrafanaClient, "build_info", new={"version": "1.0.0"})
 @patch.multiple("charm.TraefikRouteRequirer", external_host="1.2.3.4", scheme="http")
-def test_ingress_relation_sets_options_and_rel_data(ctx:Context, base_state, peer_relation):
+def test_ingress_relation_sets_options_and_rel_data(ctx:Context, base_state, peer_relation, database_relation):
     # GIVEN an ingress relation
     ingress_rel = Relation("ingress",
                             remote_app_name="traefik",
                               )
-    state = replace(base_state, relations={ingress_rel, peer_relation}, model=Model(name="testmodel"))
+    state = replace(base_state, relations={ingress_rel, peer_relation, database_relation}, model=Model(name="testmodel"))
 
     expected_rel_data = {
         "http": {
@@ -300,7 +297,7 @@ def test_ingress_relation_sets_options_and_rel_data(ctx:Context, base_state, pee
         assert yaml.safe_load(rel_data["config"]) == expected_rel_data
         assert charm.external_url == "http://1.2.3.4/testmodel-grafana-k8s"
 
-def test_config_is_updated_with_authentication_config(ctx, base_state, peer_relation):
+def test_config_is_updated_with_authentication_config(ctx, base_state, peer_relation, database_relation):
     # GIVEN a grafana-auth relation
     example_auth_conf = {
         "proxy": {
@@ -313,7 +310,7 @@ def test_config_is_updated_with_authentication_config(ctx, base_state, peer_rela
     }
     auth_rel = Relation("grafana-auth", remote_app_name="auth_provider", remote_app_data={"auth": json.dumps(example_auth_conf)})
 
-    state = replace(base_state, relations={auth_rel, peer_relation})
+    state = replace(base_state, relations={auth_rel, peer_relation, database_relation})
     # WHEN a relation_changed event is fired
     with ctx(ctx.on.relation_changed(auth_rel), state) as mgr:
         mgr.run()
@@ -322,43 +319,3 @@ def test_config_is_updated_with_authentication_config(ctx, base_state, peer_rela
         plan = charm.unit.get_container("grafana").get_plan().services["grafana"].to_dict()
         assert "GF_AUTH_PROXY_ENABLED" in plan["environment"].keys()
         assert plan["environment"]["GF_AUTH_PROXY_ENABLED"] == "True"
-
-
-@patch("socket.getfqdn", lambda: "1.2.3.4")
-def test_primary_sets_correct_peer_data(ctx, base_state):
-    # GIVEN a grafana app with 2 units
-    state = replace(base_state, planned_units=2, networks={Network("grafana", bind_addresses=[BindAddress([Address("1.2.3.4")])])})
-    # WHEN a config_changed event is fired on the leader unit
-    with ctx(ctx.on.config_changed(), state) as mgr:
-        mgr.run()
-        charm = mgr.charm
-        unit_binding = charm.model.get_binding("grafana")
-        assert unit_binding
-        unit_ip = str(unit_binding.network.bind_address)
-        # THEN the leader unit set peer data replica_primary
-        replica_address = charm.peers.get_app_data("replica_primary")
-        assert unit_ip == replica_address
-
-@mark.parametrize(
-    "event",
-    (
-        CharmEvents.update_status(),
-        CharmEvents.start(),
-        CharmEvents.install(),
-        CharmEvents.config_changed(),
-    ),
-)
-@patch("socket.getfqdn", lambda: "2.3.4.5")
-def test_replicas_get_correct_environment_variables(ctx, base_state, event):
-    # GIVEN a grafana app with 2 units
-    updated_peer_relation = PeerRelation("grafana", local_app_data={"replica_primary": json.dumps("1.2.3.4")})
-    state = replace(base_state, planned_units=2, leader=False, relations={updated_peer_relation})
-    # WHEN any event is fired on the non-leader unit
-    with ctx(event, state) as mgr:
-        mgr.run()
-        charm = mgr.charm
-        # THEN LITESTREAM_UPSTREAM_URL gets set in litestream pebble service
-        primary = charm._litestream.layer.to_dict()["services"]["litestream"][  # type: ignore
-        "environment"
-        ]["LITESTREAM_UPSTREAM_URL"]
-        assert primary  == "1.2.3.4:9876"

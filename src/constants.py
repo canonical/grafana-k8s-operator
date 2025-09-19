@@ -1,7 +1,7 @@
 """Charm constants."""
 
 REQUIRED_DATABASE_FIELDS = {
-    "type",  # mysql, postgres or sqlite3 (sqlite3 doesn't work for HA)
+    "type",  # mysql, postgres
     "host",  # in the form '<url_or_ip>:<port>', e.g. 127.0.0.1:3306
     "name",
     "user",

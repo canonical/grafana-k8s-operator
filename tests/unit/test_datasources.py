@@ -8,7 +8,7 @@ from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 
 
 @patch("socket.getfqdn", new=lambda *args: "fqdn")
-def test_datasource_sharing(ctx, peer_relation, containers):
+def test_datasource_sharing(ctx, peer_relation, grafana_container, database_relation):
     # GIVEN a datasource relation with two remote units
     datasource = Relation(
         "grafana-source",
@@ -24,7 +24,7 @@ def test_datasource_sharing(ctx, peer_relation, containers):
         },
     )
     state = State(
-        leader=True, containers=containers, relations={datasource, peer_relation}
+        leader=True, containers={grafana_container}, relations={datasource, peer_relation, database_relation}
     )
 
     # WHEN relation-changed fires for a datasource relation

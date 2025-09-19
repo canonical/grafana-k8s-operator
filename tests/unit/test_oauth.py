@@ -17,7 +17,7 @@ OAUTH_PROVIDER_INFO = {
 }
 
 
-def test_config_is_updated_with_oauth_relation_data(ctx, base_state, peer_relation):
+def test_config_is_updated_with_oauth_relation_data(ctx, base_state, peer_relation, database_relation):
     # GIVEN an oauth relation AND an oauth secret
     oauth_secret = Secret({"secret": OAUTH_CLIENT_SECRET})
     oauth_rel = Relation("oauth", remote_app_name="hydra", remote_app_data={
@@ -25,7 +25,7 @@ def test_config_is_updated_with_oauth_relation_data(ctx, base_state, peer_relati
             "client_secret_id": oauth_secret.id,
             **OAUTH_PROVIDER_INFO,
         })
-    state = replace(base_state, relations={peer_relation, oauth_rel}, secrets={oauth_secret})
+    state = replace(base_state, relations={peer_relation, oauth_rel, database_relation}, secrets={oauth_secret})
 
     # WHEN a relation_changed event fires
     with ctx(ctx.on.relation_changed(oauth_rel), state) as mgr:
@@ -49,10 +49,10 @@ def test_config_is_updated_with_oauth_relation_data(ctx, base_state, peer_relati
         for k, v in expected_env.items():
             assert env[k] == v
 
-def test_config_with_empty_oauth_relation_data(ctx, base_state, peer_relation):
+def test_config_with_empty_oauth_relation_data(ctx, base_state, peer_relation, database_relation):
     # GIVEN an oauth relation with NO app data
     oauth_rel = Relation("oauth", remote_app_name="hydra")
-    state = replace(base_state, relations={peer_relation, oauth_rel})
+    state = replace(base_state, relations={peer_relation, oauth_rel, database_relation})
     # WHEN a relation_changed event fires
     with ctx(ctx.on.relation_changed(oauth_rel), state) as mgr:
         mgr.run()
@@ -75,7 +75,7 @@ def test_config_with_empty_oauth_relation_data(ctx, base_state, peer_relation):
         for k in oauth_env:
              assert k not in env
 
-def test_config_is_updated_with_oauth_relation_data_removed(ctx, base_state, peer_relation):
+def test_config_is_updated_with_oauth_relation_data_removed(ctx, base_state, peer_relation, database_relation):
     # GIVEN an oauth relation AND an oauth secret
     oauth_secret = Secret({"secret": OAUTH_CLIENT_SECRET})
     oauth_rel = Relation("oauth", remote_app_name="hydra", remote_app_data={
@@ -83,7 +83,7 @@ def test_config_is_updated_with_oauth_relation_data_removed(ctx, base_state, pee
             "client_secret_id": oauth_secret.id,
             **OAUTH_PROVIDER_INFO,
         })
-    state = replace(base_state, relations={peer_relation, oauth_rel}, secrets={oauth_secret})
+    state = replace(base_state, relations={peer_relation, oauth_rel, database_relation}, secrets={oauth_secret})
 
     # WHEN a relation_broken event fires
     with ctx(ctx.on.relation_broken(oauth_rel), state) as mgr:

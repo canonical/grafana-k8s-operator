@@ -28,11 +28,6 @@ containers:
     mounts:
       - storage: database
         location: /var/lib/grafana
-  litestream:
-    resource: litestream-image
-    mounts:
-      - storage: database
-        location: /var/lib/grafana
 
 storage:
   database:
@@ -122,10 +117,6 @@ resources:
     description: upstream docker image for Grafana
     #upstream-source: ghcr.io/canonical/grafana:dev
     upstream-source: docker.io/ubuntu/grafana:9-22.04
-  litestream-image:
-    type: oci-image
-    description: upstream image for sqlite streaming
-    upstream-source: docker.io/litestream/litestream:0.4.0-beta.2
 
 platforms:
   ubuntu@24.04:amd64:

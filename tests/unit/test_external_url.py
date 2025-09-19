@@ -54,11 +54,11 @@ def test_url_without_path(ctx, base_state_with_model, event):
         assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
         assert is_service_running(charm)
 
-def test_external_url_precedence(ctx, base_state_with_model, peer_relation):
+def test_external_url_precedence(ctx, base_state_with_model, peer_relation, database_relation):
     """Precedence is [ingress] > [fqdn]."""
     # GIVEN an ingress relation
     ingress_rel = Relation("ingress", remote_app_name="traefik-app")
-    state = replace(base_state_with_model, relations={peer_relation, ingress_rel})
+    state = replace(base_state_with_model, relations={peer_relation, ingress_rel, database_relation})
 
     with patch.multiple("charm.TraefikRouteRequirer", external_host="1.2.3.4", scheme="http"):
         # WHEN relation_changed on traefik is fired
