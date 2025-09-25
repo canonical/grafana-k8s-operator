@@ -154,26 +154,26 @@ class Grafana:
 
         oauth_provider_info = self._grafana_config_generator.oauth_config
         if oauth_provider_info:
-            if oauth_provider_info:
-                extra_info.update(
-                    {
-                        "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
-                        "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
-                        "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(
-                            str, oauth_provider_info.client_id
-                        ),
-                        "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
-                            str, oauth_provider_info.client_secret
-                        ),
-                        "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
-                        "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
-                        "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
-                        "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
-                        "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
-                        # TODO: This toggle will be removed on grafana v10.3, remove it
-                        "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
-                    }
-                )
+            extra_info.update(
+                {
+                    "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
+                    "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
+                    "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
+                    "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(
+                        str, oauth_provider_info.client_id
+                    ),
+                    "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
+                        str, oauth_provider_info.client_secret
+                    ),
+                    "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
+                    "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
+                    # TODO: This toggle will be removed on grafana v10.3, remove it
+                    "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
+                }
+            )
 
         tracing_resource_attrs = self._pebble_env().tracing_resource_attributes
         if tracing_resource_attrs:
