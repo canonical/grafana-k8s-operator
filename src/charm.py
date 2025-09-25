@@ -353,6 +353,11 @@ class GrafanaCharm(CharmBase):
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
+        api_endpoints = {
+            "Search": "/api/search",
+            "Data Sources": "/api/datasources",
+        }
+
         return CatalogueItem(
             name="Grafana",
             icon="bar-chart",
@@ -362,6 +367,8 @@ class GrafanaCharm(CharmBase):
                 "visualize metrics from mixed datasources in configurable "
                 "dashboards for observability."
             ),
+            api_docs = "https://grafana.com/docs/grafana/latest/developers/http_api/",
+            api_endpoints={key: f"{self.external_url}{path}" for key, path in api_endpoints.items()},
         )
 
     # TRACING PROPERTIES
