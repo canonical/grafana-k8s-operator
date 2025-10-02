@@ -189,7 +189,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
-from cosl import DashboardPath40UID, LZMABase64, type_convert_stored
+from cosl import DashboardPath40UID, LZMABase64
+from cosl.types import type_convert_stored
 from ops.charm import (
     CharmBase,
     HookEvent,
@@ -217,7 +218,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 45
+LIBPATCH = 46
 
 PYDEPS = ["cosl >= 0.0.50"]
 
