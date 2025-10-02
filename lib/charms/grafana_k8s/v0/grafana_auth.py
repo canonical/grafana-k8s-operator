@@ -91,6 +91,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
+from cosl.types import type_convert_stored
 from jsonschema import validate  # type: ignore[import]
 from ops.charm import (
     CharmBase,
@@ -105,8 +106,6 @@ from ops.framework import (
     EventBase,
     EventSource,
     Object,
-    StoredDict,
-    StoredList,
 )
 
 # The unique Charmhub library identifier, never change it
@@ -117,7 +116,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
+LIBPATCH = 5
 
 AUTH_PROXY_PROVIDER_JSON_SCHEMA = {
     "$schema": "http://json-schema.org/draft-07/schema",
@@ -240,15 +239,6 @@ AUTH = "auth"
 logger = logging.getLogger(__name__)
 
 
-def _type_convert_stored(obj):
-    """Convert Stored* to their appropriate types, recursively."""
-    if isinstance(obj, StoredList):
-        return list(map(_type_convert_stored, obj))
-    if isinstance(obj, StoredDict):
-        return {k: _type_convert_stored(obj[k]) for k in obj.keys()}
-    return obj
-
-
 class UrlsAvailableEvent(EventBase):
     """Charm event triggered when provider charm extracts the urls from relation data."""
 
@@ -266,7 +256,7 @@ class UrlsAvailableEvent(EventBase):
 
     def restore(self, snapshot: dict):
         """Restores snapshot."""
-        self.urls = _type_convert_stored(snapshot["urls"])
+        self.urls = type_convert_stored(snapshot["urls"])
         self.relation_id = snapshot["relation_id"]
 
 
@@ -394,7 +384,7 @@ class AuthConfAvailableEvent(EventBase):
 
     def restore(self, snapshot: dict):
         """Restores snapshot."""
-        self.auth = _type_convert_stored(snapshot[AUTH])
+        self.auth = type_convert_stored(snapshot[AUTH])
         self.relation_id = snapshot["relation_id"]
 
 
