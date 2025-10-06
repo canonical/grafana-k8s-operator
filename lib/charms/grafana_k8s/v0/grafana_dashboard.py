@@ -963,7 +963,6 @@ class CharmedDashboard:
                 "Processed dashboard '%s': kept original uid '%s'", dashboard_path, original_uid
             )
 
-
     @classmethod
     def _add_tags(cls, dashboard_dict: dict, charm_name: str):
         tags: List[str] = dashboard_dict.get("tags", [])
