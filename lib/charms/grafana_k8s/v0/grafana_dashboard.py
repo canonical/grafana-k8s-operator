@@ -945,9 +945,17 @@ class CharmedDashboard:
         # If we're running this from within an aggregator (such as grafana agent), then the uid was
         # already rendered there, so we do not want to overwrite it with a uid generated from aggregator's info.
         # We overwrite the uid only if it's not a valid "Path40" uid.
-        if not DashboardPath40UID.is_valid(original_uid := dashboard_dict.get("uid", "")):
+        original_uid = dashboard_dict.get("uid", "")
+
+        if DashboardPath40UID.is_valid(original_uid):
+            logger.debug(
+                "Processed dashboard '%s': kept original uid '%s'", dashboard_path, original_uid
+            )
+            return
+
+        try:
             rel_path = str(
-                dashboard_path.relative_to(charm_dir, walk_up=True)
+                dashboard_path.relative_to(charm_dir)
                 if dashboard_path.is_absolute()
                 else dashboard_path
             )
@@ -958,10 +966,9 @@ class CharmedDashboard:
                 original_uid,
                 dashboard_dict["uid"],
             )
-        else:
-            logger.debug(
-                "Processed dashboard '%s': kept original uid '%s'", dashboard_path, original_uid
-            )
+        except ValueError:
+            logger.debug("dashboard_path: '%s' is no relative to charm_dir: '%s'", dashboard_path, charm_dir)
+            dashboard_dict["uid"] = DashboardPath40UID.generate(charm_name, str(dashboard_path))
 
     @classmethod
     def _add_tags(cls, dashboard_dict: dict, charm_name: str):
