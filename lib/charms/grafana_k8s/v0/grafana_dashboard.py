@@ -959,16 +959,19 @@ class CharmedDashboard:
                 if dashboard_path.is_absolute()
                 else dashboard_path
             )
-            dashboard_dict["uid"] = DashboardPath40UID.generate(charm_name, rel_path)
-            logger.debug(
-                "Processed dashboard '%s': replaced original uid '%s' with '%s'",
-                dashboard_path,
-                original_uid,
-                dashboard_dict["uid"],
-            )
         except ValueError:
-            logger.debug("dashboard_path: '%s' is no relative to charm_dir: '%s'", dashboard_path, charm_dir)
-            dashboard_dict["uid"] = DashboardPath40UID.generate(charm_name, str(dashboard_path))
+            uid =  DashboardPath40UID.generate(charm_name, str(dashboard_path))
+        else:
+            uid = DashboardPath40UID.generate(charm_name, rel_path)
+
+
+        logger.debug(
+            "Processed dashboard '%s': replaced original uid '%s' with '%s'",
+            dashboard_path,
+            original_uid,
+            uid,
+        )
+        dashboard_dict["uid"] = uid
 
     @classmethod
     def _add_tags(cls, dashboard_dict: dict, charm_name: str):
