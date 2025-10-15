@@ -268,7 +268,7 @@ class GrafanaCharm(CharmBase):
     @property
     def ingress_available(self) -> bool:
         """Return True if ingress is available, else False."""
-        return bool(self.ingress.external_hostname)
+        return bool(self.ingress.external_host)
 
     @property
     def _ingress_config(self) -> dict:
