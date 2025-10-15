@@ -266,6 +266,11 @@ class GrafanaCharm(CharmBase):
         return self.internal_url
 
     @property
+    def ingress_available(self) -> bool:
+        """Return True if ingress is available, else False."""
+        return bool(self.ingress.external_hostname)
+
+    @property
     def _ingress_config(self) -> dict:
         """Build a raw ingress configuration for Traefik."""
         # The path prefix is the same as in ingress per app
