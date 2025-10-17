@@ -209,6 +209,7 @@ class GrafanaCharm(CharmBase):
                                         dashboards = self.dashboard_consumer.dashboards,
                                         provision_own_dashboard = self._provision_own_dashboard,
                                         scheme=self._scheme,
+                                        ingress_ready=self.ingress.is_ready(),
                                         )
         self._litestream = Litestream(self.unit.get_container("litestream"),
                                       is_leader= self.unit.is_leader(),
@@ -264,11 +265,6 @@ class GrafanaCharm(CharmBase):
             # grafana's scheme is still http.
             return f"{self.ingress.scheme or 'http'}://{self.ingress.external_host}/{path_prefix}"
         return self.internal_url
-
-    @property
-    def ingress_available(self) -> bool:
-        """Return True if ingress is available, else False."""
-        return bool(self.ingress.external_host)
 
     @property
     def _ingress_config(self) -> dict:
