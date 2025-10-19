@@ -94,11 +94,11 @@ def test_external_url_precedence(ctx, base_state_with_model, peer_relation):
 
     # WHEN the traefik relation is removed
     with patch.object(TraefikRouteRequirer, "external_host", new=""):
-        with ctx(ctx.on.relation_departed(ingress_rel), state) as mgr:
+        with ctx(ctx.on.relation_broken(ingress_rel), state) as mgr:
             state_out = mgr.run()
             charm = mgr.charm
-            # THEN root url and subpath envs are undefined (because fqdn is a bare hostname)
-            assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
+            # THEN the root URL is the FQDN and Grafana does not serve from the subpath
+            assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "False"
             assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
             assert is_service_running(charm)
 
