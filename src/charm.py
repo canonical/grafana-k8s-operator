@@ -209,6 +209,7 @@ class GrafanaCharm(CharmBase):
                                         dashboards = self.dashboard_consumer.dashboards,
                                         provision_own_dashboard = self._provision_own_dashboard,
                                         scheme=self._scheme,
+                                        ingress_ready=self.ingress.is_ready(),
                                         )
         self._litestream = Litestream(self.unit.get_container("litestream"),
                                       is_leader= self.unit.is_leader(),

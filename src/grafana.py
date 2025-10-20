@@ -65,6 +65,7 @@ class Grafana:
                 dashboards: List[Dict] = [],
                 provision_own_dashboard: bool = False,
                 scheme: str = "http",
+                ingress_ready: bool = False,
                 ) -> None:
         """A class to bring up and check a Grafana server."""
         self._container = container
@@ -79,7 +80,7 @@ class Grafana:
         self._current_config_hash = None
         self._current_datasources_hash = None
         self._scheme =  scheme
-
+        self.ingress_ready = ingress_ready
 
     @property
     def grafana_version(self) -> str:
@@ -127,7 +128,7 @@ class Grafana:
         # root_url in a particular way.
         extra_info.update(
             {
-                "GF_SERVER_SERVE_FROM_SUB_PATH": "False",
+                "GF_SERVER_SERVE_FROM_SUB_PATH": "True" if self.ingress_ready else "False",
                 # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
                 "GF_SERVER_ROOT_URL": self._pebble_env().external_url,
                 "GF_SERVER_ENFORCE_DOMAIN": "false",
