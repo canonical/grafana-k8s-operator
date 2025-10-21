@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 from cosl import JujuTopology
 from cosl.reconciler import all_events, observe_events
-from ops import ActiveStatus, BlockedStatus, CollectStatusEvent, StatusBase, main
+from ops import ActiveStatus, BlockedStatus, CollectStatusEvent, RelationBrokenEvent, StatusBase, main
 from ops.charm import (
     ActionEvent,
     CharmBase,
