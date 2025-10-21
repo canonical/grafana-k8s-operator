@@ -27,11 +27,10 @@ from urllib.parse import urlparse
 
 from cosl import JujuTopology
 from cosl.reconciler import all_events, observe_events
-from ops import ActiveStatus, CollectStatusEvent, main
+from ops import ActiveStatus, BlockedStatus, CollectStatusEvent, StatusBase, main
 from ops.charm import (
     ActionEvent,
     CharmBase,
-    RelationBrokenEvent,
     RelationChangedEvent,
 )
 from ops.model import Port
@@ -41,12 +40,12 @@ from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferRequires,
 )
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
-    SourceFieldsMissingError,
 )
 from charms.hydra.v0.oauth import (
     ClientConfig as OauthClientConfig,
@@ -79,10 +78,10 @@ from constants import (
     OAUTH_SCOPES,
     CA_CERT_PATH,
     GRAFANA_WORKLOAD,
-    DATABASE_RELATION,
+    MYSQL_RELATION,
+    PGSQL_RELATION,
     PROFILING_PORT,
     OAUTH_GRANT_TYPES,
-    REQUIRED_DATABASE_FIELDS,
     VALID_AUTHENTICATION_MODES)
 import ops_tracing
 
@@ -176,12 +175,25 @@ class GrafanaCharm(CharmBase):
             refresh_event=self.on.grafana_pebble_ready,  # pyright: ignore
         )
 
+        # -- database relation
+        self._db_name = f"{self.model.name}-{self.app.name}-grafana-k8s"
+        if self.model.relations[MYSQL_RELATION] and not self.model.relations[PGSQL_RELATION]:
+            self._db = DatabaseRequires(self, relation_name=MYSQL_RELATION, database_name=self._db_name)
+            self._db_type = "mysql"
+        elif self.model.relations[PGSQL_RELATION]:
+            self._db = DatabaseRequires(self, relation_name=PGSQL_RELATION, database_name=self._db_name)
+            self._db_type = "postgres"
+        else:
+            self._db = None
+            self._db_type = "sqlite3"
+
         self._grafana_client = GrafanaClient(self.internal_url)
         self._grafana_config = GrafanaConfig(
                                             datasources_config=self._datasource_config,
                                             oauth_config = self._oauth_config,
                                             auth_env_config = lambda: self._auth_env_vars,
                                             db_config=lambda: self._db_config,
+                                            db_type=self._db_type,
                                             enable_reporting = bool(self.config["reporting_enabled"]),
                                             enable_external_db=self._enable_external_db,
                                             tracing_endpoint=self._workload_tracing_endpoint,
@@ -209,8 +221,9 @@ class GrafanaCharm(CharmBase):
 
         # FIXME: we still need to observe these events as they contain the required data
         # update the charm lib to work with the reconcile approach
-        self.framework.observe(self.on[DATABASE_RELATION].relation_changed, self._on_database_changed)
-        self.framework.observe(self.on[DATABASE_RELATION].relation_broken, self._on_database_broken)
+        if self._db is not None:
+            self.framework.observe(self._db.on.database_created, self._on_database_changed)
+            self.framework.observe(self._db.on.endpoints_changed, self._on_database_changed)
         self.framework.observe(
             self.grafana_auth_requirer.on.auth_conf_available,  # pyright: ignore
             self._on_grafana_auth_conf_available,
@@ -374,8 +387,7 @@ class GrafanaCharm(CharmBase):
     @property
     def _enable_external_db(self) -> bool:
         """Only consider a DB connection if we have config info."""
-        rel = self.model.get_relation(DATABASE_RELATION)
-        return len(rel.units) > 0 if rel is not None else False
+        return bool(self.model.get_relation(MYSQL_RELATION) or self.model.get_relation(PGSQL_RELATION))
 
     @property
     def _db_config(self) -> Optional[Dict[str, str]]:
@@ -440,10 +452,21 @@ class GrafanaCharm(CharmBase):
                 url=endpoint + "/v1/traces",
                 ca=self._tls_config.ca if self._tls_config else None
             )
+        if self._check_wrong_relations():
+            return
         self._reconcile_relations()
         self._grafana_service.reconcile()
         self._litestream.reconcile()
         self._reconcile_tls_config()
+
+    def _check_wrong_relations(self) -> Optional[StatusBase]:
+        """Check that relations are configured properly."""
+        relations = self.model.relations
+        if relations[MYSQL_RELATION] and relations[PGSQL_RELATION]:
+            return BlockedStatus("Only one of mysql and pgsql can be used.")
+        if not relations[MYSQL_RELATION] and not relations[PGSQL_RELATION] and self.app.planned_units() > 1:
+            return BlockedStatus("Scale > 1 requires mysql or pgsql relation.")
+        return None
 
 
     def _reconcile_tls_config(self) -> None:
@@ -501,6 +524,8 @@ class GrafanaCharm(CharmBase):
 
     def _on_collect_unit_status(self, e: CollectStatusEvent):
         e.add_status(ActiveStatus())
+        if status := self._check_wrong_relations():
+            e.add_status(status)
         e.add_status(self.resource_patch.get_status())
 
 
@@ -513,23 +538,22 @@ class GrafanaCharm(CharmBase):
         if not self.unit.is_leader():
             return
 
-        # Get required information
-        database_fields = {
-            field: event.relation.data[event.app].get(field)
-            for field in REQUIRED_DATABASE_FIELDS  # type: ignore
-        }
+        if self._enable_external_db and self._db is not None: # Checking self._db is not None for the type checker.
+            # fetch_relation_data() returns a dict of {relation_id: {values}}. Since there is only one db relation, we can
+            # just take the 0 element
+            data = list(self._db.fetch_relation_data().values())[0]
 
-        # if any required fields are missing, warn the user and return
-        missing_fields = [
-            field for field in REQUIRED_DATABASE_FIELDS if database_fields.get(field) is None
-        ]
-        if len(missing_fields) > 0:
-            raise SourceFieldsMissingError(
-                "Missing required data fields for database relation: {}".format(missing_fields)
-            )
+            db_info = {
+                "type": self._db_type,
+                "host": data['endpoints'],
+                "name": self._db_name,
+                "user": data['username'],
+                "password": data['password'],
+            }
+        else:
+            db_info = {}
 
         # add the new database relation data to the datastore
-        db_info = {field: value for field, value in database_fields.items() if value}
         self.peers.set_app_data("database", db_info)
         self._grafana_service.reconcile()
 
