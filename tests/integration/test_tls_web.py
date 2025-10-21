@@ -35,13 +35,17 @@ async def test_deploy(ops_test, grafana_charm):
         num_units=2,
     )
     sh.juju.deploy(
+        "postgresql-k8s", "pgsql", model=ops_test.model.name, channel="14/stable"
+    )
+    sh.juju.deploy(
         "self-signed-certificates", "ca", model=ops_test.model.name, channel="1/stable"
     )
+    await ops_test.model.add_relation(f"{grafana.name}:pgsql", "pgsql") # Database needed for >=2 units.
     await ops_test.model.add_relation(f"{grafana.name}:certificates", "ca")
 
     await asyncio.gather(
         ops_test.model.wait_for_idle(
-            apps=[grafana.name],
+            apps=[grafana.name, "pgsql"],
             raise_on_error=False,
             timeout=1200,
         ),
