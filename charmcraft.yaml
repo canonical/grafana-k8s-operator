@@ -48,8 +48,12 @@ requires:
   grafana-auth:
     interface: grafana_auth
     optional: true
-  database:
-    interface: db
+  pgsql:
+    interface: postgresql_client
+    limit: 1
+    optional: true
+  mysql:
+    interface: mysql_client
     limit: 1
     optional: true
   catalogue:

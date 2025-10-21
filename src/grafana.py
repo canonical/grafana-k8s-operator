@@ -106,10 +106,7 @@ class Grafana:
 
         Ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini
         """
-        # Placeholder for when we add "proper" mysql support for HA
-        extra_info = {
-            "GF_DATABASE_TYPE": "sqlite3",
-        }
+        extra_info = {}
 
         # Juju Proxy settings
         extra_info.update(
