@@ -59,16 +59,9 @@ def grafana_container():
     )
 
 
-@pytest.fixture(scope="function")
-def litestream_container():
-    return Container(
-        "litestream",
-        can_connect=True,
-    )
-
 @pytest.fixture
-def containers(grafana_container, litestream_container):
-    return {grafana_container, litestream_container}
+def containers(grafana_container):
+    return {grafana_container}
 
 @pytest.fixture
 def base_state(containers, peer_relation):

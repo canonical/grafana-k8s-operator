@@ -22,7 +22,6 @@ tester_resources = {
 }
 grafana_resources = {
     "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
-    "litestream-image": oci_image("./charmcraft.yaml", "litestream-image"),
 }
 grafana_app_name = "grafana"
 tester_app_name = "grafana-tester"

@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 app_name = "grafana-k8s"
 grafana_resources = {
     "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
-    "litestream-image": oci_image("./charmcraft.yaml", "litestream-image"),
 }
 
 
