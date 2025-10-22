@@ -323,31 +323,3 @@ def test_primary_sets_correct_peer_data(ctx, base_state, peer_relation):
         charm = mgr.charm
         unit_binding = charm.model.get_binding("grafana")
         assert unit_binding
-        unit_ip = str(unit_binding.network.bind_address)
-        # THEN the leader unit set peer data replica_primary
-        replica_address = charm.peers.get_app_data("replica_primary")
-        assert unit_ip == replica_address
-
-@mark.parametrize(
-    "event",
-    (
-        CharmEvents.update_status(),
-        CharmEvents.start(),
-        CharmEvents.install(),
-        CharmEvents.config_changed(),
-    ),
-)
-@patch("socket.getfqdn", lambda: "2.3.4.5")
-def test_replicas_get_correct_environment_variables(ctx, base_state, event):
-    # GIVEN a grafana app with 2 units
-    updated_peer_relation = PeerRelation("grafana", local_app_data={"replica_primary": json.dumps("1.2.3.4")})
-    state = replace(base_state, planned_units=2, leader=False, relations={updated_peer_relation})
-    # WHEN any event is fired on the non-leader unit
-    with ctx(event, state) as mgr:
-        mgr.run()
-        charm = mgr.charm
-        # THEN LITESTREAM_UPSTREAM_URL gets set in litestream pebble service
-        primary = charm._litestream.layer.to_dict()["services"]["litestream"][  # type: ignore
-        "environment"
-        ]["LITESTREAM_UPSTREAM_URL"]
-        assert primary  == "1.2.3.4:9876"

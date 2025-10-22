@@ -65,7 +65,6 @@ from grafana import Grafana
 from grafana_client import GrafanaClient, GrafanaCommError
 from grafana_config import GrafanaConfig
 from secret_storage import generate_password
-from litestream import Litestream
 from relation import Relation
 from models import DatasourceConfig, PebbleEnvironment, TLSConfig
 from charms.tls_certificates_interface.v4.tls_certificates import (
@@ -206,9 +205,6 @@ class GrafanaCharm(CharmBase):
                                         scheme=self._scheme,
                                         ingress_ready=self.ingress.is_ready(),
                                         )
-        self._litestream = Litestream(self.unit.get_container("litestream"),
-                                      is_leader= self.unit.is_leader(),
-                                        peers = self.peers)
 
         self.framework.observe(
             self.on.get_admin_password_action,  # pyright: ignore
@@ -452,7 +448,6 @@ class GrafanaCharm(CharmBase):
             return
         self._reconcile_relations()
         self._grafana_service.reconcile()
-        self._litestream.reconcile()
         self._reconcile_tls_config()
 
     def _check_wrong_relations(self) -> Optional[StatusBase]:
