@@ -187,7 +187,7 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- database relation
-        self._db_name = f"{self.model.name}-{self.app.name}-grafana-k8s"
+        self._db_name = f"{self._topology.application}-grafana-k8s-{self._topology.model_uuid}"
         if self.model.relations[PGSQL_RELATION]:
             self._db = DatabaseRequires(self, relation_name=PGSQL_RELATION, database_name=self._db_name)
             self._db_type = "postgres"
