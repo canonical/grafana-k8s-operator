@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 RESOURCES = {
     "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
-    "litestream-image": oci_image("./charmcraft.yaml", "litestream-image"),
 }
 
 
