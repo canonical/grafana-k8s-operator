@@ -388,7 +388,7 @@ class Grafana:
             self._update_config_file(DATASOURCES_PATH, grafana_datasources)
             logger.info("Updated Grafana's datasource configuration")
 
-            # Non-leaders will get updates from litestream
+            # Non-leaders will get updates from the database
             if self._is_leader:
                 changes.append(True)
 
