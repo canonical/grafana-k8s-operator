@@ -8,7 +8,6 @@ REQUIRED_DATABASE_FIELDS = {
     "password",
 }
 PEER_RELATION = "grafana"
-MYSQL_RELATION = "mysql"
 PGSQL_RELATION = "pgsql"
 DATABASE_PATH = "/var/lib/grafana/grafana.db"
 # https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/generic-oauth
