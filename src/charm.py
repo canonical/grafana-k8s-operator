@@ -79,7 +79,6 @@ from constants import (
     OAUTH_SCOPES,
     CA_CERT_PATH,
     GRAFANA_WORKLOAD,
-    MYSQL_RELATION,
     PGSQL_RELATION,
     PROFILING_PORT,
     OAUTH_GRANT_TYPES,
@@ -190,10 +189,7 @@ class GrafanaCharm(CharmBase):
 
         # -- database relation
         self._db_name = f"{self.model.name}-{self.app.name}-grafana-k8s"
-        if self.model.relations[MYSQL_RELATION] and not self.model.relations[PGSQL_RELATION]:
-            self._db = DatabaseRequires(self, relation_name=MYSQL_RELATION, database_name=self._db_name)
-            self._db_type = "mysql"
-        elif self.model.relations[PGSQL_RELATION]:
+        if self.model.relations[PGSQL_RELATION]:
             self._db = DatabaseRequires(self, relation_name=PGSQL_RELATION, database_name=self._db_name)
             self._db_type = "postgres"
         else:
@@ -400,7 +396,7 @@ class GrafanaCharm(CharmBase):
     @property
     def _enable_external_db(self) -> bool:
         """Only consider a DB connection if we have config info."""
-        return bool(self.model.get_relation(MYSQL_RELATION) or self.model.get_relation(PGSQL_RELATION))
+        return bool(self.model.get_relation(PGSQL_RELATION))
 
     @property
     def _db_config(self) -> Optional[Dict[str, str]]:
@@ -470,10 +466,8 @@ class GrafanaCharm(CharmBase):
     def _check_wrong_relations(self) -> Optional[StatusBase]:
         """Check that relations are configured properly."""
         relations = self.model.relations
-        if relations[MYSQL_RELATION] and relations[PGSQL_RELATION]:
-            return BlockedStatus("Only one of mysql and pgsql can be used.")
-        if not relations[MYSQL_RELATION] and not relations[PGSQL_RELATION] and self.app.planned_units() > 1:
-            return BlockedStatus("Scale > 1 requires mysql or pgsql relation.")
+        if not relations[PGSQL_RELATION] and self.app.planned_units() > 1:
+            return BlockedStatus("Scale > 1 requires pgsql relation.")
         return None
 
 

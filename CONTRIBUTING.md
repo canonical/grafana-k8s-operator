@@ -40,11 +40,9 @@ watch -c juju status --color  # wait for things to settle down
 
 ### High Availability Grafana
 
-This charm is written to support a high-availability Grafana cluster, but a database relation is required (MySQL or Postgresql).
+This charm is written to support a high-availability Grafana cluster, but a database relation is required. Currently, only Postgresql is supported.
 
 If HA is not required, there is no need to add a database relation.
-
-> NOTE: HA should not be considered for production use.
 
 ...
 

@@ -136,7 +136,7 @@ def test_datasource_config_is_updated_by_raw_grafana_source_relation(ctx:Context
 
 def test_config_is_updated_with_database_relation(ctx, base_state, peer_relation):
     # GIVEN a database relation with app data
-    database_rel = Relation("pgsql", remote_app_name="mysql", remote_app_data=DB_CONFIG)
+    database_rel = Relation("pgsql", remote_app_name="pgsql", remote_app_data=DB_CONFIG)
     state = replace(base_state, model=Model("somemodel"), relations={database_rel, peer_relation}, secrets={DB_SECRET})
 
     # WHEN running a relation_changed event
@@ -315,7 +315,7 @@ def test_config_is_updated_with_authentication_config(ctx, base_state, peer_rela
 @patch("socket.getfqdn", lambda: "1.2.3.4")
 def test_primary_sets_correct_peer_data(ctx, base_state, peer_relation):
     # GIVEN a grafana app with 2 units
-    database_rel = Relation("pgsql", remote_app_name="mysql", remote_app_data=DB_CONFIG)
+    database_rel = Relation("pgsql", remote_app_name="pgsql", remote_app_data=DB_CONFIG)
     state = replace(base_state, planned_units=2, relations={database_rel, peer_relation}, secrets={DB_SECRET}, networks={Network("grafana", bind_addresses=[BindAddress([Address("1.2.3.4")])])})
     # WHEN a config_changed event is fired on the leader unit
     with ctx(ctx.on.config_changed(), state) as mgr:
