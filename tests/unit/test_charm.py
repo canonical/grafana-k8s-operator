@@ -73,10 +73,10 @@ DB_CONFIG = {
 DATABASE_CONFIG_INI = """[database]
 type = postgres
 host = someaddress:5432
-name = somemodel-grafana-k8s-grafana-k8s
+name = grafana-k8s-grafana-k8s-{}
 user = relation_id_01
 password = password
-url = postgres://relation_id_01:password@someaddress:5432/somemodel-grafana-k8s-grafana-k8s
+url = postgres://relation_id_01:password@someaddress:5432/grafana-k8s-grafana-k8s-{}
 
 """
 
@@ -137,7 +137,8 @@ def test_datasource_config_is_updated_by_raw_grafana_source_relation(ctx:Context
 def test_config_is_updated_with_database_relation(ctx, base_state, peer_relation):
     # GIVEN a database relation with app data
     database_rel = Relation("pgsql", remote_app_name="pgsql", remote_app_data=DB_CONFIG)
-    state = replace(base_state, model=Model("somemodel"), relations={database_rel, peer_relation}, secrets={DB_SECRET})
+    model=Model("somemodel")
+    state = replace(base_state, model=model, relations={database_rel, peer_relation}, secrets={DB_SECRET})
 
     # WHEN running a relation_changed event
     with ctx(ctx.on.relation_changed(database_rel), state) as mgr:
@@ -145,7 +146,7 @@ def test_config_is_updated_with_database_relation(ctx, base_state, peer_relation
         charm = mgr.charm
         config = charm.unit.get_container("grafana").pull(CONFIG_PATH)
         # THEN we get grafana-config.ini updated with config
-        assert config.read() == DATABASE_CONFIG_INI
+        assert config.read() == DATABASE_CONFIG_INI.format(model.uuid, model.uuid)
 
 def test_dashboard_path_is_initialized(ctx, base_state, peer_relation):
     # GIVEN grafana source and metrics relations
