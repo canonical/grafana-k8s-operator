@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
-
+# pyright: reportAttributeAccessIssue = false
 import asyncio
 import logging
 
@@ -55,7 +55,7 @@ async def test_deploy(ops_test, grafana_charm):
     )
 
 @pytest.mark.abort_on_fail
-async def test_no_tls(ops_test: OpsTest):
+async def test_no_tls(ops_test):
     """Test whether we are able to reach Grafana via Traefik when using no TLS.
 
     This means that both Traefik and Grafana are only using HTTP.
@@ -69,7 +69,7 @@ async def test_no_tls(ops_test: OpsTest):
     fetch_with_retry(url=grafana_address, expected_status=200)
 
 @pytest.mark.abort_on_fail
-async def test_internal_and_full_tls(ops_test: OpsTest):
+async def test_internal_and_full_tls(ops_test):
     """Test whether we are able to reach Grafana via Traefik when using internal TLS.
 
     This means that Traefik is reachable via HTTP, but it communicates with Grafana over HTTPS.
@@ -115,7 +115,7 @@ async def test_internal_and_full_tls(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
-async def test_external_tls(ops_test: OpsTest):
+async def test_external_tls(ops_test):
     # Remove relation between Grafana and SSC. This means that Grafana no loger uses TLS.
     # TLS is terminated now at Traefik and traffik between Traefik and Grafana is unencrpyted.
     await ops_test.model.applications[grafana_app_name].remove_relation(f"{grafana_app_name}:certificates", ssc_app_name)
