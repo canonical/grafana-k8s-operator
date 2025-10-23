@@ -13,7 +13,7 @@ from pytest_operator.plugin import OpsTest
 from urllib.parse import urlparse
 from workload import Grafana
 from juju.unit import Unit
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, wait_fixed
 
 logger = logging.getLogger(__name__)
 
@@ -368,6 +368,26 @@ async def get_application_ip(ops_test: OpsTest, app_name: str) -> str:
     app = status["applications"][app_name]
     return app.public_address
 
+async def get_traefik_url(ops_test: OpsTest, traefik_app_name: str = "traefik"):
+    """Get the URL for the Traefik app, as provided by the show-external-endpoints action."""
+    external_endpoints_action = (
+        await ops_test.model.applications[traefik_app_name]
+        .units[0]
+        .run_action("show-external-endpoints")
+    )
+    external_endpoints_action_results = (await external_endpoints_action.wait()).results
+    external_endpoints = yaml.safe_load(external_endpoints_action_results["external-endpoints"])
+    return external_endpoints[traefik_app_name]["url"]
+
+@retry(
+    wait=wait_fixed(15),
+    stop=stop_after_attempt(10),
+)
+def fetch_with_retry(url: str, expected_status: int, follow_redirects: bool = True) -> requests.Response:
+    response = requests.get(url, verify=False, allow_redirects=follow_redirects)
+    if response.status_code != expected_status:
+        raise AssertionError(f"Expected status {expected_status}, got {response.status_code}")
+    return response
 
 class ModelConfigChange:
     """Context manager for temporarily changing a model config option."""
