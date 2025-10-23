@@ -371,7 +371,7 @@ async def get_application_ip(ops_test: OpsTest, app_name: str) -> str:
 async def get_traefik_url(ops_test: OpsTest, traefik_app_name: str = "traefik"):
     """Get the URL for the Traefik app, as provided by the show-external-endpoints action."""
     assert ops_test.model, "ops_test.model is not initialized"
-    
+
     app = ops_test.model.applications.get(traefik_app_name)
     assert app
     assert app.units

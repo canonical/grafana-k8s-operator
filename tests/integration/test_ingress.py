@@ -7,7 +7,6 @@ import logging
 
 import pytest
 from helpers import oci_image, get_traefik_url, fetch_with_retry
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
