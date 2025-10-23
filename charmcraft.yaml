@@ -120,11 +120,11 @@ resources:
   grafana-image:
     type: oci-image
     description: upstream docker image for Grafana
-    upstream-source: docker.io/ubuntu/grafana:12-24.04
+    upstream-source: docker.io/ubuntu/grafana@sha256:d2f26ddd1e0263cd84291375f9a2309dbc08abbd465e0554a5b678824a5f207a  # renovate: oci-image tag: 12.0-24.04
   litestream-image:
     type: oci-image
     description: upstream image for sqlite streaming
-    upstream-source: docker.io/litestream/litestream:0.4.0-beta.2
+    upstream-source: docker.io/litestream/litestream@sha256:86ffeaba5e3744771b5db95c847078bdb46d34238058a49ee54537dff70b8824  # renovate: oci-image tag: 0.4.0-beta.2
 
 platforms:
   ubuntu@24.04:amd64:
