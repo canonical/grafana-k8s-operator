@@ -276,7 +276,11 @@ class GrafanaCharm(CharmBase):
             "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
                 "entryPoints": ["web"],
                 "rule": f"PathPrefix(`/{external_path}`)",
-                "middlewares": [],
+                # We do not need to specify any middleware here.
+                # Normally, there would be two use cases for adding middlewares: (1) to strip prefix, (2) to redirect from port 80 to 443
+                # Since Grafana allows us to serve from subpath, we fix (1).
+                # And Traefik itself will redirect from 80 to 443 when it's configured for TLS.
+                # Hence, we do not add any middlewares.
                 "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
             },
         }

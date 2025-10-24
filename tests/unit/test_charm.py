@@ -255,7 +255,6 @@ def test_ingress_relation_sets_options_and_rel_data(ctx:Context, base_state, pee
             "routers": {
                 "juju-testmodel-grafana-k8s-router": {
                     "entryPoints": ["web"],
-                    "middlewares": [],
                     "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
                     "service": "juju-testmodel-grafana-k8s-service",
                 },
