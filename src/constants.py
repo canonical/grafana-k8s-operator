@@ -8,7 +8,7 @@ REQUIRED_DATABASE_FIELDS = {
     "password",
 }
 PEER_RELATION = "grafana"
-DATABASE_RELATION = "database"
+PGSQL_RELATION = "pgsql"
 DATABASE_PATH = "/var/lib/grafana/grafana.db"
 # https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/generic-oauth
 OAUTH_SCOPES = "openid email offline_access"
