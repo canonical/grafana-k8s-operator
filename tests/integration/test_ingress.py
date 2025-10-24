@@ -101,7 +101,7 @@ async def test_internal_tls(ops_test):
 
     # Due to a bug in Traefik, we have to restart the traefik pebble service after receiving the CA cert. This can be removed when the issue is solved.
     sh.juju.ssh(
-        "--container", "traefik", f"{traefik_app_name}/leader", "pebble", "restart", "traefik")
+        "--container", "traefik", f"{traefik_app_name}/0", "pebble", "restart", "traefik")
 
     # Wait for Traefik to finish executing after relation is added
     await asyncio.gather(
