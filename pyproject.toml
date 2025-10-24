@@ -36,7 +36,7 @@ dev = [
   "cosl",
   "pydantic",
   # Integration
-  "juju<=3.3.0,>=3.0",
+  "juju<=3.6.0,>=3.0",
   "websockets<14.0",
   "lightkube",
   "minio",
