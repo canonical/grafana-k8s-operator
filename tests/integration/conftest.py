@@ -58,7 +58,7 @@ def timed_memoizer(func):
 def patch_pylibjuju_series_2404():
     juju.utils.ALL_SERIES_VERSIONS["noble"] = "24.04"
     juju.utils.UBUNTU_SERIES["noble"] = "24.04"
-    
+
     yield
 
     juju.utils.ALL_SERIES_VERSIONS["noble"]
