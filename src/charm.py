@@ -60,8 +60,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 )
 from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer, TraefikRouteRequirerReadyEvent
 from grafana import Grafana
 from grafana_client import GrafanaClient, GrafanaCommError
@@ -85,21 +84,11 @@ from constants import (
     OAUTH_GRANT_TYPES,
     REQUIRED_DATABASE_FIELDS,
     VALID_AUTHENTICATION_MODES)
+import ops_tracing
 
 logger = logging.getLogger()
 
-@trace_charm(
-    tracing_endpoint="charm_tracing_endpoint",
-    server_cert="server_cert",
-    extra_types=[
-        AuthRequirer,
-        TLSCertificatesRequiresV4,
-        GrafanaDashboardConsumer,
-        GrafanaSourceConsumer,
-        KubernetesComputeResourcesPatch,
-        MetricsEndpointProvider,
-    ],
-)
+
 class GrafanaCharm(CharmBase):
     """Charm to run Grafana on Kubernetes.
 
@@ -157,9 +146,7 @@ class GrafanaCharm(CharmBase):
         self.workload_tracing = TracingEndpointRequirer(
             self, relation_name="workload-tracing", protocols=["otlp_grpc"]
         )
-        self.charm_tracing_endpoint, self.server_cert = charm_tracing_config(
-            self.charm_tracing, CA_CERT_PATH
-        )
+
         self.profiling = ProfilingEndpointProvider(self, jobs=self._profiling_scrape_jobs)
 
         # -- grafana_source relation observations
@@ -479,6 +466,11 @@ class GrafanaCharm(CharmBase):
         if not self.resource_patch.is_ready():
             logger.debug("Resource patch not ready yet. Skipping cluster update step.")
             return
+        if self.charm_tracing.is_ready() and (endpoint:= self.charm_tracing.get_endpoint("otlp_http")):
+            ops_tracing.set_destination(
+                url=endpoint + "/v1/traces",
+                ca=self._tls_config.ca if self._tls_config else None
+            )
         self._reconcile_relations()
         self._grafana_service.reconcile()
         self._litestream.reconcile()
