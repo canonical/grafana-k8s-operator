@@ -17,8 +17,8 @@ grafana_resources = {
 
 grafana_app_name = "grafana"
 traefik_app_name = "traefik"
-ssc_app_name = "self-signed-certificates"
-ssc2_app_name = "self-signed-certificates2"
+ssc_grafana = "ssc-grafana"
+ssc_traefik = "ssc-traefik"
 idle_period = 90
 
 @pytest.mark.abort_on_fail
@@ -40,13 +40,13 @@ async def test_deploy(ops_test, grafana_charm):
         # One to be used for signing Grafana and the other to is to sign Traefik
         ops_test.model.deploy(
             "ch:self-signed-certificates",
-            application_name=ssc_app_name,
+            application_name=ssc_grafana,
             channel="1/stable",
             trust=True,
         ),
         ops_test.model.deploy(
             "ch:self-signed-certificates",
-            application_name=ssc2_app_name,
+            application_name=ssc_traefik,
             channel="1/stable",
             trust=True,
         ),
@@ -58,7 +58,7 @@ async def test_deploy(ops_test, grafana_charm):
 
     await asyncio.gather(
         ops_test.model.wait_for_idle(
-            apps=[grafana_app_name, traefik_app_name, ssc_app_name],
+            apps=[grafana_app_name, traefik_app_name, ssc_grafana],
             timeout=600,
         ),
     )
@@ -71,7 +71,7 @@ async def test_no_tls(ops_test):
     """
     traefik_address = await get_traefik_url(ops_test, traefik_app_name=traefik_app_name)
 
-    assert "http://" in traefik_address
+    assert traefik_address.startswith("http://")
 
     grafana_address = f"{traefik_address}/{ops_test.model.info.name}-{grafana_app_name}"
     # We expect a 200 response now
@@ -84,7 +84,7 @@ async def test_internal_tls(ops_test):
     This means that Traefik is reachable via HTTP, but it communicates with Grafana over HTTPS.
     """
     # Relate Grafana and SSC - this will make Grafana use TLS.
-    await ops_test.model.add_relation(f"{grafana_app_name}", f"{ssc_app_name}:certificates")
+    await ops_test.model.add_relation(f"{grafana_app_name}", f"{ssc_grafana}:certificates")
 
     traefik_address = await get_traefik_url(ops_test, traefik_app_name=traefik_app_name)
 
@@ -97,18 +97,18 @@ async def test_internal_tls(ops_test):
     fetch_with_retry(url=grafana_address, expected_status=500)
 
     # Relate Traefik and SSC so Traefik has Grafana's CA.
-    await ops_test.model.add_relation(f"{traefik_app_name}", f"{ssc_app_name}:send-ca-cert")
+    await ops_test.model.add_relation(f"{traefik_app_name}", f"{ssc_grafana}:send-ca-cert")
 
-    # Due to a bug in Traefik, we have to restart the traefik pebble service after receiving the CA cert. This can be removed when the issue is solved.
+    # Due to a bug in Traefik, we have to restart the traefik pebble service after receiving the CA cert.
+    # This can be removed when the issue is solved.
+    # Traefik PR to fix this: https://github.com/canonical/traefik-k8s-operator/pull/572
     sh.juju.ssh(
         "-m", f"{ops_test.model.info.name}", "--container", "traefik", f"{traefik_app_name}/0", "pebble", "restart", "traefik")
 
     # Wait for Traefik to finish executing after relation is added
-    await asyncio.gather(
-        ops_test.model.wait_for_idle(
-            apps=[grafana_app_name, traefik_app_name, ssc_app_name],
-            timeout=600,
-        ),
+    await ops_test.model.wait_for_idle(
+        apps=[grafana_app_name, traefik_app_name, ssc_grafana],
+        timeout=600,
     )
 
     traefik_address = await get_traefik_url(ops_test, traefik_app_name=traefik_app_name)
@@ -122,12 +122,12 @@ async def test_full_tls(ops_test):
     # To test full TLS, we will have the second SSC sign Traefik.
     # Now, the requests from the client to Traefik are encrypted, so it the traffic from Traefik to Grafana.
     # Relate Traefik and SSC so Traefik has Grafana's CA.
-    await ops_test.model.add_relation(f"{traefik_app_name}", f"{ssc2_app_name}:certificates")
+    await ops_test.model.add_relation(f"{traefik_app_name}", f"{ssc_traefik}:certificates")
 
     # Wait for Traefik to finish executing after relation is added
     await asyncio.gather(
         ops_test.model.wait_for_idle(
-            apps=[grafana_app_name, traefik_app_name, ssc_app_name],
+            apps=[grafana_app_name, traefik_app_name, ssc_grafana],
             timeout=600,
         ),
     )
@@ -151,12 +151,12 @@ async def test_full_tls(ops_test):
 @pytest.mark.abort_on_fail
 async def test_external_tls(ops_test):
     # Remove relation between Grafana and SSC. This means that Grafana no loger uses TLS.
-    # TLS is terminated now at Traefik and traffik between Traefik and Grafana is unencrpyted.
-    await ops_test.model.applications[grafana_app_name].remove_relation(f"{grafana_app_name}:certificates", ssc_app_name)
+    # TLS is terminated now at Traefik, so traffic between Traefik and Grafana is unencrpyted.
+    await ops_test.model.applications[grafana_app_name].remove_relation(f"{grafana_app_name}:certificates", ssc_grafana)
 
     await asyncio.gather(
         ops_test.model.wait_for_idle(
-            apps=[grafana_app_name, traefik_app_name, ssc_app_name],
+            apps=[grafana_app_name, traefik_app_name, ssc_grafana],
             timeout=600,
         ),
     )
