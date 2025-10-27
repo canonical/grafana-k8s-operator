@@ -61,7 +61,7 @@ def patch_pylibjuju_series_2404():
 
     yield
 
-    juju.utils.ALL_SERIES_VERSIONS["noble"]
+    del juju.utils.ALL_SERIES_VERSIONS["noble"]
     del juju.utils.UBUNTU_SERIES["noble"]
 
 
