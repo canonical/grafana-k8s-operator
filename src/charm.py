@@ -136,7 +136,7 @@ class GrafanaCharm(CharmBase):
         self.trusted_cert_transfer = CertificateTransferRequires(self, "receive-ca-cert")
 
         # -- ingress
-        self.ingress = IngressPerAppRequirer(self, port=WORKLOAD_PORT, scheme=self._scheme, strip_prefix=True, redirect_https=True)
+        self.ingress = IngressPerAppRequirer(self, port=WORKLOAD_PORT, scheme=self._scheme, strip_prefix=False)
 
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
