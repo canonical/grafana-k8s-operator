@@ -259,47 +259,16 @@ class GrafanaCharm(CharmBase):
         # The path prefix is the same as in ingress per app
         external_path = f"{self.model.name}-{self.model.app.name}"
 
-        redirect_middleware = (
-            {
-                f"juju-sidecar-redir-https-{self.model.name}-{self.model.app.name}": {
-                    "redirectScheme": {
-                        "permanent": True,
-                        "port": 443,
-                        "scheme": "https",
-                    }
-                }
-            }
-            if self._scheme == "https"
-            else {}
-        )
-
-        middlewares = {
-            f"juju-sidecar-noprefix-{self.model.name}-{self.model.app.name}": {
-                "stripPrefix": {"forceSlash": False, "prefixes": [f"/{external_path}"]},
-            },
-            **redirect_middleware,
-        }
-
         routers = {
             "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
                 "entryPoints": ["web"],
                 "rule": f"PathPrefix(`/{external_path}`)",
-                "middlewares": list(middlewares.keys()),
+                # We do not need to specify any middleware here.
+                # Normally, there would be two use cases for adding middlewares: (1) to strip prefix, (2) to redirect from port 80 to 443
+                # Since Grafana allows us to serve from subpath, we fix (1).
+                # And Traefik itself will redirect from 80 to 443 when it's configured for TLS.
+                # Hence, we do not add any middlewares.
                 "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-            },
-            "juju-{}-{}-router-tls".format(self.model.name, self.model.app.name): {
-                "entryPoints": ["websecure"],
-                "rule": f"PathPrefix(`/{external_path}`)",
-                "middlewares": list(middlewares.keys()),
-                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-                "tls": {
-                    "domains": [
-                        {
-                            "main": self.ingress.external_host,
-                            "sans": [f"*.{self.ingress.external_host}"],
-                        },
-                    ],
-                },
             },
         }
 
@@ -309,7 +278,7 @@ class GrafanaCharm(CharmBase):
             }
         }
 
-        return {"http": {"routers": routers, "services": services, "middlewares": middlewares}}
+        return {"http": {"routers": routers, "services": services}}
 
     @property
     def _metrics_scrape_jobs(self) -> list:
