@@ -7,7 +7,6 @@ import logging
 
 import pytest
 from helpers import oci_image, get_traefik_url, fetch_with_retry
-import sh
 logger = logging.getLogger(__name__)
 
 grafana_resources = {
