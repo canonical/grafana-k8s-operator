@@ -7,6 +7,7 @@ requires-python = "~=3.8"
 
 dependencies = [
   "ops>=2.17",
+  "ops[tracing]",
   "pyyaml",
   "urllib3",
   "jsonschema",
@@ -17,9 +18,6 @@ dependencies = [
   # lib/charms/grafana_k8s/v0/grafana_dashboard.py
   # lib/charms/temo_k8s/v1/charm_tracing.py
   "cosl",
-  # lib/charms/tempo_k8s/v1/charm_tracing.py
-  "opentelemetry-exporter-otlp-proto-http",
-  "pydantic",
 ]
 
 [project.optional-dependencies]
