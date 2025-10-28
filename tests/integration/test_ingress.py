@@ -99,12 +99,6 @@ async def test_internal_tls(ops_test):
     # Relate Traefik and SSC so Traefik has Grafana's CA.
     await ops_test.model.add_relation(f"{traefik_app_name}", f"{ssc_grafana}:send-ca-cert")
 
-    # Due to a bug in Traefik, we have to restart the traefik pebble service after receiving the CA cert.
-    # This can be removed when the issue is solved.
-    # Traefik PR to fix this: https://github.com/canonical/traefik-k8s-operator/pull/572
-    sh.juju.ssh(
-        "-m", f"{ops_test.model.info.name}", "--container", "traefik", f"{traefik_app_name}/0", "pebble", "restart", "traefik")
-
     # Wait for Traefik to finish executing after relation is added
     await ops_test.model.wait_for_idle(
         apps=[grafana_app_name, traefik_app_name, ssc_grafana],
