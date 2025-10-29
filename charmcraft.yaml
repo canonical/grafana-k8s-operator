@@ -51,10 +51,9 @@ requires:
     interface: catalogue
     optional: true
   ingress:
-    interface: traefik_route
+    interface: ingress
     limit: 1
     optional: true
-    description: Grafana needs "ingress per leader" (not per app and not per unit).
   certificates:
     interface: tls-certificates
     limit: 1
