@@ -451,11 +451,15 @@ class GrafanaCharm(CharmBase):
         # push CA cert to charm container
         cacert_path = Path(CA_CERT_PATH)
         if tls_config := self._tls_config:
-            cacert_path.parent.mkdir(parents=True, exist_ok=True)
-            cacert_path.write_text(tls_config.ca)
+            current_ca_cert = cacert_path.read_text() if cacert_path.exists() else ""
+            if current_ca_cert != tls_config.ca:
+                cacert_path.parent.mkdir(parents=True, exist_ok=True)
+                cacert_path.write_text(tls_config.ca)
+                subprocess.run(["update-ca-certificates", "--fresh"])
         else:
-            cacert_path.unlink(missing_ok=True)
-        subprocess.run(["update-ca-certificates", "--fresh"])
+            if cacert_path.exists():
+                cacert_path.unlink(missing_ok=True)
+                subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _reconcile_relations(self):
         self._reconcile_ingress()
