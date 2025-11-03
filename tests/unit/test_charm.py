@@ -252,27 +252,11 @@ def test_ingress_relation_sets_options_and_rel_data(ctx:Context, base_state, pee
 
     expected_rel_data = {
         "http": {
-            "middlewares": {
-                "juju-sidecar-noprefix-testmodel-grafana-k8s": {
-                    "stripPrefix": {
-                        "forceSlash": False,
-                        "prefixes": ["/testmodel-grafana-k8s"],
-                    }
-                }
-            },
             "routers": {
                 "juju-testmodel-grafana-k8s-router": {
                     "entryPoints": ["web"],
-                    "middlewares": ["juju-sidecar-noprefix-testmodel-grafana-k8s"],
                     "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
                     "service": "juju-testmodel-grafana-k8s-service",
-                },
-                "juju-testmodel-grafana-k8s-router-tls": {
-                    "entryPoints": ["websecure"],
-                    "middlewares": ["juju-sidecar-noprefix-testmodel-grafana-k8s"],
-                    "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
-                    "service": "juju-testmodel-grafana-k8s-service",
-                    "tls": {"domains": [{"main": "1.2.3.4", "sans": ["*.1.2.3.4"]}]},
                 },
             },
             "services": {
