@@ -2,7 +2,6 @@ from unittest.mock import MagicMock, patch
 
 from ops import ActiveStatus
 from ops.testing import PeerRelation, Container, State, Exec
-from charms.tempo_coordinator_k8s.v0.charm_tracing import charm_tracing_disabled
 
 import pytest
 from ops.testing import Context
@@ -16,10 +15,6 @@ GRAFANA_FQDN = "grafana-k8s-0.testmodel.svc.cluster.local"
 def tautology(*_, **__) -> bool:
     return True
 
-@pytest.fixture(autouse=True, scope="session")
-def disable_charm_tracing():
-    with charm_tracing_disabled():
-        yield
 
 
 @pytest.fixture

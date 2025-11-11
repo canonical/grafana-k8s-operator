@@ -106,6 +106,7 @@ class Grafana:
 
         Ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini
         """
+        pebble_env = self._pebble_env()
         extra_info = {}
 
         # Juju Proxy settings
@@ -127,7 +128,7 @@ class Grafana:
             {
                 "GF_SERVER_SERVE_FROM_SUB_PATH": "True" if self.ingress_ready else "False",
                 # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
-                "GF_SERVER_ROOT_URL": self._pebble_env().external_url,
+                "GF_SERVER_ROOT_URL": pebble_env.external_url,
                 "GF_SERVER_ENFORCE_DOMAIN": "false",
                 # When traefik provides TLS termination then traefik is https, but grafana is http.
                 # We need to set GF_SERVER_PROTOCOL.
@@ -173,7 +174,7 @@ class Grafana:
                 }
             )
 
-        tracing_resource_attrs = self._pebble_env().tracing_resource_attributes
+        tracing_resource_attrs = pebble_env.tracing_resource_attributes
         if tracing_resource_attrs:
             extra_info.update(
                 {
@@ -196,8 +197,8 @@ class Grafana:
         # This Grafana instance will inherit them automatically from the replication primary (the leader).
         if self._is_leader:
             # self.admin_password is guaranteed str if this unit is leader
-            extra_info["GF_SECURITY_ADMIN_PASSWORD"] = cast(str, self._pebble_env().admin_password)
-            extra_info["GF_SECURITY_ADMIN_USER"] = cast(str, self._pebble_env().admin_user)
+            extra_info["GF_SECURITY_ADMIN_PASSWORD"] = cast(str, pebble_env.admin_password)
+            extra_info["GF_SECURITY_ADMIN_USER"] = cast(str, pebble_env.admin_user)
 
         layer = Layer(
             {
@@ -211,15 +212,15 @@ class Grafana:
                         "startup": "enabled",
                         "environment": {
                             "GF_SERVER_HTTP_PORT": str(WORKLOAD_PORT),
-                            "GF_LOG_LEVEL": self._pebble_env().log_level,
+                            "GF_LOG_LEVEL": pebble_env.log_level,
                             "GF_PLUGINS_ENABLE_ALPHA": "true",
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
-                            "GF_SECURITY_ALLOW_EMBEDDING": str(self._pebble_env().allow_embedding).lower(),
+                            "GF_SECURITY_ALLOW_EMBEDDING": str(pebble_env.allow_embedding).lower(),
                             "GF_AUTH_ANONYMOUS_ENABLED": str(
-                                self._pebble_env().allow_anonymous_access
+                                pebble_env.allow_anonymous_access
                             ).lower(),
                             "GF_USERS_AUTO_ASSIGN_ORG": str(
-                               self._pebble_env().enable_auto_assign_org
+                               pebble_env.enable_auto_assign_org
                             ).lower(),
                             **extra_info,
                         },
@@ -358,12 +359,12 @@ class Grafana:
                     continue
                 changes.append(True)
                 self._container.push(cert_path, cert ,make_dirs=True)
+                self._container.exec(["update-ca-certificates", "--fresh"]).wait()
             else:
                 if self._container.exists(cert_path):
                     changes.append(True)
                     self._container.remove_path(cert_path,recursive=True)
-
-        self._container.exec(["update-ca-certificates", "--fresh"]).wait()
+                    self._container.exec(["update-ca-certificates", "--fresh"]).wait()
 
     def _reconcile_config(self, changes: List):
         logger.debug("Handling grafana-k8s configuration change")
@@ -405,9 +406,9 @@ class Grafana:
         Note that Grafana does not support SIGHUP, so a full restart is needed.
         """
         # TODO: add a check that the config file is on disk
-        if self._layer:
+        if layer:= self._layer:
             try:
-                self._container.add_layer(GRAFANA_WORKLOAD, self._layer, combine=True)
+                self._container.add_layer(GRAFANA_WORKLOAD, layer, combine=True)
                 self._container.restart(GRAFANA_WORKLOAD)
                 logger.info("Restarted grafana-k8s")
 

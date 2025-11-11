@@ -82,21 +82,11 @@ from constants import (
     PROFILING_PORT,
     OAUTH_GRANT_TYPES,
     VALID_AUTHENTICATION_MODES)
+import ops_tracing
 
 logger = logging.getLogger()
 
-@trace_charm(
-    tracing_endpoint="charm_tracing_endpoint",
-    server_cert="server_cert",
-    extra_types=[
-        AuthRequirer,
-        TLSCertificatesRequiresV4,
-        GrafanaDashboardConsumer,
-        GrafanaSourceConsumer,
-        KubernetesComputeResourcesPatch,
-        MetricsEndpointProvider,
-    ],
-)
+
 class GrafanaCharm(CharmBase):
     """Charm to run Grafana on Kubernetes.
 
@@ -153,9 +143,7 @@ class GrafanaCharm(CharmBase):
         self.workload_tracing = TracingEndpointRequirer(
             self, relation_name="workload-tracing", protocols=["otlp_grpc"]
         )
-        self.charm_tracing_endpoint, self.server_cert = charm_tracing_config(
-            self.charm_tracing, CA_CERT_PATH
-        )
+
         self.profiling = ProfilingEndpointProvider(self, jobs=self._profiling_scrape_jobs)
 
         # -- grafana_source relation observations
@@ -421,9 +409,14 @@ class GrafanaCharm(CharmBase):
         if not self.resource_patch.is_ready():
             logger.debug("Resource patch not ready yet. Skipping cluster update step.")
             return
+        if self.charm_tracing.is_ready() and (endpoint:= self.charm_tracing.get_endpoint("otlp_http")):
+            ops_tracing.set_destination(
+                url=endpoint + "/v1/traces",
+                ca=self._tls_config.ca if self._tls_config else None
+            )
+        self.ingress.provide_ingress_requirements(scheme=self._scheme, port=WORKLOAD_PORT)
         if self._check_wrong_relations():
             return
-        self.ingress.provide_ingress_requirements(scheme=self._scheme, port=WORKLOAD_PORT)
         self._reconcile_relations()
         self._grafana_service.reconcile()
         self._reconcile_tls_config()
@@ -441,11 +434,15 @@ class GrafanaCharm(CharmBase):
         # push CA cert to charm container
         cacert_path = Path(CA_CERT_PATH)
         if tls_config := self._tls_config:
-            cacert_path.parent.mkdir(parents=True, exist_ok=True)
-            cacert_path.write_text(tls_config.ca)
+            current_ca_cert = cacert_path.read_text() if cacert_path.exists() else ""
+            if current_ca_cert != tls_config.ca:
+                cacert_path.parent.mkdir(parents=True, exist_ok=True)
+                cacert_path.write_text(tls_config.ca)
+                subprocess.run(["update-ca-certificates", "--fresh"])
         else:
-            cacert_path.unlink(missing_ok=True)
-        subprocess.run(["update-ca-certificates", "--fresh"])
+            if cacert_path.exists():
+                cacert_path.unlink(missing_ok=True)
+                subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _reconcile_relations(self):
         self.metrics_endpoint.set_scrape_job_spec()
