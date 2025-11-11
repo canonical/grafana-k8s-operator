@@ -138,6 +138,7 @@ class GrafanaCharm(CharmBase):
         # -- ingress
         self.ingress = IngressPerAppRequirer(self, port=WORKLOAD_PORT, scheme=self._scheme, strip_prefix=False)
 
+
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
             jobs=self._metrics_scrape_jobs,
@@ -221,6 +222,8 @@ class GrafanaCharm(CharmBase):
             self.on.get_admin_password_action,  # pyright: ignore
             self._on_get_admin_password,
         )
+
+        self.framework.observe(self._cert_requirer.on.certificate_available, self._reconcile)  # pyright: ignore
 
         # FIXME: we still need to observe these events as they contain the required data
         # update the charm lib to work with the reconcile approach
@@ -420,6 +423,7 @@ class GrafanaCharm(CharmBase):
             return
         if self._check_wrong_relations():
             return
+        self.ingress.provide_ingress_requirements(scheme=self._scheme, port=WORKLOAD_PORT)
         self._reconcile_relations()
         self._grafana_service.reconcile()
         self._reconcile_tls_config()
