@@ -59,8 +59,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 )
 from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer, IngressPerAppReadyEvent, IngressPerAppRevokedEvent
 from grafana import Grafana
 from grafana_client import GrafanaClient, GrafanaCommError
@@ -71,6 +70,7 @@ from models import DatasourceConfig, PebbleEnvironment, TLSConfig
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
+    CertificateAvailableEvent,
 )
 from constants import (
     PEER_RELATION,
@@ -211,8 +211,6 @@ class GrafanaCharm(CharmBase):
             self._on_get_admin_password,
         )
 
-        self.framework.observe(self._cert_requirer.on.certificate_available, self._reconcile)  # pyright: ignore
-
         # FIXME: we still need to observe these events as they contain the required data
         # update the charm lib to work with the reconcile approach
         if self._db is not None:
@@ -238,6 +236,7 @@ class GrafanaCharm(CharmBase):
 
         all_events.add(IngressPerAppReadyEvent)
         all_events.add(IngressPerAppRevokedEvent)
+        all_events.add(CertificateAvailableEvent)
         observe_events(self, all_events, self._reconcile)
 
 
