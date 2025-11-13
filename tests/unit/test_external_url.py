@@ -8,7 +8,8 @@ import unittest
 from typing import Dict
 from unittest.mock import patch
 from pytest import fixture, mark
-from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
+#from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.model import ActiveStatus
 from ops.testing import Model, Relation, CharmEvents
 
@@ -60,47 +61,47 @@ def test_external_url_precedence(ctx, base_state_with_model, peer_relation):
     ingress_rel = Relation("ingress", remote_app_name="traefik-app")
     state = replace(base_state_with_model, relations={peer_relation, ingress_rel})
 
-    with patch.multiple("charm.TraefikRouteRequirer", external_host="1.2.3.4", scheme="http"):
-        # WHEN relation_changed on traefik is fired
-        with ctx(ctx.on.relation_changed(ingress_rel), state) as mgr:
-            state_out = mgr.run()
-            charm = mgr.charm
+    with patch.multiple("charm.IngressPerAppRequirer", url="http://1.2.3.4/testmodel-grafana-k8s"):
+        with patch.object(IngressPerAppRequirer, "is_ready", return_value=True):
+            # WHEN relation_changed on traefik is fired
+            with ctx(ctx.on.relation_changed(ingress_rel), state) as mgr:
+                state_out = mgr.run()
+                charm = mgr.charm
 
-            # THEN root URL is the ingress URL and the subpath env is set to True
-            assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
-            assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://1.2.3.4/testmodel-grafana-k8s"
-            assert is_service_running(charm)
+                # THEN root URL is the ingress URL and the subpath env is set to True
+                assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
+                assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://1.2.3.4/testmodel-grafana-k8s"
+                assert is_service_running(charm)
 
-        # WHEN the web_external_url config option is set
-        external_url_config = "http://foo.bar.config:8080/path/to/grafana"
-        state_in = replace(state_out, config={"web_external_url": external_url_config})
-        with ctx(ctx.on.config_changed(), state_in) as mgr:
-            state_out = mgr.run()
-            charm = mgr.charm
-            # THEN root url is not affected
-            assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
-            assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://1.2.3.4/testmodel-grafana-k8s"
-            assert is_service_running(charm)
+            # WHEN the web_external_url config option is set
+            external_url_config = "http://foo.bar.config:8080/path/to/grafana"
+            state_in = replace(state_out, config={"web_external_url": external_url_config})
+            with ctx(ctx.on.config_changed(), state_in) as mgr:
+                state_out = mgr.run()
+                charm = mgr.charm
+                # THEN root url is not affected
+                assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
+                assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://1.2.3.4/testmodel-grafana-k8s"
+                assert is_service_running(charm)
 
-        # WHEN the web_external_url config option is cleared
-        external_url_config = ""
-        state_in = replace(state_out, config={"web_external_url": external_url_config})
-        with ctx(ctx.on.config_changed(), state_in) as mgr:
-            state_out = mgr.run()
-            charm = mgr.charm
-            # THEN root url is still not affected
-            assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
-            assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://1.2.3.4/testmodel-grafana-k8s"
+            # WHEN the web_external_url config option is cleared
+            external_url_config = ""
+            state_in = replace(state_out, config={"web_external_url": external_url_config})
+            with ctx(ctx.on.config_changed(), state_in) as mgr:
+                state_out = mgr.run()
+                charm = mgr.charm
+                # THEN root url is still not affected
+                assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "True"
+                assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://1.2.3.4/testmodel-grafana-k8s"
 
     # WHEN the traefik relation is removed
-    with patch.object(TraefikRouteRequirer, "external_host", new=""):
-        with ctx(ctx.on.relation_broken(ingress_rel), state) as mgr:
-            state_out = mgr.run()
-            charm = mgr.charm
-            # THEN the root URL is the FQDN and Grafana does not serve from the subpath
-            assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "False"
-            assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
-            assert is_service_running(charm)
+    with ctx(ctx.on.relation_broken(ingress_rel), state) as mgr:
+        state_out = mgr.run()
+        charm = mgr.charm
+        # THEN the root URL is the FQDN and Grafana does not serve from the subpath
+        assert get_pebble_env(charm)["GF_SERVER_SERVE_FROM_SUB_PATH"] == "False"
+        assert get_pebble_env(charm)["GF_SERVER_ROOT_URL"] == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
+        assert is_service_running(charm)
 
 
 @unittest.skip("The admin intentionally sets this. Leaving it not fully specced for now.")
