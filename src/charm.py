@@ -60,7 +60,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
-from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer, TraefikRouteRequirerReadyEvent
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer, IngressPerAppReadyEvent, IngressPerAppRevokedEvent
 from grafana import Grafana
 from grafana_client import GrafanaClient, GrafanaCommError
 from grafana_config import GrafanaConfig
@@ -70,6 +70,7 @@ from models import DatasourceConfig, PebbleEnvironment, TLSConfig
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
+    CertificateAvailableEvent,
 )
 from constants import (
     PEER_RELATION,
@@ -124,10 +125,9 @@ class GrafanaCharm(CharmBase):
         # -- trusted_cert_transfer
         self.trusted_cert_transfer = CertificateTransferRequires(self, "receive-ca-cert")
 
-        # -- ingress via raw traefik_route
-        # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
-        # so this may be none. Rely on `self.ingress.is_ready` later to check
-        self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
+        # -- ingress
+        self.ingress = IngressPerAppRequirer(self, port=WORKLOAD_PORT, scheme=self._scheme, strip_prefix=False)
+
 
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
@@ -234,7 +234,9 @@ class GrafanaCharm(CharmBase):
 
         self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
 
-        all_events.add(TraefikRouteRequirerReadyEvent)
+        all_events.add(IngressPerAppReadyEvent)
+        all_events.add(IngressPerAppRevokedEvent)
+        all_events.add(CertificateAvailableEvent)
         observe_events(self, all_events, self._reconcile)
 
 
@@ -250,40 +252,7 @@ class GrafanaCharm(CharmBase):
     @property
     def external_url(self) -> str:
         """Return the external hostname configured, if any."""
-        if self.ingress.external_host:
-            path_prefix = f"{self.model.name}-{self.model.app.name}"
-            # The scheme we use here needs to be the ingress URL's scheme:
-            # If traefik is providing TLS termination then the ingress scheme is https, but
-            # grafana's scheme is still http.
-            return f"{self.ingress.scheme or 'http'}://{self.ingress.external_host}/{path_prefix}"
-        return self.internal_url
-
-    @property
-    def _ingress_config(self) -> dict:
-        """Build a raw ingress configuration for Traefik."""
-        # The path prefix is the same as in ingress per app
-        external_path = f"{self.model.name}-{self.model.app.name}"
-
-        routers = {
-            "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
-                "entryPoints": ["web"],
-                "rule": f"PathPrefix(`/{external_path}`)",
-                # We do not need to specify any middleware here.
-                # Normally, there would be two use cases for adding middlewares: (1) to strip prefix, (2) to redirect from port 80 to 443
-                # Since Grafana allows us to serve from subpath, we fix (1).
-                # And Traefik itself will redirect from 80 to 443 when it's configured for TLS.
-                # Hence, we do not add any middlewares.
-                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-            },
-        }
-
-        services = {
-            "juju-{}-{}-service".format(self.model.name, self.model.app.name): {
-                "loadBalancer": {"servers": [{"url": self.internal_url}]}
-            }
-        }
-
-        return {"http": {"routers": routers, "services": services}}
+        return self.ingress.url or self.internal_url
 
     @property
     def _metrics_scrape_jobs(self) -> list:
@@ -444,6 +413,7 @@ class GrafanaCharm(CharmBase):
                 url=endpoint + "/v1/traces",
                 ca=self._tls_config.ca if self._tls_config else None
             )
+        self.ingress.provide_ingress_requirements(scheme=self._scheme, port=WORKLOAD_PORT)
         if self._check_wrong_relations():
             return
         self._reconcile_relations()
@@ -474,19 +444,12 @@ class GrafanaCharm(CharmBase):
                 subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _reconcile_relations(self):
-        self._reconcile_ingress()
         self.metrics_endpoint.set_scrape_job_spec()
         self.source_consumer.upgrade_keys()
         self.dashboard_consumer.update_dashboards()
         self.oauth.update_client_config(client_config=self._oauth_client_config)
         self._reconcile_grafana_metadata()
         self.catalog.update_item(item=self._catalogue_item)
-
-    def _reconcile_ingress(self):
-        if not self.unit.is_leader():
-            return
-        if self.ingress.is_ready():
-            self.ingress.submit_to_traefik(self._ingress_config)
 
     def _reconcile_grafana_metadata(self):
         """Send metadata to related applications on the grafana-metadata relation."""

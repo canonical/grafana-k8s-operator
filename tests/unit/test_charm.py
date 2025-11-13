@@ -246,48 +246,6 @@ def test_bare_charm_has_no_subpath_set_in_layer(ctx, base_state, event):
         pebble_layer = charm._grafana_service._layer
         assert pebble_layer.to_dict()["services"]["grafana"]["environment"]["GF_SERVER_ROOT_URL"] == "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"
 
-@patch.object(grafana_client.GrafanaClient, "build_info", new={"version": "1.0.0"})
-@patch.multiple("charm.TraefikRouteRequirer", external_host="1.2.3.4", scheme="http")
-def test_ingress_relation_sets_options_and_rel_data(ctx:Context, base_state, peer_relation):
-    # GIVEN an ingress relation
-    ingress_rel = Relation("ingress",
-                            remote_app_name="traefik",
-                              )
-    state = replace(base_state, relations={ingress_rel, peer_relation}, model=Model(name="testmodel"))
-
-    expected_rel_data = {
-        "http": {
-            "routers": {
-                "juju-testmodel-grafana-k8s-router": {
-                    "entryPoints": ["web"],
-                    "rule": "PathPrefix(`/testmodel-grafana-k8s`)",
-                    "service": "juju-testmodel-grafana-k8s-service",
-                },
-            },
-            "services": {
-                "juju-testmodel-grafana-k8s-service": {
-                    "loadBalancer": {
-                        "servers": [
-                            {"url": "http://grafana-k8s-0.testmodel.svc.cluster.local:3000"}
-                        ]
-                    }
-                }
-            },
-        }
-    }
-
-    # WHEN relation_changed event is fired
-    with ctx(ctx.on.relation_changed(ingress_rel), state) as mgr:
-        out = mgr.run()
-        charm = mgr.charm
-        # THEN GF_SERVER_ROOT_URL & GF_SERVER_SERVE_FROM_SUB_PATH are set in the pebble layer
-        plan = charm.unit.get_container("grafana").get_plan().services["grafana"].to_dict()
-        assert "GF_SERVER_SERVE_FROM_SUB_PATH" in plan["environment"].keys()
-        assert "GF_SERVER_ROOT_URL" in plan["environment"].keys()
-        # AND traefik_route config is set in local app data
-        rel_data = out.get_relation(ingress_rel.id).local_app_data
-        assert yaml.safe_load(rel_data["config"]) == expected_rel_data
-        assert charm.external_url == "http://1.2.3.4/testmodel-grafana-k8s"
 
 def test_config_is_updated_with_authentication_config(ctx, base_state, peer_relation):
     # GIVEN a grafana-auth relation
