@@ -107,10 +107,7 @@ class Grafana:
         Ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini
         """
         pebble_env = self._pebble_env()
-        # Placeholder for when we add "proper" mysql support for HA
-        extra_info = {
-            "GF_DATABASE_TYPE": "sqlite3",
-        }
+        extra_info = {}
 
         # Juju Proxy settings
         extra_info.update(
@@ -391,7 +388,7 @@ class Grafana:
             self._update_config_file(DATASOURCES_PATH, grafana_datasources)
             logger.info("Updated Grafana's datasource configuration")
 
-            # Non-leaders will get updates from litestream
+            # Non-leaders will get updates from the database
             if self._is_leader:
                 changes.append(True)
 
