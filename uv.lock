@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.10, <4"
+requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14' and platform_python_implementation != 'PyPy'",
     "python_full_version >= '3.11' and python_full_version < '3.14' and platform_python_implementation != 'PyPy'",
@@ -8,9 +8,6 @@ resolution-markers = [
     "python_full_version >= '3.11' and python_full_version < '3.14' and platform_python_implementation == 'PyPy'",
     "python_full_version < '3.11'",
 ]
-
-[options]
-prerelease-mode = "allow"
 
 [[package]]
 name = "aiohappyeyeballs"
