@@ -79,7 +79,7 @@ convention = "google"
 
 [tool.pyright]
 extraPaths = ["lib"]
-pythonVersion = "3.8"
+pythonVersion = "3.10"
 pythonPlatform = "All"
 
 [tool.pytest.ini_options]
