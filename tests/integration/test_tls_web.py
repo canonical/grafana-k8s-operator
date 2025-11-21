@@ -39,7 +39,8 @@ async def test_deploy(ops_test, grafana_charm):
     sh.juju.deploy(
         "self-signed-certificates", "ca", model=ops_test.model.name, channel="1/stable"
     )
-    await ops_test.model.add_relation(f"{grafana.name}:pgsql", "pgsql") # Database needed for >=2 units.
+    # Since Grafana has a scale of 2, we need a db.
+    await ops_test.model.add_relation(f"{grafana.name}:pgsql", "pgsql")
     await ops_test.model.add_relation(f"{grafana.name}:certificates", "ca")
 
     await asyncio.gather(
