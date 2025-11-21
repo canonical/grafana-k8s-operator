@@ -8,7 +8,6 @@ import unittest
 from typing import Dict
 from unittest.mock import patch
 from pytest import fixture, mark
-#from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.model import ActiveStatus
 from ops.testing import Model, Relation, CharmEvents

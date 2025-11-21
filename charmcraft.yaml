@@ -43,10 +43,14 @@ requires:
   grafana-auth:
     interface: grafana_auth
     optional: true
-  pgsql:  # Do not call this endpoint "database" because we may want to add mysql support at some point.
+  pgsql:
     interface: postgresql_client
     limit: 1
     optional: true
+    description: |
+      This endpoint allows using a PostgreSQL database backend for data storage.
+      Using this endpoint overrides Grafana's usage of the embedded sqlite3 database
+      for data storage and is required for more than one Grafana unit.
   catalogue:
     interface: catalogue
     optional: true
