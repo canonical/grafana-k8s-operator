@@ -490,7 +490,7 @@ class GrafanaCharm(CharmBase):
         if not self.unit.is_leader():
             return
 
-        if self._enable_external_db and self._db is not None: # Checking self._db is not None for the type checker.
+        if self._enable_external_db and self._db is not None:
             # fetch_relation_data() returns a dict of {relation_id: {values}}. Since there is only one db relation, we can
             # just take the 0 element
             data = list(self._db.fetch_relation_data().values())[0]
