@@ -28,11 +28,6 @@ containers:
     mounts:
       - storage: database
         location: /var/lib/grafana
-  litestream:
-    resource: litestream-image
-    mounts:
-      - storage: database
-        location: /var/lib/grafana
 
 storage:
   database:
@@ -48,18 +43,21 @@ requires:
   grafana-auth:
     interface: grafana_auth
     optional: true
-  database:
-    interface: db
+  pgsql:
+    interface: postgresql_client
     limit: 1
     optional: true
+    description: |
+      This endpoint allows using a PostgreSQL database backend for data storage.
+      Using this endpoint overrides Grafana's usage of the embedded sqlite3 database
+      for data storage and is required for more than one Grafana unit.
   catalogue:
     interface: catalogue
     optional: true
   ingress:
-    interface: traefik_route
+    interface: ingress
     limit: 1
     optional: true
-    description: Grafana needs "ingress per leader" (not per app and not per unit).
   certificates:
     interface: tls-certificates
     limit: 1
@@ -121,10 +119,6 @@ resources:
     type: oci-image
     description: upstream docker image for Grafana
     upstream-source: docker.io/ubuntu/grafana@sha256:d2f26ddd1e0263cd84291375f9a2309dbc08abbd465e0554a5b678824a5f207a  # renovate: oci-image tag: 12.0-24.04
-  litestream-image:
-    type: oci-image
-    description: upstream image for sqlite streaming
-    upstream-source: docker.io/litestream/litestream@sha256:86ffeaba5e3744771b5db95c847078bdb46d34238058a49ee54537dff70b8824  # renovate: oci-image tag: 0.4.0-beta.2
 
 platforms:
   ubuntu@24.04:amd64:
