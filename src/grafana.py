@@ -47,6 +47,7 @@ from constants import (
     TRUSTED_CA_CERT_PATH
 )
 from grafana_config import GrafanaConfig
+from collections import namedtuple
 
 logger = logging.getLogger()
 
@@ -280,8 +281,19 @@ class Grafana:
         try:
             for dashboard_file in self._container.list_files(DASHBOARDS_DIR, pattern="juju_*.json"):
                 dashboards_file_to_be_kept[dashboard_file.path] = False
-
+        
+            # If we get multiple dashboards with the same UID but different versions, we want
+            # to make sure that we provision (write to disk) only the one with the highest version.
+            _T = namedtuple('_T', ['version', 'dashboard'])
+            latest_versions: Dict[str, _T] = {}
             for dashboard in self._dashboards:
+                dash_dict = json.loads(dashboard["content"])
+                uid = dash_dict["uid"]
+                ver = dash_dict["ver"]
+                if uid not in latest_versions or ver > latest_versions[uid].version:
+                    latest_versions[uid] = _T(ver, dashboard)
+
+            for dashboard in [t.dashboard for t in latest_versions.values()]:
                 dashboard_content = dashboard["content"]
                 dashboard_content_bytes = dashboard_content.encode("utf-8")
                 dashboard_content_digest = hashlib.sha256(dashboard_content_bytes).hexdigest()
