@@ -15,6 +15,7 @@
 """A module used for interacting with a running Grafana instance."""
 import time
 from pathlib import Path
+import json
 import os
 import hashlib
 import logging
@@ -289,7 +290,7 @@ class Grafana:
             for dashboard in self._dashboards:
                 dash_dict = json.loads(dashboard["content"])
                 uid = dash_dict["uid"]
-                ver = dash_dict["ver"]
+                ver = dash_dict["version"]
                 if uid not in latest_versions or ver > latest_versions[uid].version:
                     latest_versions[uid] = _T(ver, dashboard)
 
