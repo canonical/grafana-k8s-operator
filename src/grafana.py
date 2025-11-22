@@ -281,7 +281,7 @@ class Grafana:
         try:
             for dashboard_file in self._container.list_files(DASHBOARDS_DIR, pattern="juju_*.json"):
                 dashboards_file_to_be_kept[dashboard_file.path] = False
-        
+
             # If we get multiple dashboards with the same UID but different versions, we want
             # to make sure that we provision (write to disk) only the one with the highest version.
             _T = namedtuple('_T', ['version', 'dashboard'])
