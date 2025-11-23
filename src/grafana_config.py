@@ -20,6 +20,7 @@ class GrafanaConfig:
                 oauth_config: Optional[OauthProviderConfig] = None,
                 auth_env_config: Callable[[],Any] = lambda: {},
                 db_config: Callable[[],Optional[Dict[str, str]]]  = lambda: None,
+                db_type: str = "",
                 enable_reporting: bool = True,
                 enable_external_db: bool = False,
                 tracing_endpoint: Optional[str] = None,
@@ -28,6 +29,7 @@ class GrafanaConfig:
         self._oauth_config = oauth_config
         self._auth_env_config = auth_env_config
         self._db_config = db_config
+        self._db_type = db_type
         self._enable_reporting = enable_reporting
         self._enable_external_db = enable_external_db
         self._tracing_endpoint = tracing_endpoint
@@ -176,7 +178,7 @@ class GrafanaConfig:
             file.
         """
         config_ini = configparser.ConfigParser()
-        db_type = "mysql"
+        db_type = self._db_type
         db_config = self._db_config()
         if not db_config:
             return ""

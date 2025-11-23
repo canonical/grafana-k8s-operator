@@ -27,11 +27,10 @@ from urllib.parse import urlparse
 
 from cosl import JujuTopology
 from cosl.reconciler import all_events, observe_events
-from ops import ActiveStatus, CollectStatusEvent, main
+from ops import ActiveStatus, BlockedStatus, CollectStatusEvent, RelationBrokenEvent, StatusBase, main
 from ops.charm import (
     ActionEvent,
     CharmBase,
-    RelationBrokenEvent,
     RelationChangedEvent,
 )
 from ops.model import Port
@@ -41,12 +40,12 @@ from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferRequires,
 )
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider
 from charms.grafana_k8s.v0.grafana_source import (
     GrafanaSourceConsumer,
-    SourceFieldsMissingError,
 )
 from charms.hydra.v0.oauth import (
     ClientConfig as OauthClientConfig,
@@ -61,17 +60,17 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
-from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer, TraefikRouteRequirerReadyEvent
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer, IngressPerAppReadyEvent, IngressPerAppRevokedEvent
 from grafana import Grafana
 from grafana_client import GrafanaClient, GrafanaCommError
 from grafana_config import GrafanaConfig
 from secret_storage import generate_password
-from litestream import Litestream
 from relation import Relation
 from models import DatasourceConfig, PebbleEnvironment, TLSConfig
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
+    CertificateAvailableEvent,
 )
 from constants import (
     PEER_RELATION,
@@ -79,10 +78,9 @@ from constants import (
     OAUTH_SCOPES,
     CA_CERT_PATH,
     GRAFANA_WORKLOAD,
-    DATABASE_RELATION,
+    PGSQL_RELATION,
     PROFILING_PORT,
     OAUTH_GRANT_TYPES,
-    REQUIRED_DATABASE_FIELDS,
     VALID_AUTHENTICATION_MODES)
 import ops_tracing
 
@@ -127,10 +125,9 @@ class GrafanaCharm(CharmBase):
         # -- trusted_cert_transfer
         self.trusted_cert_transfer = CertificateTransferRequires(self, "receive-ca-cert")
 
-        # -- ingress via raw traefik_route
-        # TraefikRouteRequirer expects an existing relation to be passed as part of the constructor,
-        # so this may be none. Rely on `self.ingress.is_ready` later to check
-        self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
+        # -- ingress
+        self.ingress = IngressPerAppRequirer(self, port=WORKLOAD_PORT, scheme=self._scheme, strip_prefix=False)
+
 
         self.metrics_endpoint = MetricsEndpointProvider(
             charm=self,
@@ -176,12 +173,22 @@ class GrafanaCharm(CharmBase):
             refresh_event=self.on.grafana_pebble_ready,  # pyright: ignore
         )
 
+        # -- database relation
+        self._db_name = f"{self._topology.application}-grafana-k8s-{self._topology.model_uuid}"
+        self._db = None
+        self._db_type = "sqlite3"
+
+        if self.model.relations[PGSQL_RELATION]:
+            self._db = DatabaseRequires(self, relation_name=PGSQL_RELATION, database_name=self._db_name)
+            self._db_type = "postgres"
+
         self._grafana_client = GrafanaClient(self.internal_url)
         self._grafana_config = GrafanaConfig(
                                             datasources_config=self._datasource_config,
                                             oauth_config = self._oauth_config,
                                             auth_env_config = lambda: self._auth_env_vars,
                                             db_config=lambda: self._db_config,
+                                            db_type=self._db_type,
                                             enable_reporting = bool(self.config["reporting_enabled"]),
                                             enable_external_db=self._enable_external_db,
                                             tracing_endpoint=self._workload_tracing_endpoint,
@@ -198,9 +205,6 @@ class GrafanaCharm(CharmBase):
                                         scheme=self._scheme,
                                         ingress_ready=self.ingress.is_ready(),
                                         )
-        self._litestream = Litestream(self.unit.get_container("litestream"),
-                                      is_leader= self.unit.is_leader(),
-                                        peers = self.peers)
 
         self.framework.observe(
             self.on.get_admin_password_action,  # pyright: ignore
@@ -209,8 +213,9 @@ class GrafanaCharm(CharmBase):
 
         # FIXME: we still need to observe these events as they contain the required data
         # update the charm lib to work with the reconcile approach
-        self.framework.observe(self.on[DATABASE_RELATION].relation_changed, self._on_database_changed)
-        self.framework.observe(self.on[DATABASE_RELATION].relation_broken, self._on_database_broken)
+        if self._db is not None:
+            self.framework.observe(self._db.on.database_created, self._on_database_changed)
+            self.framework.observe(self._db.on.endpoints_changed, self._on_database_changed)
         self.framework.observe(
             self.grafana_auth_requirer.on.auth_conf_available,  # pyright: ignore
             self._on_grafana_auth_conf_available,
@@ -229,7 +234,9 @@ class GrafanaCharm(CharmBase):
 
         self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
 
-        all_events.add(TraefikRouteRequirerReadyEvent)
+        all_events.add(IngressPerAppReadyEvent)
+        all_events.add(IngressPerAppRevokedEvent)
+        all_events.add(CertificateAvailableEvent)
         observe_events(self, all_events, self._reconcile)
 
 
@@ -245,40 +252,7 @@ class GrafanaCharm(CharmBase):
     @property
     def external_url(self) -> str:
         """Return the external hostname configured, if any."""
-        if self.ingress.external_host:
-            path_prefix = f"{self.model.name}-{self.model.app.name}"
-            # The scheme we use here needs to be the ingress URL's scheme:
-            # If traefik is providing TLS termination then the ingress scheme is https, but
-            # grafana's scheme is still http.
-            return f"{self.ingress.scheme or 'http'}://{self.ingress.external_host}/{path_prefix}"
-        return self.internal_url
-
-    @property
-    def _ingress_config(self) -> dict:
-        """Build a raw ingress configuration for Traefik."""
-        # The path prefix is the same as in ingress per app
-        external_path = f"{self.model.name}-{self.model.app.name}"
-
-        routers = {
-            "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
-                "entryPoints": ["web"],
-                "rule": f"PathPrefix(`/{external_path}`)",
-                # We do not need to specify any middleware here.
-                # Normally, there would be two use cases for adding middlewares: (1) to strip prefix, (2) to redirect from port 80 to 443
-                # Since Grafana allows us to serve from subpath, we fix (1).
-                # And Traefik itself will redirect from 80 to 443 when it's configured for TLS.
-                # Hence, we do not add any middlewares.
-                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-            },
-        }
-
-        services = {
-            "juju-{}-{}-service".format(self.model.name, self.model.app.name): {
-                "loadBalancer": {"servers": [{"url": self.internal_url}]}
-            }
-        }
-
-        return {"http": {"routers": routers, "services": services}}
+        return self.ingress.url or self.internal_url
 
     @property
     def _metrics_scrape_jobs(self) -> list:
@@ -374,8 +348,7 @@ class GrafanaCharm(CharmBase):
     @property
     def _enable_external_db(self) -> bool:
         """Only consider a DB connection if we have config info."""
-        rel = self.model.get_relation(DATABASE_RELATION)
-        return len(rel.units) > 0 if rel is not None else False
+        return bool(self.model.get_relation(PGSQL_RELATION))
 
     @property
     def _db_config(self) -> Optional[Dict[str, str]]:
@@ -440,10 +413,19 @@ class GrafanaCharm(CharmBase):
                 url=endpoint + "/v1/traces",
                 ca=self._tls_config.ca if self._tls_config else None
             )
+        self.ingress.provide_ingress_requirements(scheme=self._scheme, port=WORKLOAD_PORT)
+        if self._check_wrong_relations():
+            return
         self._reconcile_relations()
         self._grafana_service.reconcile()
-        self._litestream.reconcile()
         self._reconcile_tls_config()
+
+    def _check_wrong_relations(self) -> Optional[StatusBase]:
+        """Check that relations are configured properly."""
+        relations = self.model.relations
+        if not relations[PGSQL_RELATION] and self.app.planned_units() > 1:
+            return BlockedStatus("Scale > 1 requires pgsql relation.")
+        return None
 
 
     def _reconcile_tls_config(self) -> None:
@@ -462,19 +444,12 @@ class GrafanaCharm(CharmBase):
                 subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _reconcile_relations(self):
-        self._reconcile_ingress()
         self.metrics_endpoint.set_scrape_job_spec()
         self.source_consumer.upgrade_keys()
         self.dashboard_consumer.update_dashboards()
         self.oauth.update_client_config(client_config=self._oauth_client_config)
         self._reconcile_grafana_metadata()
         self.catalog.update_item(item=self._catalogue_item)
-
-    def _reconcile_ingress(self):
-        if not self.unit.is_leader():
-            return
-        if self.ingress.is_ready():
-            self.ingress.submit_to_traefik(self._ingress_config)
 
     def _reconcile_grafana_metadata(self):
         """Send metadata to related applications on the grafana-metadata relation."""
@@ -501,6 +476,8 @@ class GrafanaCharm(CharmBase):
 
     def _on_collect_unit_status(self, e: CollectStatusEvent):
         e.add_status(ActiveStatus())
+        if status := self._check_wrong_relations():
+            e.add_status(status)
         e.add_status(self.resource_patch.get_status())
 
 
@@ -513,23 +490,22 @@ class GrafanaCharm(CharmBase):
         if not self.unit.is_leader():
             return
 
-        # Get required information
-        database_fields = {
-            field: event.relation.data[event.app].get(field)
-            for field in REQUIRED_DATABASE_FIELDS  # type: ignore
-        }
+        if self._enable_external_db and self._db is not None:
+            # fetch_relation_data() returns a dict of {relation_id: {values}}. Since there is only one db relation, we can
+            # just take the 0 element
+            data = list(self._db.fetch_relation_data().values())[0]
 
-        # if any required fields are missing, warn the user and return
-        missing_fields = [
-            field for field in REQUIRED_DATABASE_FIELDS if database_fields.get(field) is None
-        ]
-        if len(missing_fields) > 0:
-            raise SourceFieldsMissingError(
-                "Missing required data fields for database relation: {}".format(missing_fields)
-            )
+            db_info = {
+                "type": self._db_type,
+                "host": data['endpoints'],
+                "name": self._db_name,
+                "user": data['username'],
+                "password": data['password'],
+            }
+        else:
+            db_info = {}
 
         # add the new database relation data to the datastore
-        db_info = {field: value for field, value in database_fields.items() if value}
         self.peers.set_app_data("database", db_info)
         self._grafana_service.reconcile()
 
