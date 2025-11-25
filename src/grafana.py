@@ -290,7 +290,17 @@ class Grafana:
             for dashboard in self._dashboards:
                 dash_dict = json.loads(dashboard["content"])
                 uid = dash_dict["uid"]
-                ver = dash_dict["version"]
+                title = dash_dict.get("title")
+                
+                if not (ver := dash_dict.get("version")):
+                    ver = 0
+                    logger.warning("Dashboard '%s' (uid '%s') is missing a '.version' field; using '0' as fallback", title, uid)
+                ver = int(ver)
+
+                if uid in latest_versions and ver > latest_versions[uid].version:
+                    old_title = json.loads(latest_versions[uid].dashboard["content"]).get("title")
+                    logger.info("Dashboard '%s' (uid '%s', version '%s') replaces dashboard '%s' (same uid, older version '%s')", title, uid, ver, old_title, latest_versions[uid].version)
+                    
                 if uid not in latest_versions or ver > latest_versions[uid].version:
                     latest_versions[uid] = _T(ver, dashboard)
 
