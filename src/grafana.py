@@ -285,7 +285,7 @@ class Grafana:
 
             # If we get multiple dashboards with the same UID but different versions, we want
             # to make sure that we provision (write to disk) only the one with the highest version.
-            _T = namedtuple('_T', ['version', 'dashboard'])
+            _T = namedtuple('_T', ['version', 'title', 'dashboard'])
             latest_versions: Dict[str, _T] = {}
             for dashboard in self._dashboards:
                 dash_dict = json.loads(dashboard["content"])
@@ -298,11 +298,10 @@ class Grafana:
                 ver = int(ver)
 
                 if uid in latest_versions and ver > latest_versions[uid].version:
-                    old_title = json.loads(latest_versions[uid].dashboard["content"]).get("title")
-                    logger.info("Dashboard '%s' (uid '%s', version '%s') replaces dashboard '%s' (same uid, older version '%s')", title, uid, ver, old_title, latest_versions[uid].version)
+                    logger.info("Dashboard '%s' (uid '%s', version '%s') replaces dashboard '%s' (same uid, older version '%s')", title, uid, ver, latest_versions[uid].title, latest_versions[uid].version)
 
                 if uid not in latest_versions or ver > latest_versions[uid].version:
-                    latest_versions[uid] = _T(ver, dashboard)
+                    latest_versions[uid] = _T(ver, title, dashboard)
 
             for dashboard in [t.dashboard for t in latest_versions.values()]:
                 dashboard_content = dashboard["content"]
