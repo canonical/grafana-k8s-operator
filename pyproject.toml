@@ -16,8 +16,11 @@ dependencies = [
   "markupsafe==2.0.1", # https://github.com/pallets/markupsafe/issues/371
   "lightkube>=0.11",
   # lib/charms/grafana_k8s/v0/grafana_dashboard.py
-  # lib/charms/temo_k8s/v1/charm_tracing.py
+  # lib/charms/tempo_k8s/v1/charm_tracing.py
   "cosl",
+  # lib/charms/istio_beacon_k8s/v0/service_mesh.py
+  "charmed-service-mesh-helpers>=0.2.0",
+  "lightkube-extensions",
 ]
 
 [project.optional-dependencies]

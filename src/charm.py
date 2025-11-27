@@ -52,6 +52,7 @@ from charms.hydra.v0.oauth import (
     OAuthRequirer,
     OauthProviderConfig
 )
+from charms.istio_beacon_k8s.v0.service_mesh import UnitPolicy, ServiceMeshConsumer
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     KubernetesComputeResourcesPatch,
     ResourceRequirements,
@@ -81,7 +82,8 @@ from constants import (
     PGSQL_RELATION,
     PROFILING_PORT,
     OAUTH_GRANT_TYPES,
-    VALID_AUTHENTICATION_MODES)
+    VALID_AUTHENTICATION_MODES,
+    METRICS_PATH)
 import ops_tracing
 
 logger = logging.getLogger()
@@ -127,6 +129,21 @@ class GrafanaCharm(CharmBase):
 
         # -- ingress
         self.ingress = IngressPerAppRequirer(self, port=WORKLOAD_PORT, scheme=self._scheme, strip_prefix=False)
+
+        # -- service mesh
+        self.mesh = ServiceMeshConsumer(
+            self,
+            policies=[
+                UnitPolicy(
+                    relation="metrics-endpoint",
+                    ports=[WORKLOAD_PORT],
+                ),
+                UnitPolicy(
+                    relation="profiling-endpoint",
+                    ports=[PROFILING_PORT],
+                ),
+            ],
+        )
 
 
         self.metrics_endpoint = MetricsEndpointProvider(
@@ -257,7 +274,10 @@ class GrafanaCharm(CharmBase):
     @property
     def _metrics_scrape_jobs(self) -> list:
         parts = urlparse(self.internal_url)
-        job = {"static_configs": [{"targets": [parts.netloc]}], "scheme": self._scheme}
+        job = {
+            "metrics_path": METRICS_PATH,
+            "static_configs": [{"targets": [parts.netloc]}], "scheme": self._scheme,
+        }
         return [job]
 
     @property
