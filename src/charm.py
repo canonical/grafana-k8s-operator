@@ -276,7 +276,8 @@ class GrafanaCharm(CharmBase):
         parts = urlparse(self.internal_url)
         job = {
             "metrics_path": METRICS_PATH,
-            "static_configs": [{"targets": [parts.netloc]}], "scheme": self._scheme,
+            "static_configs": [{"targets": [parts.netloc]}],
+            "scheme": self._scheme,
         }
         return [job]
 
