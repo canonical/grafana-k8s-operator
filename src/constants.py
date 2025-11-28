@@ -25,3 +25,4 @@ CA_CERT_PATH = "/usr/local/share/ca-certificates/cos-ca.crt"
 TRUSTED_CA_CERT_PATH = "/usr/local/share/ca-certificates/trusted-ca-cert.crt"
 PROFILING_PORT = 8080
 WORKLOAD_PORT = 3000
+METRICS_PATH = "/metrics"
