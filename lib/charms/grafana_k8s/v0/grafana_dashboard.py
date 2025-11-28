@@ -187,7 +187,6 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from collections import defaultdict
 import yaml
 from cosl import DashboardPath40UID, LZMABase64
 from cosl.types import type_convert_stored
@@ -218,7 +217,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 46
+LIBPATCH = 47
 
 PYDEPS = ["cosl >= 0.0.50"]
 
@@ -1638,14 +1637,14 @@ class GrafanaDashboardConsumer(Object):
     def _to_external_object(self, relation_id, dashboard):
         decompressed = LZMABase64.decompress(dashboard["content"])
         as_dict = json.loads(decompressed)
-        
+
         dashboard_title = as_dict.get("title", "")
-        
+
         if not (dashboard_uid := as_dict.get("uid", "")):
             logger.error("Dashboard '%s' from relation id '%s' is missing a '.uid' field", dashboard_title, relation_id)
-        
+
         try:
-            dashboard_version := int(as_dict["version"])
+            dashboard_version = int(as_dict["version"])
         except (KeyError, ValueError):
             logger.warning("Dashboard '%s' (uid '%s') is missing a '.version' field or is invalid (must be integer); using '0' as fallback", dashboard_title, dashboard_uid)
             dashboard_version = 0
@@ -1661,17 +1660,17 @@ class GrafanaDashboardConsumer(Object):
         }
 
     @property
-    def dashboards(self, *, keep_only_latest_version=False) -> List[Dict]:
+    def dashboards(self) -> List[Dict]:
         """Get a list of known dashboards across all instances of the monitored relation.
 
-        Args:
-            keep_only_latest_version: Whether to filter out dashboards with the same uid, keeping only the one with the highest version.
-              When more than one dashboard have the same uid and version, keep the first one when sorted by (relation_id, content) in reverse lexicographic order (highest relid first).
+        Filters out dashboards with the same uid, keeping only the one with the highest version.
+        When more than one dashboard have the same uid and version, keep the first one when
+        sorted by (relation_id, content) in reverse lexicographic order (highest relid first).
 
         Returns: a list of known dashboards. The JSON of each of the dashboards is available
             in the `content` field of the corresponding `dict`.
         """
-        d = defaultdict(list)
+        d: Dict[str, dict] = {}
 
         for _, (relation_id, dashboards_for_relation) in enumerate(
             self.get_peer_data("dashboards").items()
@@ -1679,13 +1678,10 @@ class GrafanaDashboardConsumer(Object):
             for dashboard in dashboards_for_relation:
                 obj = self._to_external_object(relation_id, dashboard)
                 key = obj["dashboard_uid"]
-                if keep_only_latest_version:
-                    if key in d:
-                        d[key] = max(d[key], obj, lambda o: (o["dashboard_version"], o["relation_id"], o["content"]))
-                    else:
-                        d[key] = [obj]
+                if key in d:
+                    d[key] = max(d[key][0], obj, key=lambda o: (o["dashboard_version"], o["relation_id"], o["content"]))
                 else:
-                    d[key].append(obj)
+                    d[key] = obj
 
         # Flatten the defaultdict to obtain a combined list of all the values
         return [item for lst in d.values() for item in lst]
