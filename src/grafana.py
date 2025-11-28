@@ -15,7 +15,6 @@
 """A module used for interacting with a running Grafana instance."""
 import time
 from pathlib import Path
-import json
 import os
 import hashlib
 import logging
@@ -48,7 +47,6 @@ from constants import (
     TRUSTED_CA_CERT_PATH
 )
 from grafana_config import GrafanaConfig
-from collections import namedtuple
 
 logger = logging.getLogger()
 

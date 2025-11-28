@@ -217,7 +217,7 @@ class GrafanaCharm(CharmBase):
                                         pebble_env=self._pebble_env,
                                         tls_config = self._tls_config,
                                         trusted_ca_certs = self._trusted_ca_certs,
-                                        dashboards = self.dashboard_consumer.dashboards(keep_only_latest_version=True),
+                                        dashboards = self.dashboard_consumer.dashboards,
                                         provision_own_dashboard = self._provision_own_dashboard,
                                         scheme=self._scheme,
                                         ingress_ready=self.ingress.is_ready(),
