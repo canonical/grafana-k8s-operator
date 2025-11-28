@@ -283,27 +283,7 @@ class Grafana:
             for dashboard_file in self._container.list_files(DASHBOARDS_DIR, pattern="juju_*.json"):
                 dashboards_file_to_be_kept[dashboard_file.path] = False
 
-            # If we get multiple dashboards with the same UID but different versions, we want
-            # to make sure that we provision (write to disk) only the one with the highest version.
-            _T = namedtuple('_T', ['version', 'title', 'dashboard'])
-            latest_versions: Dict[str, _T] = {}
             for dashboard in self._dashboards:
-                dash_dict = json.loads(dashboard["content"])
-                uid = dash_dict["uid"]
-                title = dash_dict.get("title")
-
-                if not (ver := dash_dict.get("version")):
-                    ver = 0
-                    logger.warning("Dashboard '%s' (uid '%s') is missing a '.version' field; using '0' as fallback", title, uid)
-                ver = int(ver)
-
-                if uid in latest_versions and ver > latest_versions[uid].version:
-                    logger.info("Dashboard '%s' (uid '%s', version '%s') replaces dashboard '%s' (same uid, older version '%s')", title, uid, ver, latest_versions[uid].title, latest_versions[uid].version)
-
-                if uid not in latest_versions or ver > latest_versions[uid].version:
-                    latest_versions[uid] = _T(ver, title, dashboard)
-
-            for dashboard in [t.dashboard for t in latest_versions.values()]:
                 dashboard_content = dashboard["content"]
                 dashboard_content_bytes = dashboard_content.encode("utf-8")
                 dashboard_content_digest = hashlib.sha256(dashboard_content_bytes).hexdigest()
