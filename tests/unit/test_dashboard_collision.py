@@ -8,18 +8,16 @@ from cosl import LZMABase64
 from ops.testing import Context, PeerRelation, State
 
 
-def read_dashboards_from_fs(container, ctx: Context, glob_pattern: str = "juju_*.json") -> Dict[str, str]:
+def read_dashboards_from_fs(fs, glob_pattern: str = "juju_*.json") -> Dict[str, str]:
     """Read dashboard files from the simulated filesystem.
 
     Args:
-        container: The container to read from
-        ctx: The test context
+        fs: The filesystem object (from container.get_filesystem(ctx))
         glob_pattern: Pattern to match dashboard files
 
     Returns:
         A mapping from relative filename to the contents of the file
     """
-    fs = container.get_filesystem(ctx)
     dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
 
     dashboard_files = list(dashboards_dir.glob(glob_pattern))
@@ -94,7 +92,8 @@ def test_distinct_uid_and_version_both_on_disk(ctx: Context, base_state: State, 
 
     # THEN both dashboards should be written to the filesystem
     container = out.get_container("grafana")
-    dashboards = read_dashboards_from_fs(container, ctx)
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
 
     assert len(dashboards) == 2
 
@@ -132,7 +131,8 @@ def test_distinct_uid_same_version_both_on_disk(ctx: Context, base_state: State,
 
     # THEN both dashboards should be written to the filesystem
     container = out.get_container("grafana")
-    dashboards = read_dashboards_from_fs(container, ctx)
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
 
     assert len(dashboards) == 2
 
@@ -170,7 +170,8 @@ def test_same_uid_different_version_only_higher_on_disk(ctx: Context, base_state
 
     # THEN only one dashboard should be written to the filesystem - the one with higher version
     container = out.get_container("grafana")
-    dashboards = read_dashboards_from_fs(container, ctx)
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
 
     assert len(dashboards) == 1
 
@@ -211,7 +212,8 @@ def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state:
     # THEN only one dashboard should be written to the filesystem
     # Selected deterministically based on (version, relation_id, content) lexicographic order
     container = out.get_container("grafana")
-    dashboards = read_dashboards_from_fs(container, ctx)
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
 
     assert len(dashboards) == 1
 

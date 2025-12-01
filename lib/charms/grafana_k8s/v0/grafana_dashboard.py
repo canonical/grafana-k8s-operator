@@ -1671,7 +1671,6 @@ class GrafanaDashboardConsumer(Object):
             in the `content` field of the corresponding `dict`.
         """
         d: Dict[str, dict] = {}
-        dashboards_without_uid: List[dict] = []
 
         for _, (relation_id, dashboards_for_relation) in enumerate(
             self.get_peer_data("dashboards").items()
@@ -1680,17 +1679,12 @@ class GrafanaDashboardConsumer(Object):
                 obj = self._to_external_object(relation_id, dashboard)
                 key = obj["dashboard_uid"]
 
-                # Dashboards without a UID are not subject to collision detection
-                if not key:
-                    dashboards_without_uid.append(obj)
-                    continue
-
                 if key in d:
                     d[key] = max(d[key], obj, key=lambda o: (o["dashboard_version"], o["relation_id"], o["content"]))
                 else:
                     d[key] = obj
 
-        return list(d.values()) + dashboards_without_uid
+        return list(d.values())
 
     def _get_stored_dashboards(self, relation_id: int) -> list:
         """Pull stored dashboards out of the peer data bucket."""
