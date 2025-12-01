@@ -1678,13 +1678,13 @@ class GrafanaDashboardConsumer(Object):
             for dashboard in dashboards_for_relation:
                 obj = self._to_external_object(relation_id, dashboard)
                 key = obj["dashboard_uid"]
+
                 if key in d:
-                    d[key] = max(d[key][0], obj, key=lambda o: (o["dashboard_version"], o["relation_id"], o["content"]))
+                    d[key] = max(d[key], obj, key=lambda o: (o["dashboard_version"], o["relation_id"], o["content"]))
                 else:
                     d[key] = obj
 
-        # Flatten the defaultdict to obtain a combined list of all the values
-        return [item for lst in d.values() for item in lst]
+        return list(d.values())
 
     def _get_stored_dashboards(self, relation_id: int) -> list:
         """Pull stored dashboards out of the peer data bucket."""
