@@ -1639,9 +1639,7 @@ class GrafanaDashboardConsumer(Object):
         as_dict = json.loads(decompressed)
 
         dashboard_title = as_dict.get("title", "")
-
-        if not (dashboard_uid := as_dict.get("uid", "")):
-            logger.error("Dashboard '%s' from relation id '%s' is missing a '.uid' field", dashboard_title, relation_id)
+        dashboard_uid = as_dict.get("uid", "")
 
         try:
             dashboard_version = int(as_dict["version"])
@@ -1677,10 +1675,15 @@ class GrafanaDashboardConsumer(Object):
         ):
             for dashboard in dashboards_for_relation:
                 obj = self._to_external_object(relation_id, dashboard)
-                key = obj["dashboard_uid"]
+                
+                if not (key := obj.get("dashboard_uid"):
+                    # At this point, we assume that a `.uid` is present so we do not render a fallback identifier here. Instead, we omit it.
+                    logger.error("Dashboard '%s' from relation id '%s' is missing a '.uid' field; omitted", obj["dashboard_title"], obj["relation_id"])
+                    continue
 
                 if key in d:
                     d[key] = max(d[key], obj, key=lambda o: (o["dashboard_version"], o["relation_id"], o["content"]))
+                    logger.warning("Deduplicate dashboard '%s' (uid '%s') - kept version '%s' from relation id '%s'", d[key]["dashboard_title"], d[key]["dashboard_uid"], d[key]["dashboard_version"], d[key]["relation_id"])
                 else:
                     d[key] = obj
 
