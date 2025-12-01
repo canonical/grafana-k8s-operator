@@ -8,6 +8,23 @@ from cosl import LZMABase64
 from ops.testing import Context, PeerRelation, State
 
 
+def read_dashboards_from_fs(container, ctx: Context, glob_pattern: str = "juju_*.json") -> Dict[str, str]:
+    """Read dashboard files from the simulated filesystem.
+
+    Args:
+        container: The container to read from
+        ctx: The test context
+        glob_pattern: Pattern to match dashboard files
+
+    Returns:
+        A mapping from relative filename to the contents of the file
+    """
+    fs = container.get_filesystem(ctx)
+    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+
+    dashboard_files = list(dashboards_dir.glob(glob_pattern))
+    return {f.name: f.read_text() for f in dashboard_files}
+
 
 def dashboard_factory(
     uid: str,
@@ -77,15 +94,12 @@ def test_distinct_uid_and_version_both_on_disk(ctx: Context, base_state: State, 
 
     # THEN both dashboards should be written to the filesystem
     container = out.get_container("grafana")
-    fs = container.get_filesystem(ctx)
-    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+    dashboards = read_dashboards_from_fs(container, ctx)
 
-    # Get all dashboard files
-    dashboard_files = list(dashboards_dir.glob("juju_*.json"))
-    assert len(dashboard_files) == 2
+    assert len(dashboards) == 2
 
     # Verify the dashboards have the correct UIDs
-    dashboard_contents = [json.loads(f.read_text()) for f in dashboard_files]
+    dashboard_contents = [json.loads(content) for content in dashboards.values()]
     dashboard_uids = {d["uid"] for d in dashboard_contents}
     assert dashboard_uids == {"dash1", "dash2"}
 
@@ -118,15 +132,12 @@ def test_distinct_uid_same_version_both_on_disk(ctx: Context, base_state: State,
 
     # THEN both dashboards should be written to the filesystem
     container = out.get_container("grafana")
-    fs = container.get_filesystem(ctx)
-    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+    dashboards = read_dashboards_from_fs(container, ctx)
 
-    # Get all dashboard files
-    dashboard_files = list(dashboards_dir.glob("juju_*.json"))
-    assert len(dashboard_files) == 2
+    assert len(dashboards) == 2
 
     # Verify the dashboards have the correct UIDs
-    dashboard_contents = [json.loads(f.read_text()) for f in dashboard_files]
+    dashboard_contents = [json.loads(content) for content in dashboards.values()]
     dashboard_uids = {d["uid"] for d in dashboard_contents}
     assert dashboard_uids == {"dash1", "dash2"}
 
@@ -159,15 +170,12 @@ def test_same_uid_different_version_only_higher_on_disk(ctx: Context, base_state
 
     # THEN only one dashboard should be written to the filesystem - the one with higher version
     container = out.get_container("grafana")
-    fs = container.get_filesystem(ctx)
-    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+    dashboards = read_dashboards_from_fs(container, ctx)
 
-    # Get all dashboard files
-    dashboard_files = list(dashboards_dir.glob("juju_*.json"))
-    assert len(dashboard_files) == 1
+    assert len(dashboards) == 1
 
     # Verify the dashboard has the correct UID and version
-    dashboard_content = json.loads(dashboard_files[0].read_text())
+    dashboard_content = json.loads(list(dashboards.values())[0])
     assert dashboard_content["uid"] == "dash1"
     assert dashboard_content["version"] == 2
 
@@ -203,15 +211,12 @@ def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state:
     # THEN only one dashboard should be written to the filesystem
     # Selected deterministically based on (version, relation_id, content) lexicographic order
     container = out.get_container("grafana")
-    fs = container.get_filesystem(ctx)
-    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+    dashboards = read_dashboards_from_fs(container, ctx)
 
-    # Get all dashboard files
-    dashboard_files = list(dashboards_dir.glob("juju_*.json"))
-    assert len(dashboard_files) == 1
+    assert len(dashboards) == 1
 
     # Verify the dashboard has the correct UID and version
-    dashboard_content = json.loads(dashboard_files[0].read_text())
+    dashboard_content = json.loads(list(dashboards.values())[0])
     assert dashboard_content["uid"] == "dash1"
     assert dashboard_content["version"] == 1
     # The one with higher relation_id (and different content) should win
