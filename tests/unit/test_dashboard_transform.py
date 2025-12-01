@@ -384,6 +384,9 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -403,6 +406,9 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_NO_TOPOLOGY,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -422,6 +428,9 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": LOKI_DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -441,6 +450,9 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_WITH_NEGATIVE,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -460,6 +472,9 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_WITH_RANGES,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -479,6 +494,9 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_WITH_OFFSETS,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )

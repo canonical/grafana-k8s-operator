@@ -539,6 +539,9 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -560,6 +563,9 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_NO_DROPDOWNS,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -612,6 +618,9 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": VARIABLE_DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -630,6 +639,9 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": ROW_ONLY_DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -648,6 +660,9 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": INPUT_DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -666,6 +681,9 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": NULL_DATASOURCE_DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -684,6 +702,9 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": BUILTIN_DATASOURCE_DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -703,6 +724,9 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DICT_DATASOURCE_DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
@@ -721,6 +745,9 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": EXISTING_VARIABLE_DASHBOARD_RENDERED,
+                    "dashboard_uid": "",
+                    "dashboard_version": 0,
+                    "dashboard_title": "",
                 }
             ],
         )
