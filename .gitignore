@@ -48,4 +48,4 @@ terraform.rc
 
 # Tracing stuff
 .charm_tracing_buffer.raw
-src/grafana_k8s.egg-info/
+*.egg-info/

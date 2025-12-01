@@ -29,15 +29,15 @@ def dashboard_factory(
     dashboard_dict = {
         "uid": uid,
         "version": version,
-        "title": f"Test Dashboard {uid}",
+        "title": f"Test Dashboard {uid} - {content}",  # Use title for uniqueness
         "panels": [],
-        "content_extra": content  # To make content unique when needed
     }
 
     dashboard_json = json.dumps(dashboard_dict)
     compressed_content = LZMABase64.compress(dashboard_json)
 
     # Return the structure as stored in peer data by GrafanaDashboardConsumer
+    # This matches the structure created in _render_dashboards_and_signal_changed
     return {
         "id": f"grafana-dashboard:{relation_id}/dashboard-{uid}",
         "original_id": f"dashboard-{uid}",
@@ -46,8 +46,6 @@ def dashboard_factory(
             "charm": "test-charm",
             "content": compressed_content,
         },
-        "valid": True,
-        "error": None,
     }
 
 
@@ -74,15 +72,22 @@ def test_distinct_uid_and_version_both_on_disk(ctx: Context, base_state: State, 
         relations={peer_relation_with_data}
     )
 
-    # WHEN accessing the dashboards property
-    with ctx(ctx.on.config_changed(), state) as mgr:
-        charm = mgr.charm
-        dashboards = charm.dashboard_consumer.dashboards
+    # WHEN the charm processes the dashboards
+    out = ctx.run(ctx.on.update_status(), state)
 
-        # THEN both dashboards should be returned
-        assert len(dashboards) == 2
-        dashboard_uids = {d["dashboard_uid"] for d in dashboards}
-        assert dashboard_uids == {"dash1", "dash2"}
+    # THEN both dashboards should be written to the filesystem
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+
+    # Get all dashboard files
+    dashboard_files = list(dashboards_dir.glob("juju_*.json"))
+    assert len(dashboard_files) == 2
+
+    # Verify the dashboards have the correct UIDs
+    dashboard_contents = [json.loads(f.read_text()) for f in dashboard_files]
+    dashboard_uids = {d["uid"] for d in dashboard_contents}
+    assert dashboard_uids == {"dash1", "dash2"}
 
 
 def test_distinct_uid_same_version_both_on_disk(ctx: Context, base_state: State, peer_relation: PeerRelation):
@@ -108,15 +113,22 @@ def test_distinct_uid_same_version_both_on_disk(ctx: Context, base_state: State,
         relations={peer_relation_with_data}
     )
 
-    # WHEN accessing the dashboards property
-    with ctx(ctx.on.config_changed(), state) as mgr:
-        charm = mgr.charm
-        dashboards = charm.dashboard_consumer.dashboards
+    # WHEN the charm processes the dashboards
+    out = ctx.run(ctx.on.update_status(), state)
 
-        # THEN both dashboards should be returned
-        assert len(dashboards) == 2
-        dashboard_uids = {d["dashboard_uid"] for d in dashboards}
-        assert dashboard_uids == {"dash1", "dash2"}
+    # THEN both dashboards should be written to the filesystem
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+
+    # Get all dashboard files
+    dashboard_files = list(dashboards_dir.glob("juju_*.json"))
+    assert len(dashboard_files) == 2
+
+    # Verify the dashboards have the correct UIDs
+    dashboard_contents = [json.loads(f.read_text()) for f in dashboard_files]
+    dashboard_uids = {d["uid"] for d in dashboard_contents}
+    assert dashboard_uids == {"dash1", "dash2"}
 
 
 def test_same_uid_different_version_only_higher_on_disk(ctx: Context, base_state: State, peer_relation: PeerRelation):
@@ -142,15 +154,22 @@ def test_same_uid_different_version_only_higher_on_disk(ctx: Context, base_state
         relations={peer_relation_with_data}
     )
 
-    # WHEN accessing the dashboards property
-    with ctx(ctx.on.config_changed(), state) as mgr:
-        charm = mgr.charm
-        dashboards = charm.dashboard_consumer.dashboards
+    # WHEN the charm processes the dashboards
+    out = ctx.run(ctx.on.update_status(), state)
 
-        # THEN only one dashboard is returned - the one with the higher version
-        assert len(dashboards) == 1
-        assert dashboards[0]["dashboard_uid"] == "dash1"
-        assert dashboards[0]["dashboard_version"] == 2
+    # THEN only one dashboard should be written to the filesystem - the one with higher version
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+
+    # Get all dashboard files
+    dashboard_files = list(dashboards_dir.glob("juju_*.json"))
+    assert len(dashboard_files) == 1
+
+    # Verify the dashboard has the correct UID and version
+    dashboard_content = json.loads(dashboard_files[0].read_text())
+    assert dashboard_content["uid"] == "dash1"
+    assert dashboard_content["version"] == 2
 
 
 def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state: State, peer_relation: PeerRelation):
@@ -178,17 +197,24 @@ def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state:
         relations={peer_relation_with_data}
     )
 
-    # WHEN accessing the dashboards property
-    with ctx(ctx.on.config_changed(), state) as mgr:
-        charm = mgr.charm
-        dashboards = charm.dashboard_consumer.dashboards
+    # WHEN the charm processes the dashboards
+    out = ctx.run(ctx.on.update_status(), state)
 
-        # THEN only one dashboard is returned - selected deterministically
-        # based on (version, relation_id, content) lexicographic order
-        # The one with higher relation_id should win
-        assert len(dashboards) == 1
-        assert dashboards[0]["dashboard_uid"] == "dash1"
-        assert dashboards[0]["dashboard_version"] == 1
-        assert dashboards[0]["relation_id"] == "2"  # Higher relation_id wins
+    # THEN only one dashboard should be written to the filesystem
+    # Selected deterministically based on (version, relation_id, content) lexicographic order
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+
+    # Get all dashboard files
+    dashboard_files = list(dashboards_dir.glob("juju_*.json"))
+    assert len(dashboard_files) == 1
+
+    # Verify the dashboard has the correct UID and version
+    dashboard_content = json.loads(dashboard_files[0].read_text())
+    assert dashboard_content["uid"] == "dash1"
+    assert dashboard_content["version"] == 1
+    # The one with higher relation_id (and different content) should win
+    assert "content_b" in dashboard_content["title"]
 
 
