@@ -3,12 +3,12 @@
 
 import json
 from typing import Any, Dict
-
+from pathlib import Path
 from cosl import LZMABase64
 from ops.testing import Context, PeerRelation, State
 
 
-def read_dashboards_from_fs(fs, glob_pattern: str = "juju_*.json") -> Dict[str, str]:
+def read_dashboards_from_fs(fs: Path) -> Dict[str, str]:
     """Read dashboard files from the simulated filesystem.
 
     Args:
@@ -18,16 +18,14 @@ def read_dashboards_from_fs(fs, glob_pattern: str = "juju_*.json") -> Dict[str, 
     Returns:
         A mapping from relative filename to the contents of the file
     """
-    dashboards_dir = fs / "etc" / "grafana" / "provisioning" / "dashboards"
-
-    dashboard_files = list(dashboards_dir.glob(glob_pattern))
-    return {f.name: f.read_text() for f in dashboard_files}
+    dashboards_dir: Path = fs / "etc" / "grafana" / "provisioning" / "dashboards"
+    return {f.name: f.read_text() for f in dashboards_dir.glob("juju_*.json")}
 
 
 def dashboard_factory(
     uid: str,
     version: int,
-    relation_id: str,
+    relation_id: str = "1",
     content: str = "test content"
 ) -> Dict[str, Any]:
     """Factory function for generating dashboard stand-in dictionaries.
@@ -64,13 +62,11 @@ def dashboard_factory(
     }
 
 
-def test_distinct_uid_and_version_both_on_disk(ctx: Context, base_state: State, peer_relation: PeerRelation):
+def test_distinct_uid_and_version_both_on_disk(ctx: Context, base_state: State):
     """Test that two dashboards with distinct uid and version are both provisioned."""
     # GIVEN reldata with two dashboard "objects" with distinct 'uid' and 'version'
-    dashboard1 = dashboard_factory(uid="dash1", version=1, relation_id="1")
-    dashboard2 = dashboard_factory(uid="dash2", version=2, relation_id="1")
-
-    # Set up peer relation with dashboards
+    dashboard1 = dashboard_factory(uid="dash1", version=1)
+    dashboard2 = dashboard_factory(uid="dash2", version=2)
     peer_data = {
         "dashboards": json.dumps({
             "1": [dashboard1, dashboard2]
@@ -81,13 +77,12 @@ def test_distinct_uid_and_version_both_on_disk(ctx: Context, base_state: State, 
         local_app_data=peer_data
     )
 
+    # WHEN the charm processes the dashboards
     state = State(
         leader=True,
         containers=base_state.containers,
         relations={peer_relation_with_data}
     )
-
-    # WHEN the charm processes the dashboards
     out = ctx.run(ctx.on.update_status(), state)
 
     # THEN both dashboards should be written to the filesystem
@@ -103,13 +98,11 @@ def test_distinct_uid_and_version_both_on_disk(ctx: Context, base_state: State, 
     assert dashboard_uids == {"dash1", "dash2"}
 
 
-def test_distinct_uid_same_version_both_on_disk(ctx: Context, base_state: State, peer_relation: PeerRelation):
+def test_distinct_uid_same_version_both_on_disk(ctx: Context, base_state: State):
     """Test that two dashboards with distinct uid but same version are both provisioned."""
     # GIVEN reldata with two dashboard "objects" with distinct 'uid' but same 'version'
-    dashboard1 = dashboard_factory(uid="dash1", version=1, relation_id="1")
-    dashboard2 = dashboard_factory(uid="dash2", version=1, relation_id="1")
-
-    # Set up peer relation with dashboards
+    dashboard1 = dashboard_factory(uid="dash1", version=1)
+    dashboard2 = dashboard_factory(uid="dash2", version=1)
     peer_data = {
         "dashboards": json.dumps({
             "1": [dashboard1, dashboard2]
@@ -120,13 +113,12 @@ def test_distinct_uid_same_version_both_on_disk(ctx: Context, base_state: State,
         local_app_data=peer_data
     )
 
+    # WHEN the charm processes the dashboards
     state = State(
         leader=True,
         containers=base_state.containers,
         relations={peer_relation_with_data}
     )
-
-    # WHEN the charm processes the dashboards
     out = ctx.run(ctx.on.update_status(), state)
 
     # THEN both dashboards should be written to the filesystem
@@ -142,13 +134,11 @@ def test_distinct_uid_same_version_both_on_disk(ctx: Context, base_state: State,
     assert dashboard_uids == {"dash1", "dash2"}
 
 
-def test_same_uid_different_version_only_higher_on_disk(ctx: Context, base_state: State, peer_relation: PeerRelation):
+def test_same_uid_different_version_only_higher_on_disk(ctx: Context, base_state: State):
     """Test that only the dashboard with higher version is provisioned when uid matches."""
     # GIVEN reldata with two dashboard "objects" with the same 'uid' but different 'version'
-    dashboard1 = dashboard_factory(uid="dash1", version=1, relation_id="1")
-    dashboard2 = dashboard_factory(uid="dash1", version=2, relation_id="1")
-
-    # Set up peer relation with dashboards
+    dashboard1 = dashboard_factory(uid="dash1", version=1)
+    dashboard2 = dashboard_factory(uid="dash1", version=2)
     peer_data = {
         "dashboards": json.dumps({
             "1": [dashboard1, dashboard2]
@@ -159,13 +149,12 @@ def test_same_uid_different_version_only_higher_on_disk(ctx: Context, base_state
         local_app_data=peer_data
     )
 
+    # WHEN the charm processes the dashboards
     state = State(
         leader=True,
         containers=base_state.containers,
         relations={peer_relation_with_data}
     )
-
-    # WHEN the charm processes the dashboards
     out = ctx.run(ctx.on.update_status(), state)
 
     # THEN only one dashboard should be written to the filesystem - the one with higher version
@@ -181,12 +170,11 @@ def test_same_uid_different_version_only_higher_on_disk(ctx: Context, base_state
     assert dashboard_content["version"] == 2
 
 
-def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state: State, peer_relation: PeerRelation):
+def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state: State):
     """Test deterministic selection when uid and version are the same."""
     # GIVEN reldata with two dashboard "objects" with the same 'uid' and same 'version'
-    # from different relations
-    dashboard1 = dashboard_factory(uid="dash1", version=1, relation_id="1", content="content_a")
-    dashboard2 = dashboard_factory(uid="dash1", version=1, relation_id="2", content="content_b")
+    dashboard1 = dashboard_factory(uid="dash1", version=1, content="content_a")
+    dashboard2 = dashboard_factory(uid="dash1", version=1, content="content_b")
 
     # Set up peer relation with dashboards from different relations
     peer_data = {
@@ -200,13 +188,12 @@ def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state:
         local_app_data=peer_data
     )
 
+    # WHEN the charm processes the dashboards
     state = State(
         leader=True,
         containers=base_state.containers,
         relations={peer_relation_with_data}
     )
-
-    # WHEN the charm processes the dashboards
     out = ctx.run(ctx.on.update_status(), state)
 
     # THEN only one dashboard should be written to the filesystem
@@ -223,5 +210,3 @@ def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state:
     assert dashboard_content["version"] == 1
     # The one with higher relation_id (and different content) should win
     assert "content_b" in dashboard_content["title"]
-
-
