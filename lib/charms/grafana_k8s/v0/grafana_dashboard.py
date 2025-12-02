@@ -1623,7 +1623,6 @@ class GrafanaDashboardConsumer(Object):
 
         if not dashboard_dict.get("uid", None) and "dashboard_alt_uid" in template:
             dashboard_dict["uid"] = template["dashboard_alt_uid"]
-            logger.info("uid: %s", dashboard_dict["uid"])
 
         return json.dumps(dashboard_dict)
 

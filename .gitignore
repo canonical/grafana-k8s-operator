@@ -47,5 +47,4 @@ terraform.rc
 .terraform.lock.hcl
 
 # Tracing stuff
-.charm_tracing_buffer.raw
-*.egg-info/
+.charm_tracing_buffer.raw*.egg-info/
