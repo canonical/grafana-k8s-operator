@@ -8,6 +8,7 @@ import unittest
 import uuid
 from unittest.mock import patch
 
+from helpers import conv_dashboard_list
 from charms.grafana_k8s.v0.grafana_dashboard import (
     DATASOURCE_TEMPLATE_DROPDOWNS,
     TOPOLOGY_TEMPLATE_DROPDOWNS,
@@ -28,7 +29,8 @@ DASHBOARD_TEMPLATE = """
 {
     "panels": {
         "data": "label_values(up, juju_unit)"
-    }
+    },
+    "uid": "deadbeef"
 }
 """
 
@@ -46,6 +48,7 @@ DASHBOARD_DATA = {
 DASHBOARD_RENDERED = json.dumps(
     {
         "panels": {"data": "label_values(up, juju_unit)"},
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -55,6 +58,7 @@ DASHBOARD_RENDERED_NO_DROPDOWNS = json.dumps(
     {
         "panels": {"data": "label_values(up, juju_unit)"},
         "templating": {"list": list(DATASOURCE_TEMPLATE_DROPDOWNS)},
+        "uid": "deadbeef",
     }
 )
 
@@ -71,7 +75,8 @@ VARIABLE_DASHBOARD_TEMPLATE = """
             "data": "label_values(up, juju_unit)",
             "datasource": "$replace_me"
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -80,6 +85,7 @@ VARIABLE_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -103,7 +109,8 @@ ROW_ONLY_DASHBOARD_TEMPLATE = """
                 }
             ]
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -121,6 +128,7 @@ ROW_ONLY_DASHBOARD_RENDERED = json.dumps(
                 ],
             },
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -141,7 +149,8 @@ INPUT_DASHBOARD_TEMPLATE = """
             "data": "label_values(up, juju_unit)",
             "datasource": "$DS_PROMETHEUS"
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -150,6 +159,7 @@ INPUT_DASHBOARD_RENDERED = json.dumps(
         "panels": [
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -165,7 +175,8 @@ NULL_DATASOURCE_DASHBOARD_TEMPLATE = """
             "data": "Row separator",
             "datasource": null
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -175,6 +186,7 @@ NULL_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "Row separator", "datasource": None},
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -203,7 +215,8 @@ BUILTIN_DATASOURCE_DASHBOARD_TEMPLATE = """
             ],
             "title": "foo"
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -220,6 +233,7 @@ BUILTIN_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
                 "title": "foo",
             }
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -240,6 +254,7 @@ EXISTING_VARIABLE_DASHBOARD_TEMPLATE = """
             "datasource": "${leave_me_alone}"
         }
     ],
+    "uid": "deadbeef",
     "templating": {
         "list": [
             {
@@ -269,6 +284,7 @@ EXISTING_VARIABLE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_application)", "datasource": "${prometheusds}"},
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
+        "uid": "deadbeef",
         "templating": {
             "list": list(reversed(TEMPLATE_DROPDOWNS))
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
@@ -288,6 +304,7 @@ EXISTING_DATASOURCE_DASHBOARD_TEMPLATE = """
             "datasource": "${leave_me_alone}"
         }
     ],
+    "uid": "deadbeef",
     "templating": {
         "list": [
             {
@@ -321,6 +338,7 @@ EXISTING_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${prometheusds}"},
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
+        "uid": "deadbeef",
         "templating": {
             "list": list(reversed(TEMPLATE_DROPDOWNS))
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
@@ -340,6 +358,7 @@ EXISTING_LOKI_DATASOURCE_DASHBOARD_TEMPLATE = """
             "datasource": "${leave_me_alone}"
         }
     ],
+    "uid": "deadbeef",
     "templating": {
         "list": [
             {
@@ -373,6 +392,7 @@ EXISTING_LOKI_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
             {"data": "label_values(up, juju_unit)", "datasource": "${lokids}"},
             {"data": "label_values(up, juju_unit)", "datasource": "${leave_me_alone}"},
         ],
+        "uid": "deadbeef",
         "templating": {
             "list": list(reversed(TEMPLATE_DROPDOWNS))
             + [{"name": "leave_me_alone", "query": "influxdb", "type": "datasource"}]
@@ -390,7 +410,8 @@ DICT_DATASOURCE_DASHBOARD_TEMPLATE = """
                 "uid": "someuid"
             }
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -405,6 +426,7 @@ DICT_DATASOURCE_DASHBOARD_RENDERED = json.dumps(
                 },
             },
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -532,18 +554,18 @@ class TestDashboardConsumer(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
         self.assertEqual(
-            self.harness.charm.grafana_consumer.dashboards,
-            [
+            conv_dashboard_list(self.harness.charm.grafana_consumer.dashboards),
+            conv_dashboard_list([
                 {
                     "id": "file:tester",
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
-            ],
+            ]),
         )
         # assert restart is not called
         assert restart_patcher.call_count == 0
@@ -555,20 +577,17 @@ class TestDashboardConsumer(unittest.TestCase):
         self.setup_without_dropdowns(DASHBOARD_TEMPLATE)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
-        self.assertEqual(
-            self.harness.charm.grafana_consumer.dashboards,
-            [
-                {
-                    "id": "file:tester",
-                    "relation_id": "2",
-                    "charm": "grafana-k8s",
-                    "content": DASHBOARD_RENDERED_NO_DROPDOWNS,
-                    "dashboard_uid": "",
-                    "dashboard_version": 0,
-                    "dashboard_title": "",
-                }
-            ],
-        )
+
+        self.assertEqual(conv_dashboard_list(self.harness.charm.grafana_consumer.dashboards), conv_dashboard_list([{
+            "id": "file:tester",
+            "relation_id": "2",
+            "charm": "grafana-k8s",
+            "content": DASHBOARD_RENDERED_NO_DROPDOWNS,
+            "dashboard_uid": "deadbeef",
+            "dashboard_version": 0,
+            "dashboard_title": "",
+        }]))
+
         # assert restart is not called
         assert restart_patcher.call_count == 0
 
@@ -618,7 +637,7 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": VARIABLE_DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
@@ -639,7 +658,7 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": ROW_ONLY_DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
@@ -653,18 +672,18 @@ class TestDashboardConsumer(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
         self.assertEqual(
-            self.harness.charm.grafana_consumer.dashboards,
-            [
+            conv_dashboard_list(self.harness.charm.grafana_consumer.dashboards),
+            conv_dashboard_list([
                 {
                     "id": "file:tester",
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": INPUT_DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
-            ],
+            ]),
         )
 
     def test_consumer_templates_with_null_datasource(self):
@@ -681,7 +700,7 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": NULL_DATASOURCE_DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
@@ -702,7 +721,7 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": BUILTIN_DATASOURCE_DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
@@ -724,7 +743,7 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DICT_DATASOURCE_DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
@@ -745,7 +764,7 @@ class TestDashboardConsumer(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": EXISTING_VARIABLE_DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }

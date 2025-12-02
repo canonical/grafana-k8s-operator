@@ -8,6 +8,7 @@ from typing import Dict, Optional
 import unittest
 import uuid
 from unittest.mock import patch
+from helpers import conv_dashboard_list
 
 from charms.grafana_k8s.v0.grafana_dashboard import (
     DATASOURCE_TEMPLATE_DROPDOWNS,
@@ -38,7 +39,8 @@ DASHBOARD_TEMPLATE = """
                 }
             ]
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -66,6 +68,7 @@ DASHBOARD_RENDERED = json.dumps(
                 ],
             },
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -89,6 +92,7 @@ DASHBOARD_RENDERED_NO_TOPOLOGY = json.dumps(
                 ],
             },
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -105,7 +109,8 @@ LOKI_DASHBOARD_TEMPLATE = r"""
                 }
             ]
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -133,6 +138,7 @@ LOKI_DASHBOARD_RENDERED = json.dumps(
                 ],
             },
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -157,7 +163,8 @@ DASHBOARD_TEMPLATE_WITH_NEGATIVE = """
             ],
             "datasource": "${prometheusds}"
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -188,6 +195,7 @@ DASHBOARD_RENDERED_WITH_NEGATIVE = json.dumps(
                 "datasource": "${prometheusds}",
             },
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -204,7 +212,8 @@ DASHBOARD_TEMPLATE_WITH_RANGES = """
             ],
             "datasource": "${prometheusds}"
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -232,6 +241,7 @@ DASHBOARD_RENDERED_WITH_RANGES = json.dumps(
                 "datasource": "${prometheusds}",
             },
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -248,7 +258,8 @@ DASHBOARD_TEMPLATE_WITH_OFFSETS = """
             ],
             "datasource": "${prometheusds}"
         }
-    ]
+    ],
+    "uid": "deadbeef"
 }
 """
 
@@ -276,6 +287,7 @@ DASHBOARD_RENDERED_WITH_OFFSETS = json.dumps(
                 "datasource": "${prometheusds}",
             },
         ],
+        "uid": "deadbeef",
         "templating": {"list": list(TEMPLATE_DROPDOWNS)},
     }
 )
@@ -377,18 +389,18 @@ class TestDashboardLabelInjector(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.dashboard_events, 1)
 
         self.assertEqual(
-            self.harness.charm.grafana_consumer.dashboards,
-            [
+            conv_dashboard_list(self.harness.charm.grafana_consumer.dashboards),
+            conv_dashboard_list([
                 {
                     "id": "file:tester",
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
-            ],
+            ]),
         )
 
     @patch("platform.processor", lambda: "x86_64")
@@ -406,7 +418,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_NO_TOPOLOGY,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
@@ -428,7 +440,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": LOKI_DASHBOARD_RENDERED,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
@@ -450,7 +462,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_WITH_NEGATIVE,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
@@ -472,7 +484,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_WITH_RANGES,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }
@@ -494,7 +506,7 @@ class TestDashboardLabelInjector(unittest.TestCase):
                     "relation_id": "2",
                     "charm": "grafana-k8s",
                     "content": DASHBOARD_RENDERED_WITH_OFFSETS,
-                    "dashboard_uid": "",
+                    "dashboard_uid": "deadbeef",
                     "dashboard_version": 0,
                     "dashboard_title": "",
                 }

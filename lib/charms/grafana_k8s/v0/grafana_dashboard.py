@@ -1623,6 +1623,7 @@ class GrafanaDashboardConsumer(Object):
 
         if not dashboard_dict.get("uid", None) and "dashboard_alt_uid" in template:
             dashboard_dict["uid"] = template["dashboard_alt_uid"]
+            logger.info("uid: %s", dashboard_dict["uid"])
 
         return json.dumps(dashboard_dict)
 
@@ -1675,8 +1676,9 @@ class GrafanaDashboardConsumer(Object):
         ):
             for dashboard in dashboards_for_relation:
                 obj = self._to_external_object(relation_id, dashboard)
-                
-                if not (key := obj.get("dashboard_uid"):
+
+                key = obj.get("dashboard_uid")
+                if key is None or str(key).strip() == "":
                     # At this point, we assume that a `.uid` is present so we do not render a fallback identifier here. Instead, we omit it.
                     logger.error("Dashboard '%s' from relation id '%s' is missing a '.uid' field; omitted", obj["dashboard_title"], obj["relation_id"])
                     continue

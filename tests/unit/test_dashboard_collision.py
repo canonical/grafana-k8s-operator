@@ -210,3 +210,45 @@ def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state:
     assert dashboard_content["version"] == 1
     # The one with higher relation_id (and different content) should win
     assert "content_b" in dashboard_content["title"]
+
+
+def test_dashboard_with_missing_uid_is_omitted(ctx: Context, base_state: State):
+    """Test deterministic selection when uid and version are the same."""
+    # GIVEN reldata with two dashboard "objects" where one of them is missing a 'uid'
+    dashboard1 = dashboard_factory(uid="dash1", version=1, content="content_a")
+    dashboard2 = dashboard_factory(uid="", version=2, content="content_b")
+    dashboard3 = dashboard_factory(uid=" ", version=3, content="content_c")
+
+    # Set up peer relation with dashboards from different relations
+    peer_data = {
+        "dashboards": json.dumps({
+            "1": [dashboard1, dashboard2, dashboard3],
+        })
+    }
+    peer_relation_with_data = PeerRelation(
+        "grafana",
+        local_app_data=peer_data
+    )
+
+    # WHEN the charm processes the dashboards
+    state = State(
+        leader=True,
+        containers=base_state.containers,
+        relations={peer_relation_with_data}
+    )
+    out = ctx.run(ctx.on.update_status(), state)
+
+    # THEN only one dashboard should be written to the filesystem
+    # Selected deterministically based on (version, relation_id, content) lexicographic order
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
+
+    assert len(dashboards) == 1
+
+    # Verify the dashboard has the correct UID and version
+    dashboard_content = json.loads(list(dashboards.values())[0])
+    assert dashboard_content["uid"] == "dash1"
+    assert dashboard_content["version"] == 1
+    # The one with higher relation_id (and different content) should win
+    assert "content_a" in dashboard_content["title"]
