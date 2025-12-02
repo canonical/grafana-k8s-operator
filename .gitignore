@@ -2,6 +2,7 @@ build
 *.charm
 .idea
 __pycache__
+*.egg-info/
 .venv
 .tox
 .coverage
@@ -47,4 +48,4 @@ terraform.rc
 .terraform.lock.hcl
 
 # Tracing stuff
-.charm_tracing_buffer.raw*.egg-info/
+.charm_tracing_buffer.raw
