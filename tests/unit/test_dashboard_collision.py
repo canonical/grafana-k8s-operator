@@ -213,7 +213,7 @@ def test_same_uid_same_version_deterministic_selection(ctx: Context, base_state:
 
 
 def test_dashboard_with_missing_uid_is_omitted(ctx: Context, base_state: State):
-    """Test deterministic selection when uid and version are the same."""
+    """Test that dashboards missing a UID are omitted and not written to the filesystem."""
     # GIVEN reldata with two dashboard "objects" where one of them is missing a 'uid'
     dashboard1 = dashboard_factory(uid="dash1", version=1, content="content_a")
     dashboard2 = dashboard_factory(uid="", version=2, content="content_b")
