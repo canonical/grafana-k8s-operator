@@ -1679,12 +1679,12 @@ class GrafanaDashboardConsumer(Object):
                 key = obj.get("dashboard_uid")
                 if key is None or str(key).strip() == "":
                     # At this point, we assume that a `.uid` is present so we do not render a fallback identifier here. Instead, we omit it.
-                    logger.error("Dashboard '%s' from relation id '%s' is missing a '.uid' field; omitted", obj["dashboard_title"], obj["relation_id"])
+                    logger.error("dashboard '%s' from relation id '%s' is missing a '.uid' field; omitted", obj["dashboard_title"], obj["relation_id"])
                     continue
 
                 if key in d:
                     d[key] = max(d[key], obj, key=lambda o: (o["dashboard_version"], o["relation_id"], o["content"]))
-                    logger.warning("Deduplicate dashboard '%s' (uid '%s') - kept version '%s' from relation id '%s'", d[key]["dashboard_title"], d[key]["dashboard_uid"], d[key]["dashboard_version"], d[key]["relation_id"])
+                    logger.warning("deduplicate dashboard '%s' (uid '%s') - kept version '%s' from relation id '%s'", d[key]["dashboard_title"], d[key]["dashboard_uid"], d[key]["dashboard_version"], d[key]["relation_id"])
                 else:
                     d[key] = obj
 
