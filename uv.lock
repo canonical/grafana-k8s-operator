@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.8, <4"
 resolution-markers = [
     "python_full_version >= '3.14' and platform_python_implementation != 'PyPy'",
@@ -2526,15 +2526,15 @@ wheels = [
 
 [[package]]
 name = "lightkube-extensions"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jinja2" },
     { name = "lightkube" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/dd/3c99fec74e6064302e0784e5241b053b9d0c014d364778d9a9fc1bedea27/lightkube_extensions-0.2.0.tar.gz", hash = "sha256:0fef1845fb4d0382646e35f3a0036968586cb6a866efb6dc5fc02bb359c6c89f", size = 17763, upload-time = "2025-10-31T15:45:22.383Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/dc/b3/2e19927719909931d98f91a960f43fba4ead937005be0de599247af0d3d9/lightkube_extensions-0.3.0.tar.gz", hash = "sha256:997c5f7457c297449083ee66dce498a1a5a6423d58d4f87258cf68da04bb99f2", size = 17932, upload-time = "2025-12-19T10:43:56.561Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/59/27/93f8361af7cac7abe09fd016bb561dd2568cd963541ffe1c2f8370a09b19/lightkube_extensions-0.2.0-py3-none-any.whl", hash = "sha256:70d8f6770bda3fff73cf493a02a57fa26d88118baef3713efffe324a71ce3919", size = 18547, upload-time = "2025-10-31T15:45:21.302Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/0e/0681f0cf50a883af99e600b0077c070bc6f58142ae5ecb724aa1c7389319/lightkube_extensions-0.3.0-py3-none-any.whl", hash = "sha256:580178f937be39b378158264e926d6f188a05d13dd17d8491c2f1f6a234ebaf8", size = 19026, upload-time = "2025-12-19T10:43:57.481Z" },
 ]
 
 [[package]]
