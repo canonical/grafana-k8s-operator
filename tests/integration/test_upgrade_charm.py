@@ -16,7 +16,7 @@ app_name = "grafana-k8s"
 grafana_resources = {
     "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
 }
-
+logger.info("grafana resources %s", grafana_resources)
 
 @pytest.mark.abort_on_fail
 async def test_config_values_are_retained_after_pod_upgraded(ops_test, grafana_charm):
