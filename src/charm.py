@@ -209,7 +209,7 @@ class GrafanaCharm(CharmBase):
                                             enable_reporting = bool(self.config["reporting_enabled"]),
                                             enable_external_db=self._enable_external_db,
                                             tracing_endpoint=self._workload_tracing_endpoint,
-                                            custom_config=str(self.config.get("custom_ini_config")),
+                                            custom_config=typing.cast(Optional[str], self.config.get("custom_ini_config")),
                                             )
         self._grafana_service = Grafana(
                                         container=self.unit.get_container("grafana"),
