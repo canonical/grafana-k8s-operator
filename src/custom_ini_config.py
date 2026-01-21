@@ -52,7 +52,7 @@ class _SMTPSection(BaseModel):
     "Enable trace propagation in email headers, using the traceparent, tracestate and (optionally) baggage fields. Default is false. To enable, you must first configure tracing in one of the tracing.opentelemetry.* sections."""
 
 
-def validate(ini_sections: Optional[str]):
+def validate(ini_sections: Optional[str]=None):
     """Validate custom ini sections.
 
     Raises:
