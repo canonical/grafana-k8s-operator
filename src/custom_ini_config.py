@@ -45,19 +45,22 @@ class _SMTPSection(BaseModel):
     ehlo_identity: Optional[str] = None
     "Name to be used as client identity for EHLO in SMTP conversation, default is <instance_name>."""
 
-    startTLS_policy: Optional[Literal["OpportunisticStartTLS", "MandatoryStartTLS", "NoStartTLS"]] = None
+    startTLS_policy: Optional[Literal["OpportunisticStartTLS", "MandatoryStartTLS", "NoStartTLS"]] = None  # noqa: N815
     """Either OpportunisticStartTLS, MandatoryStartTLS, NoStartTLS, or empty. Default is empty."""
 
     enable_tracing: Optional[bool] = None
     "Enable trace propagation in email headers, using the traceparent, tracestate and (optionally) baggage fields. Default is false. To enable, you must first configure tracing in one of the tracing.opentelemetry.* sections."""
 
 
-def validate(ini_sections: str):
+def validate(ini_sections: Optional[str]):
     """Validate custom ini sections.
 
     Raises:
         ValueError: If ini_sections is not valid.
     """
+    if ini_sections is None:
+        return
+
     config = configparser.ConfigParser()
 
     try:

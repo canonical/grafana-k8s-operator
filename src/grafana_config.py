@@ -55,7 +55,7 @@ class GrafanaConfig:
         """Generate auth environment config."""
         return self._auth_env_config()
 
-    def get_status():
+    def get_status(self):
         """Intended to be called by collect-unit-status."""
         try:
             custom_ini_config.validate(self._custom_config)
@@ -67,12 +67,13 @@ class GrafanaConfig:
     def generate_grafana_config(self) -> str:
         """Generate a configuration for Grafana."""
         configs = [self._generate_tracing_config(), self._generate_analytics_config(), self._generate_database_config()]
-        try:
-            custom_ini_config.validate(self._custom_config)
-        except ValueError:
-            pass
-        else:
-            configs.append(self._custom_config)
+        if self._custom_config is not None:
+            try:
+                custom_ini_config.validate(self._custom_config)
+            except ValueError:
+                pass
+            else:
+                configs.append(self._custom_config)
 
         if not self._enable_external_db:
             with StringIO() as data:
