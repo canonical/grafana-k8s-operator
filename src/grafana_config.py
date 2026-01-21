@@ -12,6 +12,8 @@ from constants import DATABASE_PATH, DASHBOARDS_DIR
 import configparser
 from io import StringIO
 
+import custom_ini_config
+
 class GrafanaConfig:
     """Grafana config generator."""
 
@@ -24,6 +26,7 @@ class GrafanaConfig:
                 enable_reporting: bool = True,
                 enable_external_db: bool = False,
                 tracing_endpoint: Optional[str] = None,
+                custom_config: Optional[str] = None,
                  ):
         self._datasources_config = datasources_config
         self._oauth_config = oauth_config
@@ -33,6 +36,7 @@ class GrafanaConfig:
         self._enable_reporting = enable_reporting
         self._enable_external_db = enable_external_db
         self._tracing_endpoint = tracing_endpoint
+        self._custom_config = custom_config
 
 
     @property
@@ -48,6 +52,13 @@ class GrafanaConfig:
     def generate_grafana_config(self) -> str:
         """Generate a configuration for Grafana."""
         configs = [self._generate_tracing_config(), self._generate_analytics_config(), self._generate_database_config()]
+        try:
+            custom_ini_config.validate(self._custom_config)
+        except ValueError as e:
+            pass
+        else:
+            configs.append(self._custom_config)
+
         if not self._enable_external_db:
             with StringIO() as data:
                 config_ini = configparser.ConfigParser()

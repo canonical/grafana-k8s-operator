@@ -257,3 +257,11 @@ config:
         Ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#analytics
       type: boolean
       default: true
+    custom_config:
+      type: string
+      description: |
+        Additional configuration options to be added to grafana.ini.
+        These options will be appended to the grafana.ini file, allowing for custom configuration.
+        Note that this config option accepts only a small subset of the grafana.ini file.
+        Currently supported sections:
+        - [smtp], ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#smtp
