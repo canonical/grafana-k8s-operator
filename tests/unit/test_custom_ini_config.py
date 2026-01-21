@@ -10,30 +10,56 @@ from src.custom_ini_config import validate
 
 
 def test_validate_without_args():
-    """WHEN validate called without args THEN returns None."""
-    result = validate(None)
-    assert result is None
+    # WHEN validate called without
+    r1 = validate()
+    r2 = validate(None)
+    
+    # THEN returns None
+    assert r1 is None
+    assert r2 is None
 
 
 def test_validate_with_invalid_string():
-    """WHEN validate called with "hello" THEN ValueError is raised."""
+    # GIVEN string without sections
+    ini = "hello"
+    
+    # WHEN validate called
+    # THEN ValueError is raised
     with pytest.raises(ValueError, match="Invalid ini sections"):
-        validate("hello")
+        validate(ini)
 
 
 def test_validate_with_invalid_section():
-    """WHEN validate called with "[section]\\nkey = value" THEN ValueError is raised."""
+    # GIVEN valid ini but invalid schema
+    ini = """[section]
+    key = value
+    """
+    
+    # WHEN validate called with 
+    # THEN ValueError is raised.
     with pytest.raises(ValueError, match="unallowed sections"):
-        validate("[section]\nkey = value")
+        validate(ini)
 
 
 def test_validate_with_valid_smtp_section():
-    """WHEN validate called with "[smtp]\\nenabled = true" THEN returns None."""
-    result = validate("[smtp]\nenabled = true")
-    assert result is None
+    # GIVEN a valid ini with valid schema
+    ini = """[smtp]
+    enabled = true"""
+    
+    # WHEN validate called
+    # THEN returns None
+    assert validate(ini) is None
 
 
 def test_validate_with_invalid_smtp_key():
-    """WHEN validate called with "[smtp]\\nenabled = true\\ninvalid = value" THEN ValueError is raised."""
+    # GIVEN a valid ini with the correct schema but also with some unexpected extras
+    ini = """[smtp]
+    enabled = true
+    surprise = wow
+    """
+    
+    # WHEN validate called
+    # THEN ValueError is raised."""
     with pytest.raises(ValueError, match="Invalid \\[smtp\\] section"):
         validate("[smtp]\nenabled = true\ninvalid = value")
+        validate(ini)
