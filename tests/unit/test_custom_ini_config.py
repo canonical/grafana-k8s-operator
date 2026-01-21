@@ -34,6 +34,6 @@ def test_validate_with_valid_smtp_section():
 
 
 def test_validate_with_invalid_smtp_key():
-    """WHEN validate called with "[smtp]\\nenabled = true\\n\\invalid = value" THEN ValueError is raised."""
+    """WHEN validate called with "[smtp]\\nenabled = true\\ninvalid = value" THEN ValueError is raised."""
     with pytest.raises(ValueError, match="Invalid \\[smtp\\] section"):
         validate("[smtp]\nenabled = true\ninvalid = value")
