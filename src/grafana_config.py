@@ -54,7 +54,7 @@ class GrafanaConfig:
     def auth_env_config(self) -> Any:
         """Generate auth environment config."""
         return self._auth_env_config()
-    
+
     def get_status():
         """Intended to be called by collect-unit-status."""
         try:
@@ -69,7 +69,7 @@ class GrafanaConfig:
         configs = [self._generate_tracing_config(), self._generate_analytics_config(), self._generate_database_config()]
         try:
             custom_ini_config.validate(self._custom_config)
-        except ValueError as e:
+        except ValueError:
             pass
         else:
             configs.append(self._custom_config)
