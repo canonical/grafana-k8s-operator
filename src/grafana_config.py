@@ -2,17 +2,23 @@
 # See LICENSE file for licensing details.
 """Grafana config generator."""
 
+import logging
 import yaml
 from models import DatasourceConfig
 from typing import Callable, Optional, Dict, Any
 from charms.hydra.v0.oauth import (
     OauthProviderConfig
 )
+from ops import ActiveStatus, BlockedStatus
 from constants import DATABASE_PATH, DASHBOARDS_DIR
 import configparser
 from io import StringIO
 
 import custom_ini_config
+
+
+logger = logging.getLogger()
+
 
 class GrafanaConfig:
     """Grafana config generator."""
@@ -48,6 +54,15 @@ class GrafanaConfig:
     def auth_env_config(self) -> Any:
         """Generate auth environment config."""
         return self._auth_env_config()
+    
+    def get_status():
+        """Intended to be called by collect-unit-status."""
+        try:
+            custom_ini_config.validate(self._custom_config)
+        except ValueError as e:
+            logger.error("Invalid custom_config: %s", e)
+            return BlockedStatus("Invalid custom_config; see debug-log")
+        return ActiveStatus()
 
     def generate_grafana_config(self) -> str:
         """Generate a configuration for Grafana."""

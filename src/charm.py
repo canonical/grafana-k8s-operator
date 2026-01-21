@@ -501,6 +501,7 @@ class GrafanaCharm(CharmBase):
         if status := self._check_wrong_relations():
             e.add_status(status)
         e.add_status(self.resource_patch.get_status())
+        e.add_status(self.self._grafana_config.get_status())
 
 
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
