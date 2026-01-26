@@ -10,7 +10,7 @@ from src.custom_ini_config import validate
 
 
 def test_validate_without_args():
-    # WHEN validate called without
+    # WHEN validate called without args
     r1 = validate()
     r2 = validate(None)
 
