@@ -28,28 +28,28 @@ class _SMTPSection(BaseModel):
     """In case of SMTP auth, default is empty. If the password contains # or ;, then you have to wrap it with triple quotes. Example: \"\"\"#password;\"\"\""""
 
     cert_file: Optional[str] = None
-    "File path to a cert file, default is empty."""
+    """File path to a cert file, default is empty."""
 
     key_file: Optional[str] = None
-    "File path to a key file, default is empty."""
+    """File path to a key file, default is empty."""
 
     skip_verify: bool = False
-    "Verify SSL for SMTP server, default is false."""
+    """Verify SSL for SMTP server, default is false."""
 
     from_address: Optional[EmailStr] = None
-    "Address used when sending out emails, default is admin@grafana.localhost."""
+    """Address used when sending out emails, default is admin@grafana.localhost."""
 
     from_name: Optional[str] = None
-    "Name to be used when sending out emails, default is Grafana."""
+    """Name to be used when sending out emails, default is Grafana."""
 
     ehlo_identity: Optional[str] = None
-    "Name to be used as client identity for EHLO in SMTP conversation, default is <instance_name>."""
+    """Name to be used as client identity for EHLO in SMTP conversation, default is <instance_name>."""
 
     startTLS_policy: Optional[Literal["OpportunisticStartTLS", "MandatoryStartTLS", "NoStartTLS"]] = None  # noqa: N815
     """Either OpportunisticStartTLS, MandatoryStartTLS, NoStartTLS, or empty. Default is empty."""
 
     enable_tracing: Optional[bool] = None
-    "Enable trace propagation in email headers, using the traceparent, tracestate and (optionally) baggage fields. Default is false. To enable, you must first configure tracing in one of the tracing.opentelemetry.* sections."""
+    """Enable trace propagation in email headers, using the traceparent, tracestate and (optionally) baggage fields. Default is false. To enable, you must first configure tracing in one of the tracing.opentelemetry.* sections."""
 
 
 def validate(ini_sections: Optional[str]=None):
