@@ -16,7 +16,7 @@ class _SMTPSection(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     enabled: Optional[bool] = None
-    """Enable this to allow Grafana to send email."""
+    """Enable this to allow Grafana to send email, default is false"""
 
     host: Optional[str] = None
     """Default is localhost:25. Use port 465 for implicit TLS."""
