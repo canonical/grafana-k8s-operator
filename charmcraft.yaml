@@ -265,3 +265,20 @@ config:
         Note that this config option accepts only a small subset of the grafana.ini file.
         Currently supported sections:
         - [smtp], ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#smtp
+    role_attribute_path:
+      description: |
+        See https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/generic-oauth/#configuration-options
+
+        JMESPath[1] expression to use for Grafana role lookup.
+        Grafana will first evaluate the expression using the OAuth2 ID token.
+        If no role is found, the expression will be evaluated using the user information obtained from the UserInfo endpoint.
+        If still no role is found, the expression will be evaluated using the OAuth2 access token.
+        The result of the evaluation should be a valid Grafana role (None, Viewer, Editor, Admin or GrafanaAdmin).
+
+        For more information on user role mapping, refer to "Configure role mapping"[2].
+
+        References:
+        1. http://jmespath.org/examples.html
+        2. https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/generic-oauth/#configure-role-mapping
+      type: string
+
