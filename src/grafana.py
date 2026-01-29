@@ -171,7 +171,7 @@ class Grafana:
                     "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
                 }
             )
-        
+
         if role_attribute_path := self._grafana_config_generator.role_attribute_path:
             extra_info.update({"GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH": role_attribute_path})
 
