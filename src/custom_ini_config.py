@@ -33,7 +33,7 @@ class _SMTPSection(BaseModel):
     key_file: Optional[str] = None
     """File path to a key file, default is empty."""
 
-    skip_verify: bool = False
+    skip_verify: Optional[bool] = None
     """Verify SSL for SMTP server, default is false."""
 
     from_address: Optional[EmailStr] = None
