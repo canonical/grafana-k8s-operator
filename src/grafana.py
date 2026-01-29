@@ -169,8 +169,7 @@ class Grafana:
                     "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
                     "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
                     "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
-                    # TODO: This toggle will be removed on grafana v10.3, remove it
-                    "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
+                    "GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH": self._grafana_config_generator.role_attribute_path,
                 }
             )
 

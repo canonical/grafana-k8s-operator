@@ -24,9 +24,11 @@ class GrafanaConfig:
     """Grafana config generator."""
 
     def __init__(self,
+                *,
                 datasources_config: DatasourceConfig,
                 oauth_config: Optional[OauthProviderConfig] = None,
                 auth_env_config: Callable[[],Any] = lambda: {},
+                role_attribute_path: Optional[str] = None,
                 db_config: Callable[[],Optional[Dict[str, str]]]  = lambda: None,
                 db_type: str = "",
                 enable_reporting: bool = True,
@@ -36,6 +38,7 @@ class GrafanaConfig:
                  ):
         self._datasources_config = datasources_config
         self._oauth_config = oauth_config
+        self.role_attribute_path = role_attribute_path
         self._auth_env_config = auth_env_config
         self._db_config = db_config
         self._db_type = db_type

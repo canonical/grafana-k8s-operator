@@ -204,6 +204,7 @@ class GrafanaCharm(CharmBase):
                                             datasources_config=self._datasource_config,
                                             oauth_config = self._oauth_config,
                                             auth_env_config = lambda: self._auth_env_vars,
+                                            role_attribute_path = self.config["role_attribute_path"]
                                             db_config=lambda: self._db_config,
                                             db_type=self._db_type,
                                             enable_reporting = bool(self.config["reporting_enabled"]),
