@@ -22,7 +22,7 @@ grafana_resources = {
 async def test_config_values_are_retained_after_pod_upgraded(ops_test, grafana_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.info("deploy charm from charmhub")
-    sh.juju.deploy(app_name, model=ops_test.model.name, channel="2/edge", trust=True)
+    sh.juju.deploy(app_name, model=ops_test.model.name, channel="dev/edge", trust=True)
 
     # set some custom configs to later check they persisted across the test
     config = {"log_level": "error", "admin_user": "jimmy"}

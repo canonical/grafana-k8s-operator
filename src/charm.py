@@ -209,6 +209,7 @@ class GrafanaCharm(CharmBase):
                                             enable_reporting = bool(self.config["reporting_enabled"]),
                                             enable_external_db=self._enable_external_db,
                                             tracing_endpoint=self._workload_tracing_endpoint,
+                                            custom_config=cast(Optional[str], self.config.get("custom_ini_config")),
                                             )
         self._grafana_service = Grafana(
                                         container=self.unit.get_container("grafana"),
@@ -500,6 +501,7 @@ class GrafanaCharm(CharmBase):
         if status := self._check_wrong_relations():
             e.add_status(status)
         e.add_status(self.resource_patch.get_status())
+        e.add_status(self._grafana_config.get_status())
 
 
     def _on_database_changed(self, event: RelationChangedEvent) -> None:
