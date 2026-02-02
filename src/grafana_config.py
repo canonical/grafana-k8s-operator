@@ -5,7 +5,7 @@
 import logging
 import yaml
 from models import DatasourceConfig
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Iterable, Optional, Dict, Any
 from charms.hydra.v0.oauth import (
     OauthProviderConfig
 )
@@ -28,7 +28,8 @@ class GrafanaConfig:
                 datasources_config: DatasourceConfig,
                 oauth_config: Optional[OauthProviderConfig] = None,
                 auth_env_config: Callable[[],Any] = lambda: {},
-                role_attribute_path: Optional[str] = None,
+                admin_roles: Iterable[str] = [],
+                editor_roles: Iterable[str] = [],
                 db_config: Callable[[],Optional[Dict[str, str]]]  = lambda: None,
                 db_type: str = "",
                 enable_reporting: bool = True,
@@ -38,9 +39,10 @@ class GrafanaConfig:
                  ):
         self._datasources_config = datasources_config
         self._oauth_config = oauth_config
-        self.role_attribute_path = role_attribute_path
         self._auth_env_config = auth_env_config
         self._db_config = db_config
+        self._admin_roles = admin_roles
+        self._editor_roles = editor_roles
         self._db_type = db_type
         self._enable_reporting = enable_reporting
         self._enable_external_db = enable_external_db
@@ -57,6 +59,23 @@ class GrafanaConfig:
     def auth_env_config(self) -> Any:
         """Generate auth environment config."""
         return self._auth_env_config()
+
+    @property
+    def role_attribute_path(self) -> Optional[str]:
+        """Generate role attribute path."""
+        group_claim_path  = "groups[*]"
+        if not self._admin_roles and not self._editor_roles:
+            return None
+
+        role_paths = []
+        for admin_role in self._admin_roles:
+            role_paths.append(f"contains({group_claim_path}, {admin_role}) && 'Admin'")
+        for editor_role in self._editor_roles:
+            role_paths.append(f"contains({group_claim_path}, {editor_role}) && 'Editor'")
+
+        role_paths.append("'Viewer'")
+
+        return " || ".join(role_paths)
 
     def get_status(self):
         """Intended to be called by collect-unit-status."""
