@@ -105,7 +105,7 @@ provides:
     interface: parca_scrape
     optional: true
     description: |
-      Links to grafana's pprof endpoint. Can be used to integrate with parca to 
+      Links to grafana's pprof endpoint. Can be used to integrate with parca to
       profile the grafana server process.
   metrics-endpoint:
     interface: prometheus_scrape
@@ -251,9 +251,9 @@ config:
         When disabled, Grafana will be configured to not send anonymous usage statistics to stats.grafana.org, nor
         periodically check for updates.
         It is very helpful to the Grafana project, so please leave this enabled.
-        
+
         When enabled, Grafana will use its default values for analytics.
-        
+
         Ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#analytics
       type: boolean
       default: true
@@ -265,20 +265,15 @@ config:
         Note that this config option accepts only a small subset of the grafana.ini file.
         Currently supported sections:
         - [smtp], ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#smtp
-    role_attribute_path:
+    admin_roles:
       description: |
-        See https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/generic-oauth/#configuration-options
-
-        JMESPath[1] expression to use for Grafana role lookup.
-        Grafana will first evaluate the expression using the OAuth2 ID token.
-        If no role is found, the expression will be evaluated using the user information obtained from the UserInfo endpoint.
-        If still no role is found, the expression will be evaluated using the OAuth2 access token.
-        The result of the evaluation should be a valid Grafana role (None, Viewer, Editor, Admin or GrafanaAdmin).
-
-        For more information on user role mapping, refer to "Configure role mapping"[2].
-
-        References:
-        1. http://jmespath.org/examples.html
-        2. https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/generic-oauth/#configure-role-mapping
+        Comma-separated list of groups oAuth2/OIDC that should be granted admin
+        privileges in Grafana. Only applicable when using oAuth2/OIDC authentication.
       type: string
-
+      default: ""
+    editor_roles:
+      description: |
+        Comma-separated list of groups oAuth2/OIDC that should be granted editor
+        privileges in Grafana. Only applicable when using oAuth2/OIDC authentication.
+      type: string
+      default: ""
