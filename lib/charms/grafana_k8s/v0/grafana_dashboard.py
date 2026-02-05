@@ -643,7 +643,7 @@ class CharmedDashboard:
             if tmpl["name"] and tmpl["name"] in used_replacements:
                 # it might happen that existing template var name is the same as the one we insert (i.e prometheusds or lokids)
                 # in that case, we want to pop the existing one only.
-                if tmpl not in [*TOPOLOGY_TEMPLATE_DROPDOWNS, *DATASOURCE_TEMPLATE_DROPDOWNS]:
+                if tmpl not in DATASOURCE_TEMPLATE_DROPDOWNS:
                     deletions.append(tmpl)
 
         for d in deletions:
