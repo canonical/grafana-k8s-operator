@@ -33,6 +33,7 @@ dev = [
   "pyright",
   # Unit
   "pytest",
+  "pytest-bdd",
   "coverage[toml]",
   "responses",
   "cosl",
