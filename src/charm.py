@@ -205,8 +205,8 @@ class GrafanaCharm(CharmBase):
                                             oauth_config = self._oauth_config,
                                             auth_env_config = lambda: self._auth_env_vars,
                                             # TODO: Probably some validation is required that the provided strings are in the expected format
-                                            admin_roles=self.config.get("admin_roles", "").split(",") if self.config["admin_roles"] else [],
-                                            editor_roles=self.config.get("editor_roles", "").split(",") if self.config["editor_roles"] else [],
+                                            admin_roles=cast(str, self.config.get("admin_roles")),
+                                            editor_roles=cast(str, self.config.get("editor_roles")),
                                             db_config=lambda: self._db_config,
                                             db_type=self._db_type,
                                             enable_reporting = bool(self.config["reporting_enabled"]),

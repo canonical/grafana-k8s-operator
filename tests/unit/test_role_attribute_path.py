@@ -10,23 +10,14 @@ from grafana_config import GrafanaConfig
 scenarios('features/role_attribute_path.feature')
 
 
-def config_factory(admin_roles=None, editor_roles=None):
-    """Factory function to create GrafanaConfig with specified roles."""
-    return GrafanaConfig(
-        datasources_config=Mock(),
-        admin_roles=admin_roles or [],
-        editor_roles=editor_roles or []
-    )
-
-
-def csv_to_list(roles: str) -> list[str]:
-    return [role.strip() for role in roles.split(',') if role.strip()]
-
-
 @given(parsers.re(r'a GrafanaConfig with admin roles "(?P<admin_roles>.*)", and editor roles "(?P<editor_roles>.*)"'), target_fixture="grafana_config")
 def grafana_config_with_roles(admin_roles, editor_roles):
     """Create GrafanaConfig with specified admin and editor roles."""
-    return config_factory(admin_roles=csv_to_list(admin_roles), editor_roles=csv_to_list(editor_roles))
+    return GrafanaConfig(
+        datasources_config=Mock(),
+        admin_roles=admin_roles,
+        editor_roles=editor_roles
+    )
 
 
 @then("the role attribute path should be None")
