@@ -270,10 +270,8 @@ config:
         Comma-separated list of groups oAuth2/OIDC that should be granted admin
         privileges in Grafana. Only applicable when using oAuth2/OIDC authentication.
       type: string
-      default: ""
     editor_roles:
       description: |
         Comma-separated list of groups oAuth2/OIDC that should be granted editor
         privileges in Grafana. Only applicable when using oAuth2/OIDC authentication.
       type: string
-      default: ""

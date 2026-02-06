@@ -5,7 +5,7 @@
 import logging
 import yaml
 from models import DatasourceConfig
-from typing import Callable, Iterable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any
 from charms.hydra.v0.oauth import (
     OauthProviderConfig
 )
@@ -20,6 +20,12 @@ import custom_ini_config
 logger = logging.getLogger()
 
 
+def _csv_to_list(roles: Optional[str]) -> list[str]:
+    if not roles:
+        return []
+    return [role.strip() for role in roles.split(',') if role.strip()]
+
+
 class GrafanaConfig:
     """Grafana config generator."""
 
@@ -28,8 +34,8 @@ class GrafanaConfig:
                 datasources_config: DatasourceConfig,
                 oauth_config: Optional[OauthProviderConfig] = None,
                 auth_env_config: Callable[[],Any] = lambda: {},
-                admin_roles: Iterable[str] = [],
-                editor_roles: Iterable[str] = [],
+                admin_roles: Optional[str] = None,
+                editor_roles: Optional[str] = None,
                 db_config: Callable[[],Optional[Dict[str, str]]]  = lambda: None,
                 db_type: str = "",
                 enable_reporting: bool = True,
@@ -41,8 +47,8 @@ class GrafanaConfig:
         self._oauth_config = oauth_config
         self._auth_env_config = auth_env_config
         self._db_config = db_config
-        self._admin_roles = admin_roles
-        self._editor_roles = editor_roles
+        self._admin_roles = _csv_to_list(admin_roles)
+        self._editor_roles = _csv_to_list(editor_roles)
         self._db_type = db_type
         self._enable_reporting = enable_reporting
         self._enable_external_db = enable_external_db
