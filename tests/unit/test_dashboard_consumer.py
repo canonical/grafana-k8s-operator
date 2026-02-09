@@ -943,8 +943,6 @@ MINIMAL_TEMPLATE_WITH_DROPDOWNS = {
   }
 }
 
-content = LZMABase64.compress(json.dumps(MINIMAL_TEMPLATE_WITH_DROPDOWNS))
-
 relation_data = {
     "dashboards": json.dumps({
         "templates": {
