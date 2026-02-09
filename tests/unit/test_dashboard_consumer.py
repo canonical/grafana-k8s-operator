@@ -943,6 +943,8 @@ MINIMAL_TEMPLATE_WITH_DROPDOWNS = {
   }
 }
 
+content = LZMABase64.compress(json.dumps(MINIMAL_TEMPLATE_WITH_DROPDOWNS))
+
 relation_data = {
     "dashboards": json.dumps({
         "templates": {
@@ -972,7 +974,8 @@ def test_no_dashboard_dropdown_duplication(ctx:Context, containers):
       to be eventually written to disk.
 
     Finally, we'll read the dashboards saved to disk and ensure they still contain the same number
-    of dropdowns, which is 6, one for each element of the Juju Topology.
+    of dropdowns, which is 5, one for each element of the Juju Topology. The library will then add
+    the loki_datasource, so we expect a total of 6 dropdowns in the end.
     """
     dashboards_path = "/etc/grafana/provisioning/dashboards"
 
@@ -987,24 +990,25 @@ def test_no_dashboard_dropdown_duplication(ctx:Context, containers):
 
     # First, create the relation so dashboards are written to peer data.
     with ctx(ctx.on.relation_created(dashboard_relation), state) as mgr:
-        state_out = mgr.run()
+      state_out = mgr.run()
 
-        # Now that peer relation data contains the dashboards,
-        # we simulate another event.
-        with ctx(ctx.on.update_status(), state_out) as mgr:
+    # Now that peer relation data contains the dashboards,
+    # we simulate another event.
+    with ctx(ctx.on.update_status(), state_out) as mgr:
 
-          state_out = mgr.run()
-          agent = state_out.get_container("grafana")
+      state_out = mgr.run()
+      agent = state_out.get_container("grafana")
 
-          # Get the filesystem and read the dashboard file for Mimir.
-          # We search for the string `mimir` in the filename because
-          # `MINIMAL_TEMPLATE_WITH_DROPDOWNS` has the name `mimir-config-minimal`.
-          # The dashboard name on disk reflects the file name.
-          fs = agent.get_filesystem(ctx)
-          dashboard_files = fs.joinpath(*dashboards_path.strip("/").split("/"))
-          mimir_dashboard = [d for d in dashboard_files.iterdir() if "mimir" in d.name][0]
-          dashboard_content = yaml.safe_load(Path(mimir_dashboard).read_text())
+      # Get the filesystem and read the dashboard file for Mimir.
+      # We search for the string `mimir` in the filename because
+      # `MINIMAL_TEMPLATE_WITH_DROPDOWNS` has the name `mimir-config-minimal`.
+      # The dashboard name on disk reflects the file name.
+      fs = agent.get_filesystem(ctx)
+      dashboard_files = fs.joinpath(*dashboards_path.strip("/").split("/"))
+      mimir_dashboard = [d for d in dashboard_files.iterdir() if "mimir" in d.name][0]
+      dashboard_content = yaml.safe_load(Path(mimir_dashboard).read_text())
 
-          # THEN in the Mimir dashboard being written to the `grafana` container, no duplication of dropdowns happens.
-          # This means, we still expect 6 elements in the `list` sub-section of the `templating` section.
-          assert len(dashboard_content["templating"]["list"]) == 6
+      # THEN in the Mimir dashboard being written to the `grafana` container, no duplication of dropdowns happens.
+      # This means, we still expect 65 elements in the `list` sub-section of the `templating` section
+      # PLUS 1 for the loki_datasource, resulting in a total of 6.
+      assert len(dashboard_content["templating"]["list"]) == 6
