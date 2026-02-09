@@ -3,11 +3,12 @@
 
 import base64
 import json
+import yaml
 import lzma
 import unittest
 import uuid
 from unittest.mock import patch
-
+from pathlib import Path
 from helpers import conv_dashboard_list
 from charms.grafana_k8s.v0.grafana_dashboard import (
     DATASOURCE_TEMPLATE_DROPDOWNS,
@@ -16,8 +17,8 @@ from charms.grafana_k8s.v0.grafana_dashboard import (
 )
 from ops.charm import CharmBase
 from ops.framework import StoredState
-from ops.testing import Harness
-
+from ops.testing import Harness, Relation, PeerRelation, Context, State
+from cosl import LZMABase64
 if "unittest.util" in __import__("sys").modules:
     # Show full diff in self.assertEqual.
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
@@ -810,3 +811,202 @@ class TestDashboardConsumer(unittest.TestCase):
         )
 
         self.assertEqual(db_content, expected_content)
+
+MINIMAL_TEMPLATE_WITH_DROPDOWNS = {
+  "title": "Mimir / Config (Minimal)",
+  "uid": "mimir-config-minimal",
+  "schemaVersion": 37,
+  "version": 1,
+  "editable": "true",
+  "refresh": "10s",
+  "timezone": "utc",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": "false",
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+        "hide": 0,
+        "includeAll": "true",
+        "label": "Juju unit",
+        "multi": "true",
+        "name": "juju_unit",
+        "options": [],
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": "true",
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+        "hide": 0,
+        "includeAll": "true",
+        "label": "Juju application",
+        "multi": "true",
+        "name": "juju_application",
+        "options": [],
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": "true",
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+        "hide": 0,
+        "includeAll": "true",
+        "label": "Juju model uuid",
+        "multi": "true",
+        "name": "juju_model_uuid",
+        "options": [],
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": "false",
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up,juju_model)",
+        "hide": 0,
+        "includeAll": "true",
+        "label": "Juju model",
+        "multi": "true",
+        "name": "juju_model",
+        "options": [],
+        "query": {
+          "query": "label_values(up,juju_model)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": "true",
+          "text": ["All"],
+          "value": ["$__all"]
+        },
+        "hide": 0,
+        "includeAll": "true",
+        "label": "Prometheus datasource",
+        "multi": "true",
+        "name": "prometheusds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  }
+}
+
+content = LZMABase64.compress(json.dumps(MINIMAL_TEMPLATE_WITH_DROPDOWNS))
+
+relation_data = {
+    "dashboards": json.dumps({
+        "templates": {
+            "file:mimir-config-minimal": {
+                "charm": "mimir",
+                "content": LZMABase64.compress(json.dumps(MINIMAL_TEMPLATE_WITH_DROPDOWNS)),
+            }
+        },
+        "uuid": "some_uuid",
+    })
+}
+
+def test_no_dashboard_dropdown_duplication(ctx:Context, containers):
+    """Ensure no duplication of dropdowns.
+
+    When a dashboard is provided over relation data, it may already come with dropdowns
+    for the Juju Topology. In such cases, we want to ensure that the `grafana_dashboard`
+    library does not inject these topology-related dropdowns again.
+
+    To test this, we simulate a scenario in which a dashboard providing charm has sent
+    the `MINIMAL_TEMPLATE_WITH_DROPDOWNS` dashboard over relation data. This dashboard already
+    comes with 6 dropdowns for the Juju Topology. In the scenario test, we'll have the context
+    run two events:
+      - First, a `relation_created` event, in which the library writes the provided dashboards
+      to peer relation data.
+      - Second, a generic `update_status` event which causes the dashboards saved to peer data
+      to be eventually written to disk.
+
+    Finally, we'll read the dashboards saved to disk and ensure they still contain the same number
+    of dropdowns, which is 6, one for each element of the Juju Topology.
+    """
+    dashboards_path = "/etc/grafana/provisioning/dashboards"
+
+    # GIVEN a relation to a dashboard provider with relation data,
+    # where the relation data contains a template that already comes with dropdowns
+    # AND a peer relation.
+    dashboard_relation = Relation(endpoint="grafana-dashboard", remote_app_data=relation_data)
+
+    # The peer relation is necessary as this is where the dashboards will be stored before being written to disk.
+    peer_relation = PeerRelation(endpoint="grafana", peers_data={1: {}})
+    state = State(relations={dashboard_relation, peer_relation}, containers=containers, leader=True)
+
+    # First, create the relation so dashboards are written to peer data.
+    with ctx(ctx.on.relation_created(dashboard_relation), state) as mgr:
+        state_out = mgr.run()
+
+        # Now that peer relation data contains the dashboards,
+        # we simulate another event.
+        with ctx(ctx.on.update_status(), state_out) as mgr:
+
+          state_out = mgr.run()
+          agent = state_out.get_container("grafana")
+
+          # Get the filesystem and read the dashboard file for Mimir.
+          # We search for the string `mimir` in the filename because
+          # `MINIMAL_TEMPLATE_WITH_DROPDOWNS` has the name `mimir-config-minimal`.
+          # The dashboard name on disk reflects the file name.
+          fs = agent.get_filesystem(ctx)
+          dashboard_files = fs.joinpath(*dashboards_path.strip("/").split("/"))
+          mimir_dashboard = [d for d in dashboard_files.iterdir() if "mimir" in d.name][0]
+          dashboard_content = yaml.safe_load(Path(mimir_dashboard).read_text())
+
+          # THEN in the Mimir dashboard being written to the `grafana` container, no duplication of dropdowns happens.
+          # This means, we still expect 6 elements in the `list` sub-section of the `templating` section.
+          assert len(dashboard_content["templating"]["list"]) == 6
