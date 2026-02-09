@@ -20,13 +20,22 @@ import custom_ini_config
 logger = logging.getLogger()
 
 
+def _csv_to_list(roles: Optional[str]) -> list[str]:
+    if not roles:
+        return []
+    return [role.strip() for role in roles.split(',') if role.strip()]
+
+
 class GrafanaConfig:
     """Grafana config generator."""
 
     def __init__(self,
+                *,
                 datasources_config: DatasourceConfig,
                 oauth_config: Optional[OauthProviderConfig] = None,
                 auth_env_config: Callable[[],Any] = lambda: {},
+                admin_roles: Optional[str] = None,
+                editor_roles: Optional[str] = None,
                 db_config: Callable[[],Optional[Dict[str, str]]]  = lambda: None,
                 db_type: str = "",
                 enable_reporting: bool = True,
@@ -38,6 +47,8 @@ class GrafanaConfig:
         self._oauth_config = oauth_config
         self._auth_env_config = auth_env_config
         self._db_config = db_config
+        self._admin_roles = _csv_to_list(admin_roles)
+        self._editor_roles = _csv_to_list(editor_roles)
         self._db_type = db_type
         self._enable_reporting = enable_reporting
         self._enable_external_db = enable_external_db
@@ -54,6 +65,23 @@ class GrafanaConfig:
     def auth_env_config(self) -> Any:
         """Generate auth environment config."""
         return self._auth_env_config()
+
+    @property
+    def role_attribute_path(self) -> Optional[str]:
+        """Generate role attribute path."""
+        group_claim_path  = "groups[*]"
+        if not self._admin_roles and not self._editor_roles:
+            return None
+
+        role_paths = []
+        for admin_role in self._admin_roles:
+            role_paths.append(f"contains({group_claim_path}, {admin_role}) && 'Admin'")
+        for editor_role in self._editor_roles:
+            role_paths.append(f"contains({group_claim_path}, {editor_role}) && 'Editor'")
+
+        role_paths.append("'Viewer'")
+
+        return " || ".join(role_paths)
 
     def get_status(self):
         """Intended to be called by collect-unit-status."""

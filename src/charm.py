@@ -204,6 +204,9 @@ class GrafanaCharm(CharmBase):
                                             datasources_config=self._datasource_config,
                                             oauth_config = self._oauth_config,
                                             auth_env_config = lambda: self._auth_env_vars,
+                                            # TODO: Probably some validation is required that the provided strings are in the expected format
+                                            admin_roles=cast(str, self.config.get("admin_roles")),
+                                            editor_roles=cast(str, self.config.get("editor_roles")),
                                             db_config=lambda: self._db_config,
                                             db_type=self._db_type,
                                             enable_reporting = bool(self.config["reporting_enabled"]),
@@ -469,6 +472,8 @@ class GrafanaCharm(CharmBase):
         self.metrics_endpoint.set_scrape_job_spec()
         self.source_consumer.upgrade_keys()
         self.dashboard_consumer.update_dashboards()
+        if self._grafana_config.role_attribute_path and not self.model.get_relation("oauth"):
+            raise RuntimeError("Cannot set role attribute path without an oauth relation.")
         self.oauth.update_client_config(client_config=self._oauth_client_config)
         self._reconcile_grafana_metadata()
         self.catalog.update_item(item=self._catalogue_item)
