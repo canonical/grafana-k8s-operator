@@ -23,7 +23,7 @@ logger = logging.getLogger()
 def _csv_to_list(roles: Optional[str]) -> list[str]:
     if not roles:
         return []
-    return [role.strip() for role in roles.split(',') if role.strip()]
+    return [role.strip().strip("'") for role in roles.split(',') if role.strip()]
 
 
 class GrafanaConfig:
@@ -75,9 +75,9 @@ class GrafanaConfig:
 
         role_paths = []
         for admin_role in self._admin_roles:
-            role_paths.append(f"contains({group_claim_path}, {admin_role}) && 'Admin'")
+            role_paths.append(f"contains({group_claim_path}, '{admin_role}') && 'Admin'")
         for editor_role in self._editor_roles:
-            role_paths.append(f"contains({group_claim_path}, {editor_role}) && 'Editor'")
+            role_paths.append(f"contains({group_claim_path}, '{editor_role}') && 'Editor'")
 
         role_paths.append("'Viewer'")
 
