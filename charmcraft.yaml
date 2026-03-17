@@ -267,11 +267,17 @@ config:
         - [smtp], ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#smtp
     admin_roles:
       description: |
-        Comma-separated list of groups oAuth2/OIDC that should be granted admin
+        Unquoted, comma-separated list of groups oAuth2/OIDC that should be granted admin
         privileges in Grafana. Only applicable when using oAuth2/OIDC authentication.
+
+        Example:
+        juju config grafana admin_roles="admin,another-group"
       type: string
     editor_roles:
       description: |
-        Comma-separated list of groups oAuth2/OIDC that should be granted editor
+        Unquoted, comma-separated list of groups oAuth2/OIDC that should be granted editor
         privileges in Grafana. Only applicable when using oAuth2/OIDC authentication.
+
+        Example:
+        juju config grafana editor_roles="devs,another-group"
       type: string
