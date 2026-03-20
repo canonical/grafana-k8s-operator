@@ -451,7 +451,7 @@ class GrafanaCharm(CharmBase):
         if not relations[PGSQL_RELATION] and self.app.planned_units() > 1:
             return BlockedStatus("Scale > 1 requires pgsql relation")
         if self._grafana_config.role_attribute_path and not self.model.get_relation("oauth"):
-            logger.error(
+            logger.warning(
                 "Admin/editor auth role charm config option(s) set, but oauth integration is missing; "
                 "integrate over oauth or unset config options"
             )
