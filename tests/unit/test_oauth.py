@@ -44,7 +44,6 @@ def test_config_is_updated_with_oauth_relation_data(ctx, base_state, peer_relati
             "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": OAUTH_PROVIDER_INFO["token_endpoint"],
             "GF_AUTH_GENERIC_OAUTH_API_URL": OAUTH_PROVIDER_INFO["userinfo_endpoint"],
             "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
-            "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
         }
         for k, v in expected_env.items():
             assert env[k] == v
@@ -70,7 +69,6 @@ def test_config_with_empty_oauth_relation_data(ctx, base_state, peer_relation):
             "GF_AUTH_GENERIC_OAUTH_TOKEN_URL",
             "GF_AUTH_GENERIC_OAUTH_API_URL",
             "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN",
-            "GF_FEATURE_TOGGLES_ENABLE",
         }
         for k in oauth_env:
              assert k not in env
@@ -102,7 +100,6 @@ def test_config_is_updated_with_oauth_relation_data_removed(ctx, base_state, pee
             "GF_AUTH_GENERIC_OAUTH_TOKEN_URL",
             "GF_AUTH_GENERIC_OAUTH_API_URL",
             "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN",
-            "GF_FEATURE_TOGGLES_ENABLE",
         }
         # THEN oauth env vars are not set
         for k in oauth_env:
