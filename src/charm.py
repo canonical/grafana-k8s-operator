@@ -449,7 +449,13 @@ class GrafanaCharm(CharmBase):
         """Check that relations are configured properly."""
         relations = self.model.relations
         if not relations[PGSQL_RELATION] and self.app.planned_units() > 1:
-            return BlockedStatus("Scale > 1 requires pgsql relation.")
+            return BlockedStatus("Scale > 1 requires pgsql relation")
+        if self._grafana_config.role_attribute_path and not self.model.get_relation("oauth"):
+            logger.error(
+                "Admin/editor auth role charm config option(s) set, but oauth integration is missing; "
+                "integrate over oauth or unset config options"
+            )
+            return BlockedStatus("oauth integration missing; see debug-log")
         return None
 
 
@@ -472,8 +478,6 @@ class GrafanaCharm(CharmBase):
         self.metrics_endpoint.set_scrape_job_spec()
         self.source_consumer.upgrade_keys()
         self.dashboard_consumer.update_dashboards()
-        if self._grafana_config.role_attribute_path and not self.model.get_relation("oauth"):
-            raise RuntimeError("Cannot set role attribute path without an oauth relation.")
         self.oauth.update_client_config(client_config=self._oauth_client_config)
         self._reconcile_grafana_metadata()
         self.catalog.update_item(item=self._catalogue_item)
