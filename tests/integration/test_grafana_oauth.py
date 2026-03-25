@@ -42,6 +42,14 @@ grafana_resources = {
 }
 
 
+pytest.skip(
+    "Grafana goes into error state because the ouath_tools lib is outdated and results in schema validation errors for cert_transfer: "
+    "'Make sure not to interact with the databags except using the public methods in the provider library and use version V1.'"
+    "For future ref, in jimm they use a literal bundle instead of oauth_tools: "
+    "https://github.com/canonical/jimm-k8s-operator/blob/v3/tests/integration/identity-bundle.yaml"
+)
+
+
 @pytest.mark.skip_if_deployed
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(
@@ -63,15 +71,7 @@ async def test_build_and_deploy(
     # The identity bundle 0.2 deploys self-signed-certificates from latest/edge
     # https://github.com/canonical/iam-bundle/blob/track/0.2/bundle.yaml.j2#L44
     # which (currently) uses certificate_transfer v0.
-    # Ref: https://github.com/canonical/jimm-k8s-operator/blob/v3/tests/integration/identity-bundle.yaml
-    sh.juju.refresh(  # type:ignore[reportAttributeAccessIssue]
-        self_signed_certificates_app_name,
-        "--force-base",
-        channel="latest/stable",
-        revision=154,
-        base="ubuntu@24.04",
-        model=ops_test.model_name
-    )
+    sh.juju.refresh(self_signed_certificates_app_name, "--force-base", channel="1/stable", base="ubuntu@24.04", model=ops_test.model_name)  # type:ignore[reportAttributeAccessIssue]
 
     # Deploy grafana
     await ops_test.model.deploy(
