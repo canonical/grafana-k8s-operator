@@ -46,7 +46,8 @@ pytest.skip(
     "Grafana goes into error state because the ouath_tools lib is outdated and results in schema validation errors for cert_transfer: "
     "'Make sure not to interact with the databags except using the public methods in the provider library and use version V1.'"
     "For future ref, in jimm they use a literal bundle instead of oauth_tools: "
-    "https://github.com/canonical/jimm-k8s-operator/blob/v3/tests/integration/identity-bundle.yaml"
+    "https://github.com/canonical/jimm-k8s-operator/blob/v3/tests/integration/identity-bundle.yaml",
+    allow_module_level=True,
 )
 
 
