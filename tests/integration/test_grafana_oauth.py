@@ -64,14 +64,14 @@ async def test_build_and_deploy(
     # https://github.com/canonical/iam-bundle/blob/track/0.2/bundle.yaml.j2#L44
     # which (currently) uses certificate_transfer v0.
     # Ref: https://github.com/canonical/jimm-k8s-operator/blob/v3/tests/integration/identity-bundle.yaml
-    sh.juju.refresh(
+    sh.juju.refresh(  # type:ignore[reportAttributeAccessIssue]
         self_signed_certificates_app_name,
         "--force-base",
         channel="latest/stable",
         revision=154,
         base="ubuntu@24.04",
         model=ops_test.model_name
-    )  # type:ignore[reportAttributeAccessIssue]
+    )
 
     # Deploy grafana
     await ops_test.model.deploy(
