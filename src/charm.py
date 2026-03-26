@@ -204,6 +204,9 @@ class GrafanaCharm(CharmBase):
                                             datasources_config=self._datasource_config,
                                             oauth_config = self._oauth_config,
                                             auth_env_config = lambda: self._auth_env_vars,
+                                            # TODO: Probably some validation is required that the provided strings are in the expected format
+                                            admin_roles=cast(str, self.config.get("admin_roles")),
+                                            editor_roles=cast(str, self.config.get("editor_roles")),
                                             db_config=lambda: self._db_config,
                                             db_type=self._db_type,
                                             enable_reporting = bool(self.config["reporting_enabled"]),
@@ -446,7 +449,13 @@ class GrafanaCharm(CharmBase):
         """Check that relations are configured properly."""
         relations = self.model.relations
         if not relations[PGSQL_RELATION] and self.app.planned_units() > 1:
-            return BlockedStatus("Scale > 1 requires pgsql relation.")
+            return BlockedStatus("Scale > 1 requires pgsql relation")
+        if self._grafana_config.role_attribute_path and not self.model.get_relation("oauth"):
+            logger.warning(
+                "Admin/editor auth role charm config option(s) set, but oauth integration is missing; "
+                "integrate over oauth or unset config options"
+            )
+            return BlockedStatus("oauth integration missing; see debug-log")
         return None
 
 
