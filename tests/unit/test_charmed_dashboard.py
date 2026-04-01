@@ -1,5 +1,9 @@
 import unittest
+from pathlib import Path
+
 from charms.grafana_k8s.v0.grafana_dashboard import CharmedDashboard
+
+UNIT_TEST_DIR = Path(__file__).parent
 
 
 class CharmedDashboardTest(unittest.TestCase):
@@ -33,6 +37,24 @@ class CharmedDashboardTest(unittest.TestCase):
         # THEN list of tags is unaffected
         self.assertListEqual(dashboard["tags"], ["charm: something-else"])
 
+def test_load_dashboards_from_dir():
+    # GIVEN a dashboards directory with three subfolders each containing one dashboard
+    dashboards_path = UNIT_TEST_DIR / "nested_dashboard_templates"
+
+    # WHEN load_dashboards_from_dir is called
+    result = CharmedDashboard.load_dashboards_from_dir(
+        dashboards_path=dashboards_path,
+        charm_name="my-charm",
+        charm_dir=UNIT_TEST_DIR,
+        inject_dropdowns=False,
+        juju_topology={},
+    )
+
+    # THEN all three dashboards are returned (one per subfolder)
+    assert len(result) == 3
+    assert "file:dashboard_a" in result
+    assert "file:dashboard_b" in result
+    assert "file:dashboard_c" in result
 
 if __name__ == '__main__':
     unittest.main()
