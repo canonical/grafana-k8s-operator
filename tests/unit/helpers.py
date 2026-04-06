@@ -4,6 +4,7 @@
 import json
 from typing import List, Dict
 
+
 class FakeProcessVersionCheck:
     def __init__(self, args):
         pass
