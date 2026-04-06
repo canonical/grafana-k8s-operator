@@ -1,6 +1,5 @@
 import json
 import unittest
-from pathlib import Path
 
 from charms.grafana_k8s.v0.grafana_dashboard import CharmedDashboard
 
@@ -36,11 +35,20 @@ class CharmedDashboardTest(unittest.TestCase):
         self.assertListEqual(dashboard["tags"], ["charm: something-else"])
 
 def test_load_dashboards_from_dir(tmp_path):
-    # GIVEN a dashboards directory with three subfolders each containing one dashboard
+    # GIVEN a dashboards directory with the following structure:
+    # .
+    # ├── dashboard_a.json
+    # ├── sub1
+    # │   └── dashboard_b.json
+    # └── sub2
+    #     ├── dashboard_c.json
+    #     └── sub3
+    #         └── dashboard_d.json
     dashboards = {
-        "subfolder_a/dashboard_a.json": {"title": "Dashboard A", "uid": "aaa"},
-        "subfolder_b/dashboard_b.json": {"title": "Dashboard B", "uid": "bbb"},
-        "subfolder_c/dashboard_c.json": {"title": "Dashboard C", "uid": "ccc"},
+        "dashboard_a.json": {"title": "Dashboard A", "uid": "aaa"},
+        "sub1/dashboard_b.json": {"title": "Dashboard B", "uid": "bbb"},
+        "sub2/dashboard_c.json": {"title": "Dashboard C", "uid": "ccc"},
+        "sub2/sub3/dashboard_d.json": {"title": "Dashboard D", "uid": "ddd"},
     }
     for rel_path, content in dashboards.items():
         p = tmp_path / rel_path
@@ -56,11 +64,8 @@ def test_load_dashboards_from_dir(tmp_path):
         juju_topology={},
     )
 
-    # THEN all three dashboards are returned (one per subfolder)
-    assert len(result) == 3
-    assert "file:dashboard_a" in result
-    assert "file:dashboard_b" in result
-    assert "file:dashboard_c" in result
+    # THEN all four dashboards are returned
+    assert result.keys() == {"file:dashboard_a", "file:dashboard_b", "file:dashboard_c", "file:dashboard_d"}
 
 if __name__ == '__main__':
     unittest.main()
