@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 name: grafana-tester
 description: |
-  This charm is nothing more than a dummy which can present itself to Grafana
+  This charm is nothing more than a tester which can present itself to Grafana
   to pass over dashboards and datasources which do nothing.
 summary: |
   A charm to test the Grafana operator
