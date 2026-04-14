@@ -2,6 +2,7 @@ build
 *.charm
 .idea
 __pycache__
+*.egg-info/
 .venv
 .tox
 .coverage

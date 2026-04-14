@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 grafana_resources = {
     "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
-    "litestream-image": oci_image("./charmcraft.yaml", "litestream-image"),
 }
 grafana_app_name = "grafana"
 
@@ -32,16 +31,29 @@ async def test_deploy(ops_test, grafana_charm):
             trust=True,
         ),
         ops_test.model.deploy(
+            "ch:postresql-k8s",
+            application_name="pgsql",
+            channel="stable",
+        ),
+        ops_test.model.deploy(
             "ch:traefik-k8s",
             application_name="traefik",
             channel="edge",
         ),
     )
 
+    # Since Grafana has a scale of 2, we need a db.
+    await ops_test.model.add_relation(f"{grafana_app_name}:pgsql", "pgsql")
+
     await asyncio.gather(
         ops_test.model.wait_for_idle(
             apps=[grafana_app_name],
             wait_for_at_least_units=2,
+            timeout=600,
+        ),
+        ops_test.model.wait_for_idle(
+            apps=["pgsql"],
+            wait_for_at_least_units=1,
             timeout=600,
         ),
         ops_test.model.wait_for_idle(

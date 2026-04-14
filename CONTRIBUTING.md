@@ -22,7 +22,7 @@ Deploy Grafana on its own:
 git clone git@github.com:canonical/grafana-k8s.git
 cd grafana-k8s
 charmcraft pack
-juju deploy ./grafana-k8s_ubuntu-20.04-amd64.charm --resource grafana-image=ubuntu/grafana:latest --resource litestream-image=docker.io/litestream/litestream:0.4.0-beta.2
+juju deploy ./grafana-k8s_ubuntu-20.04-amd64.charm --resource grafana-image=ubuntu/grafana:latest
 ```
 
 View the dashboard in a browser:
@@ -40,11 +40,9 @@ watch -c juju status --color  # wait for things to settle down
 
 ### High Availability Grafana
 
-This charm is written to support a high-availability Grafana cluster, but a database relation is required (MySQL or Postgresql).
+This charm is written to support a high-availability Grafana cluster, but a database relation is required. Currently, only Postgresql is supported.
 
 If HA is not required, there is no need to add a database relation.
-
-> NOTE: HA should not be considered for production use.
 
 ...
 

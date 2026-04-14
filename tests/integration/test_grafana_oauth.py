@@ -39,10 +39,18 @@ tester_resources = {
 }
 grafana_resources = {
     "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
-    "litestream-image": oci_image("./charmcraft.yaml", "litestream-image"),
 }
 
 
+skip_reason = (
+    "Grafana goes into error state because the ouath_tools lib is outdated and results in schema validation errors for cert_transfer: "
+    "'Make sure not to interact with the databags except using the public methods in the provider library and use version V1.'"
+    "For future ref, in jimm they use a literal bundle instead of oauth_tools: "
+    "https://github.com/canonical/jimm-k8s-operator/blob/v3/tests/integration/identity-bundle.yaml"
+)
+
+
+@pytest.mark.skip(reason=skip_reason)
 @pytest.mark.skip_if_deployed
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(
@@ -93,6 +101,7 @@ async def test_build_and_deploy(
     )
 
 
+@pytest.mark.skip(reason=skip_reason)
 async def test_oauth_login_with_identity_bundle(
     ops_test: OpsTest,
     page: Page,

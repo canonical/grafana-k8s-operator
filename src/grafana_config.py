@@ -2,35 +2,58 @@
 # See LICENSE file for licensing details.
 """Grafana config generator."""
 
+import logging
 import yaml
 from models import DatasourceConfig
 from typing import Callable, Optional, Dict, Any
 from charms.hydra.v0.oauth import (
     OauthProviderConfig
 )
+from ops import ActiveStatus, BlockedStatus
 from constants import DATABASE_PATH, DASHBOARDS_DIR
 import configparser
 from io import StringIO
+
+import custom_ini_config
+
+
+logger = logging.getLogger()
+
+
+def _csv_to_list(roles: Optional[str]) -> list[str]:
+    if not roles:
+        return []
+    return [role.strip().strip("'") for role in roles.split(',') if role.strip()]
+
 
 class GrafanaConfig:
     """Grafana config generator."""
 
     def __init__(self,
+                *,
                 datasources_config: DatasourceConfig,
                 oauth_config: Optional[OauthProviderConfig] = None,
                 auth_env_config: Callable[[],Any] = lambda: {},
+                admin_roles: Optional[str] = None,
+                editor_roles: Optional[str] = None,
                 db_config: Callable[[],Optional[Dict[str, str]]]  = lambda: None,
+                db_type: str = "",
                 enable_reporting: bool = True,
                 enable_external_db: bool = False,
                 tracing_endpoint: Optional[str] = None,
+                custom_config: Optional[str] = None,
                  ):
         self._datasources_config = datasources_config
         self._oauth_config = oauth_config
         self._auth_env_config = auth_env_config
         self._db_config = db_config
+        self._admin_roles = _csv_to_list(admin_roles)
+        self._editor_roles = _csv_to_list(editor_roles)
+        self._db_type = db_type
         self._enable_reporting = enable_reporting
         self._enable_external_db = enable_external_db
         self._tracing_endpoint = tracing_endpoint
+        self._custom_config = custom_config
 
 
     @property
@@ -43,9 +66,43 @@ class GrafanaConfig:
         """Generate auth environment config."""
         return self._auth_env_config()
 
+    @property
+    def role_attribute_path(self) -> Optional[str]:
+        """Generate role attribute path."""
+        group_claim_path  = "groups[*]"
+        if not self._admin_roles and not self._editor_roles:
+            return None
+
+        role_paths = []
+        for admin_role in self._admin_roles:
+            role_paths.append(f"contains({group_claim_path}, '{admin_role}') && 'Admin'")
+        for editor_role in self._editor_roles:
+            role_paths.append(f"contains({group_claim_path}, '{editor_role}') && 'Editor'")
+
+        role_paths.append("'Viewer'")
+
+        return " || ".join(role_paths)
+
+    def get_status(self):
+        """Intended to be called by collect-unit-status."""
+        try:
+            custom_ini_config.validate(self._custom_config)
+        except ValueError as e:
+            logger.error("Invalid custom_config: %s", e)
+            return BlockedStatus("Invalid custom_config; see debug-log")
+        return ActiveStatus()
+
     def generate_grafana_config(self) -> str:
         """Generate a configuration for Grafana."""
         configs = [self._generate_tracing_config(), self._generate_analytics_config(), self._generate_database_config()]
+        if self._custom_config is not None:
+            try:
+                custom_ini_config.validate(self._custom_config)
+            except ValueError:
+                pass
+            else:
+                configs.append(self._custom_config)
+
         if not self._enable_external_db:
             with StringIO() as data:
                 config_ini = configparser.ConfigParser()
@@ -176,7 +233,7 @@ class GrafanaConfig:
             file.
         """
         config_ini = configparser.ConfigParser()
-        db_type = "mysql"
+        db_type = self._db_type
         db_config = self._db_config()
         if not db_config:
             return ""

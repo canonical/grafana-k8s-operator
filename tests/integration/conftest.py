@@ -57,10 +57,12 @@ def timed_memoizer(func):
 @pytest.fixture(scope="module", autouse=True)
 def patch_pylibjuju_series_2404():
     juju.utils.ALL_SERIES_VERSIONS["noble"] = "24.04"
+    juju.utils.UBUNTU_SERIES["noble"] = "24.04"
 
     yield
 
     del juju.utils.ALL_SERIES_VERSIONS["noble"]
+    del juju.utils.UBUNTU_SERIES["noble"]
 
 
 @pytest.fixture(scope="module", autouse=True)

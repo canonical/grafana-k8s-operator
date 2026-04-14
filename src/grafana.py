@@ -30,7 +30,7 @@ from ops.pebble import (
     PathError,
     ProtocolError,
 )
-from models import PebbleEnvironment, TLSConfig
+from models import TLSConfig
 from constants import (
     GRAFANA_KEY_PATH,
     DATABASE_PATH,
@@ -58,13 +58,14 @@ class Grafana:
                 container: Container,
                 is_leader: bool,
                 grafana_config_generator: GrafanaConfig,
-                pebble_env: PebbleEnvironment,
+                pebble_env: Callable,
                 enable_profiling: bool = False,
                 tls_config: Optional[TLSConfig] = None,
                 trusted_ca_certs: Optional[str] = None,
                 dashboards: List[Dict] = [],
                 provision_own_dashboard: bool = False,
                 scheme: str = "http",
+                ingress_ready: bool = False,
                 ) -> None:
         """A class to bring up and check a Grafana server."""
         self._container = container
@@ -79,7 +80,7 @@ class Grafana:
         self._current_config_hash = None
         self._current_datasources_hash = None
         self._scheme =  scheme
-
+        self.ingress_ready = ingress_ready
 
     @property
     def grafana_version(self) -> str:
@@ -105,10 +106,8 @@ class Grafana:
 
         Ref: https://github.com/grafana/grafana/blob/main/conf/defaults.ini
         """
-        # Placeholder for when we add "proper" mysql support for HA
-        extra_info = {
-            "GF_DATABASE_TYPE": "sqlite3",
-        }
+        pebble_env = self._pebble_env()
+        extra_info = {}
 
         # Juju Proxy settings
         extra_info.update(
@@ -127,9 +126,9 @@ class Grafana:
         # root_url in a particular way.
         extra_info.update(
             {
-                "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
+                "GF_SERVER_SERVE_FROM_SUB_PATH": "True" if self.ingress_ready else "False",
                 # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#root_url
-                "GF_SERVER_ROOT_URL": self._pebble_env.external_url,
+                "GF_SERVER_ROOT_URL": pebble_env.external_url,
                 "GF_SERVER_ENFORCE_DOMAIN": "false",
                 # When traefik provides TLS termination then traefik is https, but grafana is http.
                 # We need to set GF_SERVER_PROTOCOL.
@@ -154,28 +153,29 @@ class Grafana:
 
         oauth_provider_info = self._grafana_config_generator.oauth_config
         if oauth_provider_info:
-            if oauth_provider_info:
-                extra_info.update(
-                    {
-                        "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
-                        "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
-                        "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(
-                            str, oauth_provider_info.client_id
-                        ),
-                        "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
-                            str, oauth_provider_info.client_secret
-                        ),
-                        "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
-                        "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
-                        "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
-                        "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
-                        "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
-                        # TODO: This toggle will be removed on grafana v10.3, remove it
-                        "GF_FEATURE_TOGGLES_ENABLE": "accessTokenExpirationCheck",
-                    }
-                )
+            extra_info.update(
+                {
+                    "GF_SERVER_SERVE_FROM_SUB_PATH": "True",
+                    "GF_AUTH_GENERIC_OAUTH_ENABLED": "True",
+                    "GF_AUTH_GENERIC_OAUTH_NAME": "external identity provider",
+                    "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": cast(
+                        str, oauth_provider_info.client_id
+                    ),
+                    "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": cast(
+                        str, oauth_provider_info.client_secret
+                    ),
+                    "GF_AUTH_GENERIC_OAUTH_SCOPES": OAUTH_SCOPES,
+                    "GF_AUTH_GENERIC_OAUTH_AUTH_URL": oauth_provider_info.authorization_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": oauth_provider_info.token_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_API_URL": oauth_provider_info.userinfo_endpoint,
+                    "GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN": "True",
+                }
+            )
 
-        tracing_resource_attrs = self._pebble_env.tracing_resource_attributes
+        if role_attribute_path := self._grafana_config_generator.role_attribute_path:
+            extra_info.update({"GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH": role_attribute_path})
+
+        tracing_resource_attrs = pebble_env.tracing_resource_attributes
         if tracing_resource_attrs:
             extra_info.update(
                 {
@@ -198,8 +198,8 @@ class Grafana:
         # This Grafana instance will inherit them automatically from the replication primary (the leader).
         if self._is_leader:
             # self.admin_password is guaranteed str if this unit is leader
-            extra_info["GF_SECURITY_ADMIN_PASSWORD"] = cast(str, self._pebble_env.admin_password)
-            extra_info["GF_SECURITY_ADMIN_USER"] = cast(str, self._pebble_env.admin_user)
+            extra_info["GF_SECURITY_ADMIN_PASSWORD"] = cast(str, pebble_env.admin_password)
+            extra_info["GF_SECURITY_ADMIN_USER"] = cast(str, pebble_env.admin_user)
 
         layer = Layer(
             {
@@ -213,15 +213,15 @@ class Grafana:
                         "startup": "enabled",
                         "environment": {
                             "GF_SERVER_HTTP_PORT": str(WORKLOAD_PORT),
-                            "GF_LOG_LEVEL": self._pebble_env.log_level,
+                            "GF_LOG_LEVEL": pebble_env.log_level,
                             "GF_PLUGINS_ENABLE_ALPHA": "true",
                             "GF_PATHS_PROVISIONING": PROVISIONING_PATH,
-                            "GF_SECURITY_ALLOW_EMBEDDING": str(self._pebble_env.allow_embedding).lower(),
+                            "GF_SECURITY_ALLOW_EMBEDDING": str(pebble_env.allow_embedding).lower(),
                             "GF_AUTH_ANONYMOUS_ENABLED": str(
-                                self._pebble_env.allow_anonymous_access
+                                pebble_env.allow_anonymous_access
                             ).lower(),
                             "GF_USERS_AUTO_ASSIGN_ORG": str(
-                               self._pebble_env.enable_auto_assign_org
+                               pebble_env.enable_auto_assign_org
                             ).lower(),
                             **extra_info,
                         },
@@ -360,12 +360,12 @@ class Grafana:
                     continue
                 changes.append(True)
                 self._container.push(cert_path, cert ,make_dirs=True)
+                self._container.exec(["update-ca-certificates", "--fresh"]).wait()
             else:
                 if self._container.exists(cert_path):
                     changes.append(True)
                     self._container.remove_path(cert_path,recursive=True)
-
-        self._container.exec(["update-ca-certificates", "--fresh"]).wait()
+                    self._container.exec(["update-ca-certificates", "--fresh"]).wait()
 
     def _reconcile_config(self, changes: List):
         logger.debug("Handling grafana-k8s configuration change")
@@ -389,7 +389,7 @@ class Grafana:
             self._update_config_file(DATASOURCES_PATH, grafana_datasources)
             logger.info("Updated Grafana's datasource configuration")
 
-            # Non-leaders will get updates from litestream
+            # Non-leaders will get updates from the database
             if self._is_leader:
                 changes.append(True)
 
@@ -407,9 +407,9 @@ class Grafana:
         Note that Grafana does not support SIGHUP, so a full restart is needed.
         """
         # TODO: add a check that the config file is on disk
-        if self._layer:
+        if layer:= self._layer:
             try:
-                self._container.add_layer(GRAFANA_WORKLOAD, self._layer, combine=True)
+                self._container.add_layer(GRAFANA_WORKLOAD, layer, combine=True)
                 self._container.restart(GRAFANA_WORKLOAD)
                 logger.info("Restarted grafana-k8s")
 

@@ -187,8 +187,9 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-
 import yaml
+from cosl import DashboardPath40UID, LZMABase64
+from cosl.types import type_convert_stored
 from ops.charm import (
     CharmBase,
     HookEvent,
@@ -203,12 +204,9 @@ from ops.framework import (
     EventSource,
     Object,
     ObjectEvents,
-    StoredDict,
-    StoredList,
     StoredState,
 )
 from ops.model import Relation
-from cosl import LZMABase64, DashboardPath40UID
 
 # The unique Charmhub library identifier, never change it
 LIBID = "c49eb9c7dfef40c7b6235ebd67010a3f"
@@ -219,7 +217,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 45
+LIBPATCH = 50
 
 PYDEPS = ["cosl >= 0.0.50"]
 
@@ -596,9 +594,19 @@ class CharmedDashboard:
                     datasources[template_value["name"]] = template_value["query"].lower()
 
             # Put our own variables in the template
+            # We only want to inject our own dropdowns IFF they are NOT
+            # already in the template coming over relation data.
+            # We'll store all dropdowns in the template from the provider
+            # in a set. We'll add our own if they are not in this set.
+            existing_names = {
+                item.get("name")
+                for item in dict_content["templating"]["list"]
+            }
+
             for d in template_dropdowns:  # type: ignore
-                if d not in dict_content["templating"]["list"]:
+                if d.get("name") not in existing_names:
                     dict_content["templating"]["list"].insert(0, d)
+                    existing_names.add(d.get("name"))
 
         dict_content = cls._replace_template_fields(dict_content, datasources, existing_templates)
         return json.dumps(dict_content)
@@ -955,7 +963,15 @@ class CharmedDashboard:
         # If we're running this from within an aggregator (such as grafana agent), then the uid was
         # already rendered there, so we do not want to overwrite it with a uid generated from aggregator's info.
         # We overwrite the uid only if it's not a valid "Path40" uid.
-        if not DashboardPath40UID.is_valid(original_uid := dashboard_dict.get("uid", "")):
+        original_uid = dashboard_dict.get("uid", "")
+
+        if DashboardPath40UID.is_valid(original_uid):
+            logger.debug(
+                "Processed dashboard '%s': kept original uid '%s'", dashboard_path, original_uid
+            )
+            return
+
+        try:
             # TODO: Replace _is_subpath with dashboard_path.is_relative_to(charm_dir) when minimum Python is set to 3.9
             # Github issue: https://github.com/canonical/grafana-k8s-operator/issues/445
             rel_path = str(
@@ -964,17 +980,19 @@ class CharmedDashboard:
                 and _is_subpath(dashboard_path, charm_dir)
                 else dashboard_path
             )
-            dashboard_dict["uid"] = DashboardPath40UID.generate(charm_name, rel_path)
-            logger.debug(
-                "Processed dashboard '%s': replaced original uid '%s' with '%s'",
-                dashboard_path,
-                original_uid,
-                dashboard_dict["uid"],
-            )
+        except ValueError:
+            uid =  DashboardPath40UID.generate(charm_name, str(dashboard_path))
         else:
-            logger.debug(
-                "Processed dashboard '%s': kept original uid '%s'", dashboard_path, original_uid
-            )
+            uid = DashboardPath40UID.generate(charm_name, rel_path)
+
+
+        logger.debug(
+            "Processed dashboard '%s': replaced original uid '%s' with '%s'",
+            dashboard_path,
+            original_uid,
+            uid,
+        )
+        dashboard_dict["uid"] = uid
 
     @classmethod
     def _add_tags(cls, dashboard_dict: dict, charm_name: str):
@@ -1007,7 +1025,7 @@ class CharmedDashboard:
 
         dashboard_templates = {}
 
-        for path in filter(_is_dashboard, Path(dashboards_path).glob("*")):
+        for path in filter(_is_dashboard, Path(dashboards_path).glob("**/*")):
             try:
                 dashboard_dict = json.loads(path.read_bytes())
             except json.JSONDecodeError as e:
@@ -1037,18 +1055,6 @@ class CharmedDashboard:
             )
 
         return dashboard_templates
-
-
-def _type_convert_stored(obj):
-    """Convert Stored* to their appropriate types, recursively."""
-    if isinstance(obj, StoredList):
-        return list(map(_type_convert_stored, obj))
-    if isinstance(obj, StoredDict):
-        rdict = {}  # type: Dict[Any, Any]
-        for k in obj.keys():
-            rdict[k] = _type_convert_stored(obj[k])
-        return rdict
-    return obj
 
 
 class GrafanaDashboardsChanged(EventBase):
@@ -1358,7 +1364,7 @@ class GrafanaDashboardProvider(Object):
         # It's completely ridiculous to add a UUID, but if we don't have some
         # pseudo-random value, this never makes it across 'juju set-state'
         stored_data = {
-            "templates": _type_convert_stored(self._stored.dashboard_templates),  # pyright: ignore
+            "templates": type_convert_stored(self._stored.dashboard_templates),  # pyright: ignore
             "uuid": str(uuid.uuid4()),
         }
 
@@ -1624,7 +1630,7 @@ class GrafanaDashboardConsumer(Object):
         stored_data = rendered_dashboards
         currently_stored_data = self._get_stored_dashboards(relation.id)
 
-        coerced_data = _type_convert_stored(currently_stored_data) if currently_stored_data else {}
+        coerced_data = type_convert_stored(currently_stored_data) if currently_stored_data else {}
 
         if not coerced_data == stored_data:
             stored_dashboards = self.get_peer_data("dashboards")
@@ -1651,29 +1657,60 @@ class GrafanaDashboardConsumer(Object):
             self.on.dashboards_changed.emit()  # pyright: ignore
 
     def _to_external_object(self, relation_id, dashboard):
+        decompressed = LZMABase64.decompress(dashboard["content"])
+        as_dict = json.loads(decompressed)
+
+        dashboard_title = as_dict.get("title", "")
+        dashboard_uid = as_dict.get("uid", "")
+
+        try:
+            dashboard_version = int(as_dict["version"])
+        except (KeyError, ValueError):
+            logger.warning("Dashboard '%s' (uid '%s') is missing a '.version' field or is invalid (must be integer); using '0' as fallback", dashboard_title, dashboard_uid)
+            dashboard_version = 0
+
         return {
             "id": dashboard["original_id"],
             "relation_id": relation_id,
             "charm": dashboard["template"]["charm"],
-            "content": LZMABase64.decompress(dashboard["content"]),
+            "content": decompressed,
+            "dashboard_uid": dashboard_uid,
+            "dashboard_version": dashboard_version,
+            "dashboard_title": dashboard_title,
         }
 
     @property
     def dashboards(self) -> List[Dict]:
         """Get a list of known dashboards across all instances of the monitored relation.
 
+        Filters out dashboards with the same uid, keeping only the one with the highest version.
+        When more than one dashboard have the same uid and version, keep the first one when
+        sorted by (relation_id, content) in reverse lexicographic order (highest relid first).
+
         Returns: a list of known dashboards. The JSON of each of the dashboards is available
             in the `content` field of the corresponding `dict`.
         """
-        dashboards = []
+        d: Dict[str, dict] = {}
 
         for _, (relation_id, dashboards_for_relation) in enumerate(
             self.get_peer_data("dashboards").items()
         ):
             for dashboard in dashboards_for_relation:
-                dashboards.append(self._to_external_object(relation_id, dashboard))
+                obj = self._to_external_object(relation_id, dashboard)
 
-        return dashboards
+                key = obj.get("dashboard_uid")
+                if key is None or str(key).strip() == "":
+                    # At this point, we assume that a `.uid` is present so we do not render a fallback identifier here. Instead, we omit it.
+                    logger.error("dashboard '%s' from relation id '%s' is missing a '.uid' field; omitted", obj["dashboard_title"], obj["relation_id"])
+                    continue
+
+                if key in d:
+                    d[key] = max(d[key], obj, key=lambda o: (o["dashboard_version"], o["relation_id"], o["content"]))
+                    logger.warning("deduplicate dashboard '%s' (uid '%s') - kept version '%s' from relation id '%s'", d[key]["dashboard_title"], d[key]["dashboard_uid"], d[key]["dashboard_version"], d[key]["relation_id"])
+                else:
+                    d[key] = obj
+
+        return list(d.values())
 
     def _get_stored_dashboards(self, relation_id: int) -> list:
         """Pull stored dashboards out of the peer data bucket."""
@@ -1808,7 +1845,7 @@ class GrafanaDashboardAggregator(Object):
         """Push dashboards to the downstream Grafana relation."""
         # It's still ridiculous to add a UUID here, but needed
         stored_data = {
-            "templates": _type_convert_stored(self._stored.dashboard_templates),  # pyright: ignore
+            "templates": type_convert_stored(self._stored.dashboard_templates),  # pyright: ignore
             "uuid": str(uuid.uuid4()),
         }
 
@@ -1818,7 +1855,7 @@ class GrafanaDashboardAggregator(Object):
 
     def remove_dashboards(self, event: RelationBrokenEvent) -> None:
         """Remove a dashboard if the relation is broken."""
-        app_ids = _type_convert_stored(self._stored.id_mappings.get(event.app.name, ""))  # type: ignore
+        app_ids = type_convert_stored(self._stored.id_mappings.get(event.app.name, ""))  # type: ignore
 
         if not app_ids:
             logger.info("Could not look up stored dashboards for %s", event.app.name)  # type: ignore
@@ -1829,7 +1866,7 @@ class GrafanaDashboardAggregator(Object):
             del self._stored.dashboard_templates[id]  # type: ignore
 
         stored_data = {
-            "templates": _type_convert_stored(self._stored.dashboard_templates),  # pyright: ignore
+            "templates": type_convert_stored(self._stored.dashboard_templates),  # pyright: ignore
             "uuid": str(uuid.uuid4()),
         }
 

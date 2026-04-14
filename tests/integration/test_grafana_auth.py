@@ -2,7 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Tests the library using dummy requirer and provider charms.
+"""Tests the library using tester requirer and provider charms.
 
 It tests that the charms are able to relate and to exchange data.
 """
@@ -22,7 +22,6 @@ tester_resources = {
 }
 grafana_resources = {
     "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
-    "litestream-image": oci_image("./charmcraft.yaml", "litestream-image"),
 }
 
 

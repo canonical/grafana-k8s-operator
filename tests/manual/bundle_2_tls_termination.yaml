@@ -29,7 +29,6 @@ applications:
     series: focal
     resources:
       grafana-image: docker.io/ubuntu/grafana:9.2-22.04_beta
-      litestream-image: docker.io/litestream/litestream:0.4.0-beta.2
     scale: 1
     trust: true
   prom:
