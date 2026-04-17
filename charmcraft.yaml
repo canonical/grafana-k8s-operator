@@ -5,8 +5,8 @@ type: charm
 name: grafana-k8s
 summary: Data visualization and observability with Grafana
 description: |
-  Grafana K8s is a Juju charm that deploys and manages Grafana on Kubernetes, providing a
-  rich web interface for visualizing and exploring observability data. It is a core component
+  Grafana K8s is a Juju charm that deploys and manages Grafana on Kubernetes. It provides a
+  web interface for visualizing and exploring observability data and is a core component
   of the Canonical Observability Stack (COS):
   https://documentation.ubuntu.com/observability
 
