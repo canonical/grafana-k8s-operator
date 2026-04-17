@@ -5,9 +5,25 @@ type: charm
 name: grafana-k8s
 summary: Data visualization and observability with Grafana
 description: |
-  Grafana provides dashboards for monitoring data and this
-  charm is written to allow for HA on Kubernetes and can take
-  multiple data sources (for example, Prometheus).
+  Grafana K8s is a Juju charm that deploys and manages Grafana on Kubernetes. It provides a
+  web interface for visualizing and exploring observability data and is a core component
+  of the Canonical Observability Stack (COS):
+  https://documentation.ubuntu.com/observability
+
+  Datasources such as Prometheus and Loki, as well as dashboards bundled by other charms, are
+  automatically registered through Juju relations — no manual configuration required.
+
+  Key features:
+
+  - Automatic datasource and dashboard registration via Juju relations with charms such as
+    Prometheus, Loki, and others in the COS ecosystem.
+  - High-availability support using a PostgreSQL database backend.
+  - OAuth2/OIDC authentication via the oauth relation, with configurable role mappings.
+  - TLS support via the certificates relation.
+  - Ingress support for external access through reverse proxies such as Traefik.
+  - Built-in Prometheus alert rules for self-monitoring.
+  - Distributed tracing support via integration with Tempo.
+  - Configurable Kubernetes resource limits for CPU and memory.
 
 links:
   documentation: https://discourse.charmhub.io/t/grafana-operator-k8s-docs-index/5612
