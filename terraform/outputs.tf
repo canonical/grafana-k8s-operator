@@ -2,9 +2,14 @@ output "app_name" {
   value = juju_application.grafana.name
 }
 
-output "endpoints" {
+output "provides" {
   value = {
-    # Requires
+    metrics_endpoint = "metrics-endpoint",
+  }
+}
+
+output "requires" {
+  value = {
     catalogue         = "catalogue",
     certificates      = "certificates",
     database          = "database",
@@ -15,7 +20,5 @@ output "endpoints" {
     oauth             = "oauth",
     receive_ca_cert   = "receive-ca-cert",
     charm_tracing     = "charm-tracing",
-    # Provides
-    metrics_endpoint = "metrics-endpoint",
   }
 }
