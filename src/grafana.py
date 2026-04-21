@@ -91,7 +91,10 @@ class Grafana:
         """
         if not self._container.can_connect():
             return ""
-        version_output, _ = self._container.exec(["grafana-server", "-v"]).wait_output()
+        try:
+            version_output, _ = self._container.exec(["grafana-server", "-v"]).wait_output()
+        except (FileNotFoundError, ProtocolError, ConnectionError):
+            return ""
         # Output looks like this:
         # Version 8.2.6 (commit: d2cccfe, branch: HEAD)
         result = re.search(r"Version (\d*\.\d*\.\d*)", version_output)
