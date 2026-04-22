@@ -1,7 +1,6 @@
 # -------------- Upgrade logic --------------
 
-# TODO: Do we want to reference a commit hash instead of revision since the hash can link to all applicable revisions, but a revision can be on any track
-## -------- grafana.revision == 180 ----------
+## -------- Removed the litestream-image resource ----------
 # https://github.com/juju/juju/issues/21648
 # https://github.com/juju/juju/issues/22071
 resource "terraform_data" "grafana_resources" {
