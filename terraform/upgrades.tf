@@ -1,8 +1,9 @@
 # -------------- Upgrade logic --------------
 
-## -------- grafana.revision >= 174 ----------
-# the ingress endpoint interface changes from traefik_route to ingress_per_app so we need a
-# lifecycle to trigger integration replacement, otherwise the upgrade will fail
+# TODO: Do we want to reference a commit hash instead of revision since the hash can link to all applicable revisions, but a revision can be on any track
+## -------- grafana.revision == 180 ----------
+# https://github.com/juju/juju/issues/21648
+# https://github.com/juju/juju/issues/22071
 resource "terraform_data" "grafana_resources" {
   input = data.juju_charm.grafana_info.resources
 }
