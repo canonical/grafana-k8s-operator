@@ -4,14 +4,15 @@ variable "app_name" {
   default     = "grafana"
 }
 
+variable "base" {
+  description = "The operating system on which to deploy. E.g. ubuntu@24.04. Changing this value for machine charms will trigger a replace by terraform. Check Charmhub for supported bases."
+  default     = "ubuntu@24.04"
+  type        = string
+}
+
 variable "channel" {
   description = "Channel that the charm is deployed from"
   type        = string
-
-  validation {
-    condition     = startswith(var.channel, "dev/")
-    error_message = "The track of the channel must be 'dev/'. e.g. 'dev/edge'."
-  }
 }
 
 variable "config" {
