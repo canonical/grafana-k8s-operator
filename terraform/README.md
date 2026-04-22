@@ -15,6 +15,7 @@ This is a Terraform module facilitating the deployment of grafana-k8s charm, usi
 | Name | Version |
 |------|---------|
 | <a name="provider_juju"></a> [juju](#provider\_juju) | ~> 1.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -25,6 +26,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_app_name"></a> [app\_name](#input\_app\_name) | Name to give the deployed application | `string` | `"grafana"` | no |
+| <a name="input_base"></a> [base](#input\_base) | The operating system on which to deploy. E.g. ubuntu@24.04. Changing this value for machine charms will trigger a replace by terraform. Check Charmhub for supported bases. | `string` | `"ubuntu@24.04"` | no |
 | <a name="input_channel"></a> [channel](#input\_channel) | Channel that the charm is deployed from | `string` | n/a | yes |
 | <a name="input_config"></a> [config](#input\_config) | Map of the charm configuration options | `map(string)` | `{}` | no |
 | <a name="input_constraints"></a> [constraints](#input\_constraints) | String listing constraints for this application | `string` | `"arch=amd64"` | no |
