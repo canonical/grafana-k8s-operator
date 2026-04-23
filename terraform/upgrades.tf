@@ -1,6 +1,8 @@
 # -------------- Upgrade logic --------------
 
 ## -------- Removed the litestream-image resource ----------
+# The litestream-image resource was removed and given a Juju bug, we need to add a lifecycle to
+# trigger integration replacement, otherwise the upgrade will fail
 # https://github.com/juju/juju/issues/21648
 # https://github.com/juju/juju/issues/22071
 resource "terraform_data" "grafana_resources" {
