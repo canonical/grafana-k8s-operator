@@ -14,7 +14,7 @@ resource "juju_application" "grafana" {
   charm {
     name     = "grafana-k8s"
     channel  = var.channel
-    revision = data.juju_charm.grafana_info.revision
+    revision = var.revision
   }
 
   lifecycle { replace_triggered_by = [terraform_data.app_replace_trigger] }
