@@ -16,6 +16,4 @@ resource "juju_application" "grafana" {
     channel  = var.channel
     revision = var.revision
   }
-
-  lifecycle { replace_triggered_by = [terraform_data.app_replace_trigger] }
 }
