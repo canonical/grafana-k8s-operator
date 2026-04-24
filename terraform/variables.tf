@@ -13,6 +13,11 @@ variable "base" {
 variable "channel" {
   description = "Channel that the charm is deployed from"
   type        = string
+
+  validation {
+    condition     = startswith(var.channel, "dev/")
+    error_message = "The track of the channel must be 'dev/'. e.g. 'dev/edge'."
+  }
 }
 
 variable "config" {

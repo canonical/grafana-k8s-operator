@@ -5,8 +5,8 @@
 # trigger integration replacement, otherwise the upgrade will fail
 # https://github.com/juju/juju/issues/21648
 # https://github.com/juju/juju/issues/22071
-resource "terraform_data" "grafana_resources" {
-  input = data.juju_charm.grafana_info.resources
+resource "terraform_data" "grafana_litestream_resource" {
+  input = contains(keys(data.juju_charm.grafana_info.resources), "litestream-image")
 }
 
 # -------------- # CharmHub API -------------- #
