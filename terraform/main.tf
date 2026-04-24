@@ -1,3 +1,7 @@
+resource "terraform_data" "app_replace_trigger" {
+  triggers_replace = var.replace_triggers
+}
+
 resource "juju_application" "grafana" {
   name               = var.app_name
   config             = var.config
@@ -13,5 +17,5 @@ resource "juju_application" "grafana" {
     revision = data.juju_charm.grafana_info.revision
   }
 
-  lifecycle { replace_triggered_by = [terraform_data.grafana_litestream_resource] }
+  lifecycle { replace_triggered_by = [terraform_data.app_replace_trigger] }
 }
