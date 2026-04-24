@@ -13,5 +13,5 @@ resource "juju_application" "grafana" {
     revision = data.juju_charm.grafana_info.revision
   }
 
-  lifecycle { replace_triggered_by = [terraform_data.grafana_resources] }
+  lifecycle { replace_triggered_by = [terraform_data.grafana_litestream_resource] }
 }
