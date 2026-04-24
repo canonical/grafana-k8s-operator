@@ -6,7 +6,7 @@
 # https://github.com/juju/juju/issues/21648
 # https://github.com/juju/juju/issues/22071
 resource "terraform_data" "grafana_litestream_resource" {
-  input = contains(keys(data.juju_charm.grafana_info.resources), "litestream-image")
+  triggers_replace = contains(keys(data.juju_charm.grafana_info.resources), "litestream-image")
 }
 
 # -------------- # CharmHub API -------------- #
