@@ -1,7 +1,3 @@
-resource "terraform_data" "app_replace_trigger" {
-  triggers_replace = var.replace_triggers
-}
-
 resource "juju_application" "grafana" {
   name               = var.app_name
   config             = var.config
