@@ -52,3 +52,9 @@ variable "units" {
   type        = number
   default     = 1
 }
+
+variable "replace_triggers" {
+  description = "List of values that, when changed, trigger a full application replacement"
+  type        = list(any)
+  default     = []
+}
