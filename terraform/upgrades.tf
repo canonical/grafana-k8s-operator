@@ -1,5 +1,5 @@
 # -------------- # Replace triggers -------------- #
 
-resource "terraform_data" "app_replace_trigger" {
+resource "terraform_data" "replace_triggers" {
   triggers_replace = var.replace_triggers
 }
