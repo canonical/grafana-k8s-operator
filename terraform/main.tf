@@ -13,5 +13,5 @@ resource "juju_application" "grafana" {
     revision = var.revision
   }
 
-  lifecycle { replace_triggered_by = [terraform_data.app_replace_trigger] }
+  lifecycle { replace_triggered_by = [terraform_data.replace_triggers] }
 }
