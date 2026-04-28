@@ -5,5 +5,5 @@ on: pull_request
 jobs:
   pull-request:
     name: PR
-    uses: canonical/observability/.github/workflows/charm-pull-request.yaml@v1
+    uses: canonical/observability/.github/workflows/charm-pull-request.yaml@v2
     secrets: inherit
