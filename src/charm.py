@@ -154,7 +154,7 @@ class GrafanaCharm(CharmBase):
                 self.on.update_status,
             ],
         )
-        self.tracing = ops_tracing.Tracing(
+        self.charm_tracing = ops_tracing.Tracing(
             self,
             tracing_relation_name='charm-tracing',
             ca_relation_name='receive-ca-cert',
