@@ -155,8 +155,10 @@ class GrafanaCharm(CharmBase):
                 self.on.update_status,
             ],
         )
-        self.charm_tracing = TracingEndpointRequirer(
-            self, relation_name="charm-tracing", protocols=["otlp_http"]
+        self.charm_tracing = ops_tracing.Tracing(
+            self,
+            tracing_relation_name='charm-tracing',
+            ca_relation_name='receive-ca-cert',
         )
         self.workload_tracing = TracingEndpointRequirer(
             self, relation_name="workload-tracing", protocols=["otlp_grpc"]
@@ -437,11 +439,6 @@ class GrafanaCharm(CharmBase):
         if not self.resource_patch.is_ready():
             logger.debug("Resource patch not ready yet. Skipping cluster update step.")
             return
-        if self.charm_tracing.is_ready() and (endpoint:= self.charm_tracing.get_endpoint("otlp_http")):
-            ops_tracing.set_destination(
-                url=endpoint + "/v1/traces",
-                ca=self._tls_config.ca if self._tls_config else None
-            )
         self.ingress.provide_ingress_requirements(scheme=self._scheme, port=WORKLOAD_PORT)
         if self._check_wrong_relations():
             return

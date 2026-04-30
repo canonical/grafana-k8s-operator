@@ -3,11 +3,10 @@
 [project]
 name = "grafana-k8s"
 version = "0.0"
-requires-python = "~=3.10"
+requires-python = "~=3.12.0"
 
 dependencies = [
-  "ops>=2.17",
-  "ops[tracing]",
+  "ops[tracing]>=2.17",
   "pyyaml",
   "urllib3",
   "jsonschema",
@@ -16,7 +15,6 @@ dependencies = [
   "markupsafe==2.0.1", # https://github.com/pallets/markupsafe/issues/371
   "lightkube>=0.11",
   # lib/charms/grafana_k8s/v0/grafana_dashboard.py
-  # lib/charms/tempo_k8s/v1/charm_tracing.py
   "cosl",
   # lib/charms/istio_beacon_k8s/v0/service_mesh.py
   "charmed-service-mesh-helpers>=0.2.0",

@@ -46,13 +46,17 @@ async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.wait_for_idle(
             apps=[grafana.name, "pgsql"],
+            status="active",
             raise_on_error=False,
             timeout=1200,
+            idle_period=30,
         ),
         ops_test.model.wait_for_idle(
             apps=["ca"],
+            status="active",
             raise_on_error=False,
             timeout=600,
+            idle_period=30,
         ),
     )
 
