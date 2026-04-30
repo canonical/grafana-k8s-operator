@@ -41,12 +41,8 @@ async def test_logging_integration(ops_test: OpsTest, grafana_charm: str):
 
     # WHEN we integrate grafana with loki via the logging relation
     juju.integrate("grafana:logging", "loki:logging")
-    juju.wait(jubilant.all_active, delay=10, timeout=600)
-
     # THEN the integration is active
-    status = juju.status()
-    assert status.apps["grafana"].app_status.current == "active"
-    assert status.apps["loki"].app_status.current == "active"
+    juju.wait(jubilant.all_active, delay=10, timeout=600)
 
 
 @retry(wait=wait_fixed(15), stop=stop_after_attempt(20))
