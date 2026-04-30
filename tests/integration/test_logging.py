@@ -37,7 +37,7 @@ async def test_logging_integration(ops_test: OpsTest, grafana_charm: str):
         resources=RESOURCES,
         trust=True,
     )
-    juju.deploy(charm="loki-k8s", app="loki", channel="1/edge", trust=True)
+    juju.deploy(charm="loki-k8s", app="loki", channel="dev/edge", trust=True)
 
     # WHEN we integrate grafana with loki via the logging relation
     juju.integrate("grafana:logging", "loki:logging")
