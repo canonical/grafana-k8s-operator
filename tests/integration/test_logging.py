@@ -11,7 +11,7 @@ import jubilant
 import pytest
 import requests
 import yaml
-from helpers import oci_image
+from helpers import oci_image, unit_address
 from pytest_operator.plugin import OpsTest
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -49,9 +49,8 @@ async def test_logging_integration(ops_test: OpsTest, grafana_charm: str):
 async def test_logs_are_forwarded_to_loki(ops_test: OpsTest):
     """Verify that Grafana logs are present in Loki."""
     assert ops_test.model
-    juju = jubilant.Juju(model=ops_test.model.name)
 
-    loki_address = juju.status().apps["loki"].units["loki/0"].address
+    loki_address = await unit_address(ops_test, "loki", 0)
     url = f"http://{loki_address}:3100/loki/api/v1/query_range"
     response = requests.get(url, params={"query": f'{{juju_application="{APP_NAME}"}}'})
     response.raise_for_status()
