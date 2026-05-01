@@ -5,20 +5,17 @@
 """Integration tests for the logging (LogForwarder) integration."""
 
 import logging
-from pathlib import Path
 
 import jubilant
 import pytest
 import requests
-import yaml
 from helpers import oci_image, unit_address
 from pytest_operator.plugin import OpsTest
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-APP_NAME = METADATA["name"]
+APP_NAME = "grafana"
 RESOURCES = {
     "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
 }
