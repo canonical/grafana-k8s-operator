@@ -197,7 +197,7 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- database relation
-        self._db_name = f"{self._topology.application}-grafana-k8s-{self._topology.model_uuid}"
+        self._db_name = f"{self._topology.application}-{self._topology.model_uuid}"
         self._db = None
         self._db_type = "sqlite3"
 
