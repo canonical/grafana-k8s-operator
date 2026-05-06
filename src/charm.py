@@ -60,6 +60,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 )
 from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer, IngressPerAppReadyEvent, IngressPerAppRevokedEvent
 from grafana import Grafana
@@ -164,6 +165,9 @@ class GrafanaCharm(CharmBase):
         )
 
         self.profiling = ProfilingEndpointProvider(self, jobs=self._profiling_scrape_jobs)
+
+        # -- log forwarding
+        self._log_forwarding = LogForwarder(self, relation_name="logging")
 
         # -- grafana_source relation observations
         self.source_consumer = GrafanaSourceConsumer(
