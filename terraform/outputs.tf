@@ -20,5 +20,6 @@ output "requires" {
     oauth             = "oauth",
     receive_ca_cert   = "receive-ca-cert",
     charm_tracing     = "charm-tracing",
+    logging           = "logging",
   }
 }
