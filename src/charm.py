@@ -325,7 +325,7 @@ class GrafanaCharm(CharmBase):
             icon="bar-chart",
             url=self.external_url,
             description=(
-                "Grafana allows you to query, visualize, alert on, and "
+                "Grafana allows you to query, alert on, and "
                 "visualize metrics from mixed datasources in configurable "
                 "dashboards for observability."
             ),
