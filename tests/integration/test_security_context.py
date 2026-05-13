@@ -31,6 +31,7 @@ grafana_resources = {
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest, grafana_charm):
     """Deploy the grafana charm and wait for active status."""
+    assert ops_test.model, "ops_test.model is not initialized"
     await ops_test.model.deploy(
         grafana_charm,
         resources=grafana_resources,
@@ -54,6 +55,7 @@ async def test_container_security_context(
     Verify that container spec defines the security context with correct
     user ID and group ID.
     """
+    assert ops_test.model_name, "model_name is not set"
     lightkube_client = lightkube.Client()
     pod_name = get_pod_names(ops_test.model_name, "grafana")[0]
     assert_security_context(
