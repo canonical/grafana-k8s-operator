@@ -3,12 +3,15 @@
 # See LICENSE file for licensing details.
 import json
 import logging
+import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple, TypedDict
 
+import lightkube
 import requests
 import yaml
 from asyncstdlib import functools
+from lightkube.resources.core_v1 import Pod
 from pytest_operator.plugin import OpsTest
 from urllib.parse import urlparse
 from workload import Grafana
@@ -412,15 +415,6 @@ class ModelConfigChange:
         await self.ops_test.model.set_config(self.revert_to)
 
 
-# Security context verification helpers for non-root compliance testing
-
-import subprocess
-from typing import Dict, TypedDict
-
-import lightkube
-from lightkube.resources.core_v1 import Pod
-
-
 class ContainerSecurityContext(TypedDict):
     """TypedDict representing Kubernetes container security context settings."""
 
@@ -438,8 +432,13 @@ def generate_container_securitycontext_map(
         c_uid_map[k] = ContainerSecurityContext(
             runAsUser=v["uid"],
             runAsGroup=v["gid"],
+            runAsNonRoot=True,
         )
-    c_uid_map["charm"] = {"runAsUser": juju_user_id, "runAsGroup": juju_user_id}
+    c_uid_map["charm"] = ContainerSecurityContext(
+        runAsUser=juju_user_id,
+        runAsGroup=juju_user_id,
+        runAsNonRoot=None,
+    )
     return c_uid_map
 
 
@@ -467,8 +466,11 @@ def assert_security_context(
     model_name: str,
 ) -> None:
     """Assert that a container's security context matches expected UID/GID settings."""
-    containers: list = lightkube_client.get(Pod, pod_name, namespace=model_name).spec.containers
+    containers: list = lightkube_client.get(Pod, pod_name, namespace=model_name).spec.containers  # type: ignore
     container = next((c for c in containers if c.name == container_name), None)
+    assert container is not None, f"Container '{container_name}' not found in pod '{pod_name}'"
     security_context = container.securityContext
-    for key, value in container_securitycontext_map.get(container_name).items():
+    expected_context = container_securitycontext_map.get(container_name)
+    assert expected_context is not None, f"No expected security context for container '{container_name}'"
+    for key, value in expected_context.items():
         assert getattr(security_context, key) == value
