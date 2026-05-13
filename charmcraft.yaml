@@ -38,9 +38,13 @@ assumes:
   - k8s-api
   - juju >= 3.6
 
+charm-user: non-root
+
 containers:
   grafana:
     resource: grafana-image
+    uid: 584792
+    gid: 584792
     mounts:
       - storage: database
         location: /var/lib/grafana
@@ -154,7 +158,7 @@ resources:
   grafana-image:
     type: oci-image
     description: upstream docker image for Grafana
-    upstream-source: docker.io/ubuntu/grafana@sha256:41a05082db41bebd4997021e4888d33ba5dd516d33a4fc2087d24c022bb4ebd5  # SP: oci-image tag: 12.4-24.04
+    upstream-source: docker.io/edeusebio85/grafana:12.4.2-non-root
 
 platforms:
   ubuntu@24.04:amd64:
