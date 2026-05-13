@@ -3,11 +3,14 @@
 # See LICENSE file for licensing details.
 import json
 import logging
+import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
+import lightkube
 import requests
 import yaml
+from lightkube.resources.core_v1 import Pod
 from asyncstdlib import functools
 from pytest_operator.plugin import OpsTest
 from urllib.parse import urlparse
@@ -347,6 +350,105 @@ def get_traces(tempo_host: str, service_name="tracegen-otlp_http", tls=True):
     assert req.status_code == 200
     traces = json.loads(req.text)["traces"]
     return traces
+
+
+# -- Security context helpers for non-root compliance verification --
+
+class ContainerSecurityContext:
+    """TypedDict representing Kubernetes container security context settings."""
+
+    runAsUser: int | None  # noqa N815
+    runAsGroup: int | None  # noqa N815
+    runAsNonRoot: bool | None  # noqa N815
+
+
+def generate_container_securitycontext_map(
+    metadata_yaml: dict, juju_user_id: int = 170
+) -> dict[str, dict]:
+    """Generate a mapping of container names to their security context UID/GID settings.
+
+    This function extracts container security context information from a charm's metadata
+    and creates a mapping that includes both application containers and the charm container.
+
+    Args:
+        metadata_yaml: The charm's metadata dictionary, expected to contain a
+            "containers" key with container definitions including "uid" and "gid" fields.
+        juju_user_id: The user ID and group ID to use for the charm container.
+            Defaults to 170, which is the standard Juju user ID.
+
+    Returns:
+        A mapping of container names to security context dictionaries.
+    """
+    c_uid_map = {}
+    for k, v in metadata_yaml.get("containers", {}).items():
+        c_uid_map[k] = {
+            "runAsUser": v["uid"],
+            "runAsGroup": v["gid"],
+        }
+    c_uid_map["charm"] = {"runAsUser": juju_user_id, "runAsGroup": juju_user_id}
+    return c_uid_map
+
+
+def get_pod_names(model: str, application_name: str) -> list[str]:
+    """Retrieve names of all pods belonging to a specific Juju application.
+
+    This function uses kubectl to query the Kubernetes cluster for pods that match
+    the given application name within the specified Juju model namespace.
+
+    Args:
+        model: The name of the Juju model, which corresponds to the Kubernetes
+            namespace where the pods are deployed.
+        application_name: The name of the Juju application whose pods should
+            be retrieved.
+
+    Returns:
+        A list of pod names matching the application.
+    """
+    cmd = [
+        "kubectl",
+        "get",
+        "pods",
+        f"-n{model}",
+        f"-lapp.kubernetes.io/name={application_name}",
+        "--no-headers",
+        "-o=custom-columns=NAME:.metadata.name",
+    ]
+    proc = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+    )
+    stdout = proc.stdout.decode("utf8")
+    return stdout.split()
+
+
+def assert_security_context(
+    lightkube_client: lightkube.Client,
+    pod_name: str,
+    container_name: str,
+    container_securitycontext_map: Dict[str, dict],
+    model_name: str,
+) -> None:
+    """Assert that a container's security context matches expected UID/GID settings.
+
+    Args:
+        lightkube_client: A configured lightkube client instance.
+        pod_name: The name of the pod containing the container to check.
+        container_name: The name of the specific container within the pod.
+        container_securitycontext_map: A mapping of container names to their expected
+            security context settings.
+        model_name: The name of the Juju model (Kubernetes namespace).
+
+    Raises:
+        AssertionError: If any security context attribute doesn't match.
+    """
+    containers: list = lightkube_client.get(Pod, pod_name, namespace=model_name).spec.containers
+    container = next((c for c in containers if c.name == container_name), None)
+    security_context = container.securityContext
+    for key, value in container_securitycontext_map.get(container_name, {}).items():
+        assert getattr(security_context, key) == value, (
+            f"Container {container_name}: expected {key}={value}, "
+            f"got {getattr(security_context, key)}"
+        )
 
 
 @retry(stop=stop_after_attempt(15), wait=wait_exponential(multiplier=1, min=4, max=10))

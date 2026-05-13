@@ -7,13 +7,20 @@ from pathlib import Path
 import sh
 import pytest
 import yaml
-from helpers import oci_image
+import lightkube
+from helpers import (
+    assert_security_context,
+    generate_container_securitycontext_map,
+    get_pod_names,
+    oci_image,
+)
 
 # pyright: reportAttributeAccessIssue=false
 
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
+CONTAINERS_SECURITY_CONTEXT_MAP = generate_container_securitycontext_map(METADATA)
 app_name = "grafana"
 grafana_resources = {
     "grafana-image": oci_image("./charmcraft.yaml", "grafana-image"),
@@ -62,3 +69,24 @@ async def test_password_returns_correct_value_after_upgrading(ops_test, grafana_
     action = await ops_test.model.applications[app_name].units[0].run_action("get-admin-password")
     msg = (await action.wait()).results["admin-password"]
     assert pw == msg
+
+
+@pytest.mark.parametrize("container_name", list(CONTAINERS_SECURITY_CONTEXT_MAP.keys()))
+def test_container_security_context(
+    ops_test,
+    container_name: str,
+) -> None:
+    """Test container security context is correctly set.
+
+    Verify that container spec defines the security context with correct
+    user ID and group ID.
+    """
+    lightkube_client = lightkube.Client()
+    pod_name = get_pod_names(ops_test.model_name, app_name)[0]
+    assert_security_context(
+        lightkube_client,
+        pod_name,
+        container_name,
+        CONTAINERS_SECURITY_CONTEXT_MAP,
+        ops_test.model_name,
+    )
