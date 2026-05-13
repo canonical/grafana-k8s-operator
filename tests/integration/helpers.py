@@ -441,8 +441,11 @@ def assert_security_context(
     Raises:
         AssertionError: If any security context attribute doesn't match.
     """
-    containers: list = lightkube_client.get(Pod, pod_name, namespace=model_name).spec.containers
+    pod = lightkube_client.get(Pod, pod_name, namespace=model_name)
+    assert pod.spec is not None, f"Pod {pod_name} has no spec"
+    containers: list = pod.spec.containers
     container = next((c for c in containers if c.name == container_name), None)
+    assert container is not None, f"Container {container_name} not found in pod {pod_name}"
     security_context = container.securityContext
     for key, value in container_securitycontext_map.get(container_name, {}).items():
         assert getattr(security_context, key) == value, (
