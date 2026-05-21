@@ -197,7 +197,11 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- database relation
-        self._db_name = f"{self._topology.application}-{self._topology.model_uuid}"
+        # To avoid issues such as https://github.com/canonical/grafana-k8s-operator/issues/542
+        # we ensure that the DB name is at most 54 characters since PostgreSQL has a 63 character limit for names and we
+        # leave room for an additional 9 characters for the read-only replica that is created. The replica will append "_readonly" to the DB name,
+        # so we need to ensure that the original name is at most 54 characters to avoid exceeding the limit.
+        self._db_name = f"{self._topology.model_uuid}-{self._topology.application}"[:54]
         self._db = None
         self._db_type = "sqlite3"
 
