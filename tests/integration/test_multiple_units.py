@@ -28,6 +28,78 @@ grafana_resources = {
 }
 
 
+@pytest.mark.abort_on_fail
+async def test_multiple_units_with_postgresql_backend(ops_test, grafana_charm):
+    grafana_app_name = "grafana"
+
+    await asyncio.gather(
+        ops_test.model.deploy(
+            grafana_charm,
+            resources=grafana_resources,
+            application_name=grafana_app_name,
+            num_units=2,
+            trust=True,
+        ),
+        ops_test.model.deploy(
+            "pgbouncer-k8s",
+            application_name="pgbouncer",
+            channel="1/stable",
+            trust=True,
+        ),
+        ops_test.model.deploy(
+            "postgresql-k8s",
+            application_name="postgresql",
+            channel="14/stable",
+            trust=True,
+        ),
+    )
+
+    await asyncio.gather(
+        ops_test.model.add_relation(f"{grafana_app_name}:pgsql", "pgbouncer:database"),
+        ops_test.model.add_relation("pgbouncer", "postgresql:database"),
+    )
+
+    await asyncio.gather(
+        ops_test.model.wait_for_idle(
+            apps=[grafana_app_name],
+            status="active",
+            wait_for_exact_units=2,
+            timeout=1200,
+            idle_period=30,
+            raise_on_error=False,
+        ),
+        ops_test.model.wait_for_idle(
+            apps=["pgbouncer", "postgresql"],
+            status="active",
+            timeout=1200,
+            idle_period=30,
+            raise_on_error=False,
+        ),
+    )
+    await asyncio.gather(
+        ops_test.model.wait_for_idle(
+            apps=[grafana_app_name],
+            status="active",
+            wait_for_exact_units=2,
+            timeout=1200,
+            idle_period=30,
+            raise_on_error=True,
+        ),
+        ops_test.model.wait_for_idle(
+            apps=["pgbouncer", "postgresql"],
+            status="active",
+            timeout=1200,
+            idle_period=30,
+            raise_on_error=True,
+        ),
+    )
+
+    await asyncio.gather(
+        check_grafana_is_ready(ops_test, grafana_app_name, 0),
+        check_grafana_is_ready(ops_test, grafana_app_name, 1),
+    )
+
+
 @pytest.mark.skip
 async def test_grafana_dashboard_relation_data_with_grafana_tester(
     ops_test, grafana_charm, grafana_tester_charm
