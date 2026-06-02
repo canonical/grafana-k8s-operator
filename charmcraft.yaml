@@ -26,7 +26,7 @@ description: |
   - Configurable Kubernetes resource limits for CPU and memory.
 
 links:
-  documentation: https://discourse.charmhub.io/t/grafana-operator-k8s-docs-index/5612
+  documentation: https://documentation.ubuntu.com/observability/latest/
   website:
     - https://charmhub.io/grafana-k8s
   source:
