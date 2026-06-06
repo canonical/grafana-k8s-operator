@@ -3,9 +3,9 @@ groups:
     rules:
     - alert: GrafanaUnitIsUnavailable
       expr: up{} < 1
-      for: 0m
+      for: 5m
       labels:
-        severity: critical
+        severity: warning
       annotations:
         summary: Grafana unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} unavailable
         description: >
@@ -14,9 +14,9 @@ groups:
 
     - alert: GrafanaUnitIsDown
       expr: avg_over_time(up{}[1m]) < 0.5
-      for: 0m
+      for: 5m
       labels:
-        severity: critical
+        severity: warning
       annotations:
         summary: Grafana unit {{ $labels.juju_model }}/{{ $labels.juju_unit }} has been unreachable at least 50% of the time over the last minute
         description: >
