@@ -14,7 +14,7 @@ output "requires" {
     catalogue         = "catalogue",
     certificates      = "certificates",
     charm_tracing     = "charm-tracing",
-    database          = "database",
+    pgsql             = "pgsql",
     grafana_auth      = "grafana-auth",
     grafana_dashboard = "grafana-dashboard",
     grafana_source    = "grafana-source",
