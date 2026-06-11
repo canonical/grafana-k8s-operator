@@ -180,7 +180,7 @@ POLICY_RESOURCE_TYPES = {
 
 LIBID = "3f40cb7e3569454a92ac2541c5ca0a0c"  # Never change this
 LIBAPI = 0
-LIBPATCH = 19
+LIBPATCH = 20
 
 PYDEPS = [
     "lightkube",
@@ -455,6 +455,13 @@ class ServiceMeshConsumer(Object):
         if app_data is None:
             return {}
         return app_data.labels
+
+    @property
+    def enabled(self) -> bool:
+        """Return if the consumer is currently in the mesh."""
+        if self._relation is None or not self._relation.app:
+            return False
+        return True
 
     def mesh_type(self) -> Optional[MeshType]:
         """Return the type of the service mesh."""
