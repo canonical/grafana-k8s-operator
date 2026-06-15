@@ -154,10 +154,10 @@ resources:
   grafana-image:
     type: oci-image
     description: upstream docker image for Grafana
-    upstream-source: docker.io/ubuntu/grafana@sha256:41a05082db41bebd4997021e4888d33ba5dd516d33a4fc2087d24c022bb4ebd5  # SP: oci-image tag: 12.4-24.04
+    upstream-source: docker.io/ubuntu/grafana@sha256:1af2d3519cc3515708f855909a3a5329404079fd50d1cf6b69a7de40067447c4  # renovate: oci-image tag: 12.4-26.04_edge
 
 platforms:
-  ubuntu@24.04:amd64:
+  ubuntu@26.04:amd64:
 
 parts:
   charm:
