@@ -60,6 +60,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 )
 from charms.parca_k8s.v0.parca_scrape import ProfilingEndpointProvider
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer, IngressPerAppReadyEvent, IngressPerAppRevokedEvent
 from grafana import Grafana
@@ -154,14 +155,19 @@ class GrafanaCharm(CharmBase):
                 self.on.update_status,
             ],
         )
-        self.charm_tracing = TracingEndpointRequirer(
-            self, relation_name="charm-tracing", protocols=["otlp_http"]
+        self.charm_tracing = ops_tracing.Tracing(
+            self,
+            tracing_relation_name='charm-tracing',
+            ca_relation_name='receive-ca-cert',
         )
         self.workload_tracing = TracingEndpointRequirer(
             self, relation_name="workload-tracing", protocols=["otlp_grpc"]
         )
 
         self.profiling = ProfilingEndpointProvider(self, jobs=self._profiling_scrape_jobs)
+
+        # -- log forwarding
+        self._log_forwarding = LogForwarder(self, relation_name="logging")
 
         # -- grafana_source relation observations
         self.source_consumer = GrafanaSourceConsumer(
@@ -191,7 +197,11 @@ class GrafanaCharm(CharmBase):
         )
 
         # -- database relation
-        self._db_name = f"{self._topology.application}-grafana-k8s-{self._topology.model_uuid}"
+        # To avoid issues such as https://github.com/canonical/grafana-k8s-operator/issues/542
+        # we ensure that the DB name is at most 54 characters since PostgreSQL has a 63 character limit for names and we
+        # leave room for an additional 9 characters for the read-only replica that is created. The replica will append "_readonly" to the DB name,
+        # so we need to ensure that the original name is at most 54 characters to avoid exceeding the limit.
+        self._db_name = f"{self._topology.model_uuid}-{self._topology.application}"[:54]
         self._db = None
         self._db_type = "sqlite3"
 
@@ -319,7 +329,7 @@ class GrafanaCharm(CharmBase):
             icon="bar-chart",
             url=self.external_url,
             description=(
-                "Grafana allows you to query, visualize, alert on, and "
+                "Grafana allows you to query, alert on, and "
                 "visualize metrics from mixed datasources in configurable "
                 "dashboards for observability."
             ),
@@ -433,11 +443,6 @@ class GrafanaCharm(CharmBase):
         if not self.resource_patch.is_ready():
             logger.debug("Resource patch not ready yet. Skipping cluster update step.")
             return
-        if self.charm_tracing.is_ready() and (endpoint:= self.charm_tracing.get_endpoint("otlp_http")):
-            ops_tracing.set_destination(
-                url=endpoint + "/v1/traces",
-                ca=self._tls_config.ca if self._tls_config else None
-            )
         self.ingress.provide_ingress_requirements(scheme=self._scheme, port=WORKLOAD_PORT)
         if self._check_wrong_relations():
             return

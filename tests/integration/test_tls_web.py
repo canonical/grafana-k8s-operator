@@ -46,13 +46,17 @@ async def test_deploy(ops_test, grafana_charm):
     await asyncio.gather(
         ops_test.model.wait_for_idle(
             apps=[grafana.name, "pgsql"],
+            status="active",
             raise_on_error=False,
             timeout=1200,
+            idle_period=30,
         ),
         ops_test.model.wait_for_idle(
             apps=["ca"],
+            status="active",
             raise_on_error=False,
             timeout=600,
+            idle_period=30,
         ),
     )
 
@@ -73,17 +77,19 @@ async def test_tls_files_created(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_server_cert(ops_test: OpsTest):
     """Inspect server cert and confirm `X509v3 Subject Alternative Name` field is as expected."""
-    # echo \
-    #   | openssl s_client -showcerts -servername $IPADDR:9093 -connect $IPADDR:9093 2>/dev/null \
-    #   | openssl x509 -inform pem -noout -text
     for i in range(grafana.scale):
         grafana_ip = await unit_address(ops_test, grafana.name, i)
-        cmd = [
+        unit_name = f"{grafana.name}/{i}"
+        # Run openssl from inside the grafana container so the pod IP is reachable.
+        rc, stdout, stderr = await ops_test.juju(
+            "ssh",
+            "--container",
+            "grafana",
+            unit_name,
             "sh",
             "-c",
             f"echo | openssl s_client -showcerts -servername {grafana_ip}:3000 -connect {grafana_ip}:3000 2>/dev/null | openssl x509 -inform pem -noout -text",
-        ]
-        retcode, stdout, stderr = await ops_test.run(*cmd)
+        )
         fqdn = (
             f"{grafana.name}-{i}.{grafana.name}-endpoints.{ops_test.model_name}.svc.cluster.local"
         )

@@ -7,6 +7,11 @@ variable "app_name" {
 variable "channel" {
   description = "Channel that the charm is deployed from"
   type        = string
+
+  validation {
+    condition     = startswith(var.channel, "dev/")
+    error_message = "The track of the channel must be 'dev/'. e.g. 'dev/edge'."
+  }
 }
 
 variable "config" {
@@ -30,6 +35,12 @@ variable "model_uuid" {
   type        = string
 }
 
+variable "resources" {
+  description = "The charm's resources i.e., a resource revision number from CharmHub or a custom OCI image resource"
+  type        = map(string)
+  default     = {}
+}
+
 variable "revision" {
   description = "Revision number of the charm"
   type        = number
@@ -46,4 +57,10 @@ variable "units" {
   description = "Unit count/scale"
   type        = number
   default     = 1
+}
+
+variable "replace_triggers" {
+  description = "List of values that, when changed, trigger a full application replacement"
+  type        = list(any)
+  default     = []
 }

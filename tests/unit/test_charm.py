@@ -73,10 +73,10 @@ DB_CONFIG = {
 DATABASE_CONFIG_INI = """[database]
 type = postgres
 host = someaddress:5432
-name = grafana-k8s-grafana-k8s-{}
+name = {}-grafana-k8s
 user = relation_id_01
 password = password
-url = postgres://relation_id_01:password@someaddress:5432/grafana-k8s-grafana-k8s-{}
+url = postgres://relation_id_01:password@someaddress:5432/{}-grafana-k8s
 
 """
 
