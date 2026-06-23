@@ -25,7 +25,7 @@ async def smtp_secret(ops_test):
     """Create a Juju secret and grant it to the Grafana charm."""
     secret = await ops_test.model.add_secret(
         SECRET_NAME,
-        ["password", "my-smtp-password"],
+        ["password=my-smtp-password",],
     )
     await ops_test.model.grant_secret(SECRET_NAME, GRAFANA_APP_NAME)
     yield secret["secret-id"]
