@@ -96,7 +96,7 @@ def test_get_value_model_error(getter, model):
 
     # WHEN get_value is called
     # THEN a SecretError is raised with a permissions message
-    with pytest.raises(SecretError, match="missing charm permissions"):
+    with pytest.raises(SecretError, match="Missing charm permissions"):
         getter.get_value(url)
 
 
