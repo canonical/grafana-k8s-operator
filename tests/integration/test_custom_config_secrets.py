@@ -28,7 +28,7 @@ async def smtp_secret(ops_test):
         ["password=my-smtp-password",],
     )
     await ops_test.model.grant_secret(SECRET_NAME, GRAFANA_APP_NAME)
-    yield secret["secret-id"]
+    yield secret.split(":")[-1]
 
 
 async def read_grafana_config(ops_test) -> str:
@@ -60,15 +60,17 @@ async def test_deploy_grafana(ops_test, grafana_charm):
     )
 
 
-async def test_secret_url_is_resolved_in_config(ops_test, smtp_secret):
+async def test_secret_url_is_resolved_in_config(ops_test, smtp_secret, tmp_path):
     """Verify that a secret:// URL in custom_config is replaced by the secret value."""
-    custom_config = (
+    # Create a local INI file and pass it using the @file syntax
+    config_file = tmp_path / "smtp-config.ini"
+    config_file.write_text(
         "[smtp]\n"
         "enabled = true\n"
         f"password = secret://{smtp_secret}/password\n"
     )
     await ops_test.model.applications[GRAFANA_APP_NAME].set_config(
-        {"custom_config": custom_config}
+        {"custom_config": f"@{config_file}"}
     )
 
     await ops_test.model.wait_for_idle(
