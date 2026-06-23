@@ -7,8 +7,8 @@
 import logging
 from typing import Optional
 from urllib.parse import urlparse
+import ops
 
-from ops.model import Model, ModelError, SecretNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class SecretError(Exception):
 class SecretGetter:
     """A getter for Juju secrets referenced by secret:// URLs."""
 
-    def __init__(self, model: Model):
+    def __init__(self, model: ops.Model):
         self._model = model
 
     def get_value(self, secret_url: str) -> Optional[str]:
@@ -50,10 +50,10 @@ class SecretGetter:
         secret_key = paths[0]
         try:
             secret = self._model.get_secret(id=secret_id)
-            content = secret.get_content(refresh=True)
-        except SecretNotFoundError as e:
+        except ops.model.SecretNotFoundError as e:
+            logger.error("Secret not found for URL %s: %s", secret_url, e)
             raise SecretError("Secret not found in custom_config.") from e
-        except ModelError as e:
+        except ops.model.ModelError as e:
             logger.error(
                 "missing charm permissions for the secret in custom_config. "
                 "run 'juju grant-secret' to resolve: %s",
@@ -66,6 +66,7 @@ class SecretGetter:
             logger.error("unexpected error fetching secret: %s", e)
             raise SecretError("Unexpected error fetching secret.") from e
 
+        content = secret.get_content(refresh=True)
         if not (value := content.get(secret_key)):
             raise SecretError("Secret not found in custom_config.")
 
