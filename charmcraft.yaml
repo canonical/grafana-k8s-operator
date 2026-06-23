@@ -286,6 +286,14 @@ config:
         Note that this config option accepts only a small subset of the grafana.ini file.
         Currently supported sections:
         - [smtp], ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#smtp
+
+        Sensitive values can be referenced from Juju secrets using a `secret://<secret-id>/<key>`
+        URL in place of the plaintext value. The secret must exist in the same model and be
+        granted to the charm with `juju grant-secret`. For example:
+
+          juju add-secret smtp-config password="my-smtp-password"
+          juju grant-secret smtp-config grafana-k8s
+          juju config grafana-k8s custom_config="[smtp]\nenabled = true\npassword = secret://<secret-id>/password"
     admin_roles:
       description: |
         Unquoted, comma-separated list of groups oAuth2/OIDC that should be granted admin
