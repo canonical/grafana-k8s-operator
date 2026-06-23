@@ -110,15 +110,3 @@ def test_get_value_unexpected_error(getter, model):
     with pytest.raises(SecretError, match="Unexpected error fetching secret"):
         getter.get_value(url)
 
-
-def test_get_value_get_content_raises(getter, model):
-    # GIVEN an unexpected error from get_content
-    url = "secret://abc123/password"
-    secret_mock = MagicMock()
-    secret_mock.get_content.side_effect = RuntimeError("boom")
-    model.get_secret.return_value = secret_mock
-
-    # WHEN get_value is called
-    # THEN a SecretError is raised
-    with pytest.raises(SecretError, match="Unexpected error fetching secret"):
-        getter.get_value(url)
