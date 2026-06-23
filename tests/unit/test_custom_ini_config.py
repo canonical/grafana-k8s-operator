@@ -6,7 +6,7 @@
 
 from unittest.mock import MagicMock
 
-from ops.testing import BlockedStatus, ActiveStatus
+from ops import BlockedStatus, ActiveStatus
 import pytest
 from src.custom_ini_config import resolve_secrets, validate
 from src.grafana_config import GrafanaConfig
