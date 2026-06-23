@@ -60,17 +60,15 @@ async def test_deploy_grafana(ops_test, grafana_charm):
     )
 
 
-async def test_secret_url_is_resolved_in_config(ops_test, smtp_secret, tmp_path):
+async def test_secret_url_is_resolved_in_config(ops_test, smtp_secret):
     """Verify that a secret:// URL in custom_config is replaced by the secret value."""
-    # Create a local INI file and pass it using the @file syntax
-    config_file = tmp_path / "smtp-config.ini"
-    config_file.write_text(
+    custom_config_content = (
         "[smtp]\n"
         "enabled = true\n"
         f"password = secret://{smtp_secret}/password\n"
     )
     await ops_test.model.applications[GRAFANA_APP_NAME].set_config(
-        {"custom_config": f"@{config_file}"}
+        {"custom_config": custom_config_content}
     )
 
     await ops_test.model.wait_for_idle(
@@ -105,4 +103,4 @@ async def test_invalid_secret_url_blocks(ops_test):
 
     status = await ops_test.model.get_status()
     app = status["applications"][GRAFANA_APP_NAME]
-    assert app["units"][f"{GRAFANA_APP_NAME}/0"]["workload-status"]["current"] == "blocked"
+    assert app["status"].status == "blocked"

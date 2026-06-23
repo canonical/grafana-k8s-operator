@@ -51,23 +51,23 @@ class SecretGetter:
         try:
             secret = self._model.get_secret(id=secret_id)
         except ops.model.SecretNotFoundError as e:
-            logger.error("Secret not found for URL %s: %s", secret_url, e)
-            raise SecretError("Secret not found in custom_config.") from e
+            logger.error("Secret: %s not found", secret_id)
+            raise SecretError("Secret not found.") from e
         except ops.model.ModelError as e:
             logger.error(
-                "missing charm permissions for the secret in custom_config. "
-                "run 'juju grant-secret' to resolve: %s",
-                e,
+                "missing charm permissions for secret: %s. "
+                "run 'juju grant-secret' to resolve",
+                secret_id,
             )
             raise SecretError(
-                "missing charm permissions for secret in custom_config."
+                "Missing charm permissions."
             ) from e
         except Exception as e:
-            logger.error("unexpected error fetching secret: %s", e)
+            logger.error("Unexpected error fetching secret: %s", e)
             raise SecretError("Unexpected error fetching secret.") from e
 
         content = secret.get_content(refresh=True)
         if not (value := content.get(secret_key)):
-            raise SecretError("Secret not found in custom_config.")
+            raise SecretError("Secret not found.")
 
         return value
