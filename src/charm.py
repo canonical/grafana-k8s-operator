@@ -35,6 +35,7 @@ from ops.charm import (
 )
 from ops.model import Port
 from secret_storage import SecretStorage
+from secrets_helper import SecretGetter
 
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
@@ -222,7 +223,8 @@ class GrafanaCharm(CharmBase):
                                             enable_reporting = bool(self.config["reporting_enabled"]),
                                             enable_external_db=self._enable_external_db,
                                             tracing_endpoint=self._workload_tracing_endpoint,
-                                            custom_config=cast(Optional[str], self.config.get("custom_ini_config")),
+                                            custom_config=cast(Optional[str], self.config.get("custom_config")),
+                                            secret_getter=SecretGetter(self.model).get_value,
                                             )
         self._grafana_service = Grafana(
                                         container=self.unit.get_container("grafana"),

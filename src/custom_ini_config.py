@@ -3,9 +3,12 @@
 
 """Validation for custom ("extra") ini sections."""
 
-from typing import Literal, Optional
-from pydantic import BaseModel, EmailStr, ValidationError, ConfigDict
 import configparser
+import re
+from typing import Callable, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr, ValidationError
+
 
 class _SMTPSection(BaseModel):
     """SMTP server settings.
@@ -52,7 +55,10 @@ class _SMTPSection(BaseModel):
     """Enable trace propagation in email headers, using the traceparent, tracestate and (optionally) baggage fields. Default is false. To enable, you must first configure tracing in one of the tracing.opentelemetry.* sections."""
 
 
-def validate(ini_sections: Optional[str]=None):
+_SECRET_URL_RE = re.compile(r"secret://[^\s]+")
+
+
+def validate(ini_sections: Optional[str] = None):
     """Validate custom ini sections.
 
     Raises:
@@ -81,4 +87,37 @@ def validate(ini_sections: Optional[str]=None):
                 validator.model_validate(config[name])
             except ValidationError as e:
                 raise ValueError(f"Invalid [{name}] section: {e}")
+
+
+def resolve_secrets(
+    ini_sections: Optional[str],
+    secret_getter: Callable[[str], Optional[str]],
+) -> Optional[str]:
+    """Resolve secret:// URLs in an ini string to their actual values.
+
+    Args:
+        ini_sections: The raw ini configuration string.
+        secret_getter: A callable that takes a secret URL and returns the secret value.
+
+    Returns:
+        The ini string with secret URLs replaced by their resolved values,
+        or the original value if ini_sections is None.
+
+    Raises:
+        ValueError: If a secret URL is malformed or the secret cannot be resolved.
+    """
+    if ini_sections is None:
+        return None
+
+    def _replace_secret(match: re.Match) -> str:
+        secret_url = match.group(0)
+        value = secret_getter(secret_url)
+        if value is None:
+            raise ValueError(f"Could not resolve secret URL: {secret_url}")
+        return value
+
+    try:
+        return _SECRET_URL_RE.sub(_replace_secret, ini_sections)
+    except Exception as e:
+        raise ValueError(f"Failed to resolve secrets in custom_config: {e}") from e
 

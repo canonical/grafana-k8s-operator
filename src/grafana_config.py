@@ -2,19 +2,18 @@
 # See LICENSE file for licensing details.
 """Grafana config generator."""
 
-import logging
-import yaml
-from models import DatasourceConfig
-from typing import Callable, Optional, Dict, Any
-from charms.hydra.v0.oauth import (
-    OauthProviderConfig
-)
-from ops import ActiveStatus, BlockedStatus
-from constants import DATABASE_PATH, DASHBOARDS_DIR
 import configparser
+import logging
 from io import StringIO
+from typing import Any, Callable, Dict, Optional
+
+import yaml
+from charms.hydra.v0.oauth import OauthProviderConfig
+from ops import ActiveStatus, BlockedStatus
 
 import custom_ini_config
+from constants import DATABASE_PATH, DASHBOARDS_DIR
+from models import DatasourceConfig
 
 
 logger = logging.getLogger()
@@ -42,6 +41,7 @@ class GrafanaConfig:
                 enable_external_db: bool = False,
                 tracing_endpoint: Optional[str] = None,
                 custom_config: Optional[str] = None,
+                secret_getter: Callable[[str], Optional[str]] = lambda _: None,
                  ):
         self._datasources_config = datasources_config
         self._oauth_config = oauth_config
@@ -54,6 +54,7 @@ class GrafanaConfig:
         self._enable_external_db = enable_external_db
         self._tracing_endpoint = tracing_endpoint
         self._custom_config = custom_config
+        self._secret_getter = secret_getter
 
 
     @property
@@ -87,6 +88,7 @@ class GrafanaConfig:
         """Intended to be called by collect-unit-status."""
         try:
             custom_ini_config.validate(self._custom_config)
+            custom_ini_config.resolve_secrets(self._custom_config, self._secret_getter)
         except ValueError as e:
             logger.error("Invalid custom_config: %s", e)
             return BlockedStatus("Invalid custom_config; see debug-log")
@@ -98,10 +100,14 @@ class GrafanaConfig:
         if self._custom_config is not None:
             try:
                 custom_ini_config.validate(self._custom_config)
+                resolved_config = custom_ini_config.resolve_secrets(
+                    self._custom_config, self._secret_getter
+                )
             except ValueError:
                 pass
             else:
-                configs.append(self._custom_config)
+                if resolved_config is not None:
+                    configs.append(resolved_config)
 
         if not self._enable_external_db:
             with StringIO() as data:
