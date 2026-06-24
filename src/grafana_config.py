@@ -214,7 +214,6 @@ class GrafanaConfig:
         config_ini = configparser.ConfigParser()
         # Ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#analytics
         config_ini["analytics"] = {
-            "enabled": "false",
             "application_insights_auto_route_tracking": "false",
             "application_insights_connection_string": "false",
             "feedback_links_enabled": "false",

@@ -33,7 +33,6 @@ def test_reporting_disabled(ctx, containers):
     config.read(grafana_config_path)
     assert "analytics" in config
     assert dict(config["analytics"]) == {
-        "enabled": "false",
         "application_insights_auto_route_tracking": "false",
         "application_insights_connection_string": "false",
         "feedback_links_enabled": "false",
