@@ -11,6 +11,10 @@ The problem: The grafana_dashboard library generates a new UUID every time
 _upset_dashboards_on_relation() is called, which happens on every config-changed
 event. This causes continuous databag updates even when dashboard content hasn't
 changed, leading to unnecessary relation-changed events on the consumer side.
+
+NOTE: This test is currently skipped because it deploys opentelemetry-collector-k8s
+from charmhub, which still has the old version of the grafana_dashboard library.
+The test will pass once opentelemetry-collector-k8s updates to LIBPATCH >= 50.
 """
 
 import json
@@ -100,6 +104,11 @@ def get_status_log_executing_count(juju: jubilant.Juju, unit: str) -> int:
     output = juju.cli("show-status-log", unit, "--format", "json", "-n", "100")
     entries = json.loads(output)
     return sum(1 for e in entries if e.get("status") == "executing")
+
+
+pytestmark = pytest.mark.skip(
+    reason="Skipped until opentelemetry-collector-k8s updates to grafana_dashboard LIBPATCH >= 50"
+)
 
 
 @pytest.mark.abort_on_fail
