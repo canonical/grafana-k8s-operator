@@ -5,7 +5,7 @@ import json
 import unittest
 
 import pytest
-from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
+from charms.grafana_k8s.v1.grafana_source import GrafanaSourceConsumer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -402,3 +402,146 @@ class TestSourceConsumer(unittest.TestCase):
         self.harness.charm.on["grafana-source"].relation_broken.emit(rel)
         self.assertEqual(self.harness.charm._stored.source_delete_events, 0)
         self.assertEqual(len(self.harness.charm.grafana_consumer.sources_to_delete), 0)
+
+
+class TestAppLevelSourceConsumer(unittest.TestCase):
+    """Coverage for application-level (load-balanced) datasources.
+
+    These tests exercise the HA case from the bug report: a provider that advertises a
+    single, load-balanced address in its application databag should yield exactly one
+    datasource whose UID does NOT contain a unit number, so it is stable across leader
+    re-elections.
+    """
+
+    def setUp(self):
+        meta = open("charmcraft.yaml")
+        self.harness = Harness(GrafanaCharm, meta=meta)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
+        self.harness.begin()
+        self.harness.add_relation("grafana", "grafana-k8s")
+
+    def _setup_app_source(self, app_host="http://prometheus.test-model.svc.cluster.local:9090"):
+        rel_id = self.harness.add_relation("grafana-source", "prometheus")
+        self.harness.update_relation_data(
+            rel_id,
+            "prometheus",
+            {
+                "grafana_source_data": json.dumps(SOURCE_DATA),
+                "grafana_source_app_host": app_host,
+            },
+        )
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        return rel_id
+
+    def test_app_level_source_created_without_unit_number(self):
+        # (a) app data only -> exactly one app-level datasource, UID has no unit number
+        rel_id = self._setup_app_source()
+        sources = self.harness.charm.source_by_rel_id(rel_id)
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["source_name"], generate_source_name(SOURCE_DATA))
+        self.assertIsNone(sources[0]["unit"])
+        self.assertEqual(
+            sources[0]["url"], "http://prometheus.test-model.svc.cluster.local:9090"
+        )
+
+    def test_app_level_uid_published_back_to_provider(self):
+        # (e) app_datasource_uid is published back; per-unit map is empty
+        rel_id = self._setup_app_source()
+        app_data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+        self.assertEqual(app_data["app_datasource_uid"], generate_source_name(SOURCE_DATA))
+        self.assertEqual(json.loads(app_data["datasource_uids"]), {})
+
+    def test_both_app_and_unit_sources_created(self):
+        # (c) both app and unit data -> N + 1 datasources
+        rel_id = self.harness.add_relation("grafana-source", "prometheus")
+        self.harness.update_relation_data(
+            rel_id,
+            "prometheus",
+            {
+                "grafana_source_data": json.dumps(SOURCE_DATA),
+                "grafana_source_app_host": "http://prometheus.test-model.svc.cluster.local:9090",
+            },
+        )
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.update_relation_data(
+            rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
+        )
+        sources = self.harness.charm.source_by_rel_id(rel_id)
+        names = sorted(s["source_name"] for s in sources)
+        self.assertEqual(
+            names,
+            sorted(
+                [
+                    generate_source_name(SOURCE_DATA),
+                    "{}_0".format(generate_source_name(SOURCE_DATA)),
+                ]
+            ),
+        )
+
+    def test_unit_to_app_migration_deletes_old_unit_source(self):
+        # (d) on unit->app transition, the old per-unit UID is scheduled for deletion
+        rel_id = self.harness.add_relation("grafana-source", "prometheus")
+        self.harness.update_relation_data(
+            rel_id, "prometheus", {"grafana_source_data": json.dumps(SOURCE_DATA)}
+        )
+        self.harness.add_relation_unit(rel_id, "prometheus/0")
+        self.harness.update_relation_data(
+            rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
+        )
+        # sanity: one per-unit source exists
+        self.assertEqual(
+            self.harness.charm.source_by_rel_id(rel_id)[0]["source_name"],
+            "{}_0".format(generate_source_name(SOURCE_DATA)),
+        )
+
+        # WHEN the provider switches to app mode (clears unit host, sets app host)
+        self.harness.update_relation_data(
+            rel_id,
+            "prometheus",
+            {"grafana_source_app_host": "http://prometheus.test-model.svc.cluster.local:9090"},
+        )
+        self.harness.update_relation_data(rel_id, "prometheus/0", {"grafana_source_host": ""})
+
+        # THEN the old per-unit source is scheduled for deletion and the app source remains
+        sources = self.harness.charm.source_by_rel_id(rel_id)
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["source_name"], generate_source_name(SOURCE_DATA))
+        self.assertIn(
+            "{}_0".format(generate_source_name(SOURCE_DATA)),
+            self.harness.charm.grafana_consumer.sources_to_delete,
+        )
+
+    def test_app_uid_stable_across_leader_reelection(self):
+        # (f) the app-level UID does not depend on any unit, so re-running reconcile
+        # (as happens on/after a leader re-election) leaves the UID unchanged.
+        rel_id = self._setup_app_source()
+        first = self.harness.charm.source_by_rel_id(rel_id)[0]["source_name"]
+
+        # Simulate a leader re-election: leadership churns and sources are re-derived.
+        self.harness.set_leader(False)
+        self.harness.set_leader(True)
+        self.harness.charm.grafana_consumer.update_sources()
+
+        second = self.harness.charm.source_by_rel_id(rel_id)[0]["source_name"]
+        self.assertEqual(first, second)
+        self.assertNotIn("_0", second)
+
+    def test_app_source_survives_unit_departure(self):
+        # The app-level datasource is load-balanced and must survive a single provider
+        # unit departing (it is only removed when the whole relation is broken).
+        rel_id = self._setup_app_source()
+        self.assertEqual(len(self.harness.charm.source_by_rel_id(rel_id)), 1)
+
+        # WHEN a provider unit departs
+        self.harness.remove_relation_unit(rel_id, "prometheus/0")
+
+        # THEN the app-level source is preserved and not scheduled for deletion
+        sources = self.harness.charm.source_by_rel_id(rel_id)
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["source_name"], generate_source_name(SOURCE_DATA))
+        self.assertNotIn(
+            generate_source_name(SOURCE_DATA),
+            self.harness.charm.grafana_consumer.sources_to_delete,
+        )
+

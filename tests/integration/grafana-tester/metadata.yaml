@@ -23,3 +23,10 @@ provides:
     interface: grafana_dashboard
   grafana-auth:
     interface: grafana_auth
+requires:
+  ingress:
+    interface: ingress
+    limit: 1
+  ingress-per-unit:
+    interface: ingress_per_unit
+    limit: 1
