@@ -897,6 +897,15 @@ class GrafanaSourceConsumer(Object):
 
             data.append(app_source_data)
 
+        if not data:
+            logger.warning(
+                "grafana-source relation %s (app %r) provided source metadata but no "
+                "datasource address (neither `grafana_source_host` nor "
+                "`grafana_source_app_host`); no datasource will be created.",
+                rel.id,
+                rel.app.name if rel.app else "unknown",
+            )
+
         # share the unique source names back to the datasource units. The per-unit UIDs
         # go in the unit-keyed map; the app-level UID is published separately.
         self._publish_source_uids(
@@ -966,7 +975,7 @@ class GrafanaSourceConsumer(Object):
 
                 # Re-update the list of stored sources, preserving all non-departing
                 # sources (including the app-level source).
-                stored_sources[rel_id] = [
+                stored_sources[str(rel_id)] = [
                     dict(s) for s in removed_source if s.get("unit") != event.unit.name
                 ]
             else:

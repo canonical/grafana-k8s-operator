@@ -489,7 +489,7 @@ class TestAppLevelSourceConsumer(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id, "prometheus/0", {"grafana_source_host": "1.2.3.4:9090"}
         )
-        # sanity: one per-unit source exists
+        # coherence check: one per-unit source exists
         self.assertEqual(
             self.harness.charm.source_by_rel_id(rel_id)[0]["source_name"],
             "{}_0".format(generate_source_name(SOURCE_DATA)),
