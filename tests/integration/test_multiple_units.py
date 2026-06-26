@@ -191,7 +191,7 @@ async def test_grafana_dashboard_relation_data_with_grafana_tester(
     tester_dashboards = [d.update(update_dynamic_fields) for d in tester_dashboards]
     assert tester_dashboards[0] == tester_dashboards[1]
 
-    datasource_suffix = "{}_0".format(tester_app_name)
+    datasource_suffix = tester_app_name
     datasources_with_relation = await asyncio.gather(
         get_grafana_datasources(ops_test, grafana_app_name, 0),
         get_grafana_datasources(ops_test, grafana_app_name, 1),
