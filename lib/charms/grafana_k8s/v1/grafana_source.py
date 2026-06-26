@@ -56,14 +56,18 @@ library, it only receives the URL you give it):
 
 ### Upgrade implications
 
-- On a coordinated upgrade of Grafana together with a provider that switches to app
-  mode, that datasource's UID changes **once** (from `juju_..._{n}` to `juju_..._{app}`),
-  which breaks dashboards/alerts referencing the old UID a single time; users must
-  re-point them once. This is a one-off, deliberate break rather than the recurring one
-  it replaces.
-- If a provider is upgraded but Grafana is not, the new application-databag field is
-  simply ignored by the old consumer, and the previous per-unit behaviour continues
-  (no regression).
+**This is a coordinated rollout** — Grafana and provider charms should be upgraded
+together.
+
+- **Both upgraded**: the datasource UID changes **once** (from `juju_..._{n}` to
+  `juju_..._{app}`), which breaks dashboards/alerts referencing the old UID a single
+  time; users must re-point them once. This is a one-off, deliberate break rather than
+  the recurring one it replaces.
+- **Old Grafana + new provider (app mode)**: the old v0 consumer ignores
+  `grafana_source_app_host` and sees an empty `grafana_source_host`, resulting in **no
+  datasource**. Upgrade Grafana to restore the datasource.
+- **New Grafana + old provider**: the old fragile per-unit behaviour continues (no
+  change until the provider is also upgraded).
 
 ## Provider Library Usage
 
@@ -75,21 +79,22 @@ use case of a Prometheus (or Prometheus-compatible) datasource
 provider in a charm which `provides: grafana-source`, creation of a
 `GrafanaSourceProvider` object with the default arguments is sufficient.
 
-The default arguments are:
+The constructor arguments are:
 
     `charm`: `self` from the charm instantiating this library
-    `source_type`: None
-    `source_port`: None
-    `relation_name`: grafana-source
-    `refresh_event`: A `PebbleReady` event from `charm`, used to refresh
-        the IP address sent to Grafana on a charm lifecycle event or
-        pod restart
-    `extra_fields`: None
-    `secure_extra_fields`: None
-    `app_datasource`: True
-    `unit_datasources`: False
-    `app_datasource_url`: None
-    `unit_datasource_url`: None
+    `source_type`: **required** — the Grafana datasource type (e.g. "prometheus",
+        "loki", "tempo", "mimir", "alertmanager")
+    `source_port`: the port the datasource listens on (default: "")
+    `relation_name`: the relation name (default: "grafana-source")
+    `refresh_event`: a `PebbleReady` event from `charm`, used to refresh
+        the address sent to Grafana on a charm lifecycle event or pod restart
+        (default: auto-detected from the charm's single container, if any)
+    `extra_fields`: additional fields for Grafana's `jsonData` (default: None)
+    `secure_extra_fields`: additional fields for Grafana's `secureJsonData` (default: None)
+    `app_datasource`: publish a single app-level datasource (default: True)
+    `unit_datasources`: publish per-unit datasources (default: False)
+    `app_datasource_url`: explicit URL for the app-level datasource (default: None)
+    `unit_datasource_url`: explicit URL for this unit's datasource (default: None)
 
 The values of `app_datasource_url` / `unit_datasource_url` should be a fully-resolvable
 URL for a valid Grafana source, e.g., `http://example.com/api` or similar.
@@ -121,22 +126,30 @@ specification via YAML files. Depending on the `app_datasource`/`unit_datasource
 flags, this is either a single application-level datasource, one datasource per unit,
 or both.
 
-This information is added to the relation data for the charms as serialized JSON
-from a dict, with a structure of:
+This information is added to the relation data for the charms with the following
+structure:
+
+**Application databag** (written by leader):
 ```
 {
-    "application": {
-        "model": charm.model.name, # from `charm` in the constructor
+    "grafana_source_data": {  # JSON-encoded
+        "model": charm.model.name,
         "model_uuid": charm.model.uuid,
         "application": charm.model.app.name,
         "type": source_type,
-        # the load-balanced, application-level address (app_datasource=True):
-        "grafana_source_app_host": {scheme}://{app}.{model}.svc.cluster.local:{port}{path},
+        "extra_fields": {...},
+        "secure_extra_fields": {...},
     },
-    "unit/0": {
-        # this unit's own address (unit_datasources=True):
-        "grafana_source_host": {ip_address}:{port}{path},
-    },
+    # app-level address (when app_datasource=True):
+    "grafana_source_app_host": "{scheme}://{app}.{model}.svc.cluster.local:{port}{path}",
+}
+```
+
+**Unit databag** (written by each unit when unit_datasources=True):
+```
+{
+    "grafana_source_host": "{scheme}://{fqdn}:{port}{path}",
+}
 ```
 
 This is ingested by :class:`GrafanaSourceConsumer`, and is sufficient for configuration.
@@ -162,7 +175,11 @@ For example a Grafana charm may instantiate the
     def __init__(self, *args):
         super().__init__(*args)
         ...
-        self.grafana_source_consumer = GrafanaSourceConsumer(self)
+        self.grafana_source_consumer = GrafanaSourceConsumer(
+            self,
+            grafana_uid=self.unique_name,
+            grafana_base_url=self.external_url,
+        )
         ...
 
 2. A Grafana charm also needs to listen to the
