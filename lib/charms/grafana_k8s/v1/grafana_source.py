@@ -684,14 +684,14 @@ class GrafanaSourceProvider(Object):
             # Application-level datasource: only the leader writes to the app databag.
             if not self._charm.unit.is_leader():
                 continue
-            
+
             if self._app_datasource:
                 app_host = f"{self._charm.app.name}.{self._charm.model.name}.svc.cluster.local"
                 relation.data[self._charm.app]["grafana_source_app_host"] = self._build_url(
-                        self._app_datasource_url, app_host
-                    )
-                else:
-                    relation.data[self._charm.app]["grafana_source_app_host"] = ""
+                    self._app_datasource_url, app_host
+                )
+            else:
+                relation.data[self._charm.app]["grafana_source_app_host"] = ""
 
 
 class GrafanaSourceConsumer(Object):
