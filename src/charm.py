@@ -45,7 +45,7 @@ from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_auth import AuthRequirer, AuthRequirerCharmEvents
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardConsumer
 from charms.grafana_k8s.v0.grafana_metadata import GrafanaMetadataProvider
-from charms.grafana_k8s.v0.grafana_source import (
+from charms.grafana_k8s.v1.grafana_source import (
     GrafanaSourceConsumer,
 )
 from charms.hydra.v0.oauth import (

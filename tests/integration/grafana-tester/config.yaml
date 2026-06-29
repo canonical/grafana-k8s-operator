@@ -7,3 +7,13 @@ options:
       Really doesn't do anything at all. Makes Juju happy so it can
       deploy
     default: info
+  app_datasource:
+    type: boolean
+    description: |
+      Whether to advertise a single, load-balanced application-level datasource.
+    default: true
+  unit_datasources:
+    type: boolean
+    description: |
+      Whether to advertise one datasource per unit.
+    default: false

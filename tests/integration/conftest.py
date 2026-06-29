@@ -72,8 +72,10 @@ def copy_grafana_libraries_into_tester_charm(ops_test: OpsTest) -> None:
         Path("lib/charms/", lib)
         for lib in [
             "grafana_k8s/v0/grafana_dashboard.py",
-            "grafana_k8s/v0/grafana_source.py",
+            "grafana_k8s/v1/grafana_source.py",
             "grafana_k8s/v0/grafana_auth.py",
+            # ingress-per-app, used by the tester for app-level datasources behind ingress
+            "traefik_k8s/v2/ingress.py",
         ]
     ]
     for lib in libs:
@@ -112,6 +114,9 @@ async def grafana_charm(ops_test: OpsTest) -> Path:
 @timed_memoizer
 async def grafana_tester_charm(ops_test: OpsTest) -> Path:
     """A charm to integration test the Grafana charm."""
+    if charm_file := os.environ.get("TESTER_CHARM_PATH"):
+        return Path(charm_file)
+
     charm_path = "tests/integration/grafana-tester"
     charm = await ops_test.build_charm(charm_path)
     return charm

@@ -1,3 +1,4 @@
 ops
 jsonschema
 cosl
+pydantic

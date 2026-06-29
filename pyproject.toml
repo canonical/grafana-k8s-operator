@@ -37,8 +37,8 @@ dev = [
   "cosl",
   "pydantic",
   # Integration
-  "juju<=3.3.0,>=3.0",
-  "websockets<14.0",
+  "juju>=3.6,<3.7",
+  "websockets>=13.0.1,<14.0",
   "lightkube",
   "minio",
   "oauth-tools",
@@ -85,6 +85,16 @@ convention = "google"
 extraPaths = ["lib"]
 pythonVersion = "3.10"
 pythonPlatform = "All"
+# The integration tester charm vendors its own third-party charm libraries (e.g.
+# traefik ingress). Those vendored copies are not on pyright's search path (only the
+# top-level `lib` is) and are populated at integration-test time, so exclude them from
+# analysis. The tester's own `src/charm.py` remains type-checked.
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    "tests/integration/grafana-tester/lib",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
