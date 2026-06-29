@@ -76,6 +76,8 @@ async def test_create_and_check_datasource_and_dashboard_before_delete(ops_test)
     )
     assert tester_dashboard != {}
 
+    # The tester defaults to a single, load-balanced application-level datasource, whose
+    # name ends with the application name (no `_<unit>` suffix).
     datasource_suffix = tester_app_name
     datasources_with_relation = await get_grafana_datasources(ops_test, grafana_app_name, 0)
     tester_datasource = get_datasource_for(datasource_suffix, datasources_with_relation)
