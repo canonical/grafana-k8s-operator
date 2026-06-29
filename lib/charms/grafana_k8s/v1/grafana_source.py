@@ -672,21 +672,22 @@ class GrafanaSourceProvider(Object):
         refreshed after a pod or machine/VM restart.
         """
         for relation in self._charm.model.relations[self._relation_name]:
+            grafana_source_host = ""
             # Per-unit datasource: this unit advertises its own address.
             if self._unit_datasources:
-                relation.data[self._charm.unit]["grafana_source_host"] = self._build_url(
+                grafana_source_host = self._build_url(
                     self._unit_datasource_url, socket.getfqdn()
                 )
-            else:
-                relation.data[self._charm.unit]["grafana_source_host"] = ""
+
+            relation.data[self._charm.unit]["grafana_source_host"] = grafana_source_host
 
             # Application-level datasource: only the leader writes to the app databag.
-            if self._charm.unit.is_leader():
-                if self._app_datasource:
-                    app_host = "{}.{}.svc.cluster.local".format(
-                        self._charm.app.name, self._charm.model.name
-                    )
-                    relation.data[self._charm.app]["grafana_source_app_host"] = self._build_url(
+            if not self._charm.unit.is_leader():
+                continue
+            
+            if self._app_datasource:
+                app_host = f"{self._charm.app.name}.{self._charm.model.name}.svc.cluster.local"
+                relation.data[self._charm.app]["grafana_source_app_host"] = self._build_url(
                         self._app_datasource_url, app_host
                     )
                 else:
