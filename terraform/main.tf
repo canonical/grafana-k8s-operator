@@ -9,6 +9,7 @@ resource "juju_application" "grafana" {
   units              = var.units
 
   charm {
+    base     = var.base
     name     = "grafana-k8s"
     channel  = var.channel
     revision = var.revision
