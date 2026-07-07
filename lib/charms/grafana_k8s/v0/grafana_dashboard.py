@@ -1366,10 +1366,14 @@ class GrafanaDashboardProvider(Object):
             return  # No change in templates, don't update the databag
 
         # It's completely ridiculous to add a UUID, but if we don't have some
-        # pseudo-random value, this never makes it across 'juju set-state'
+        # pseudo-random value, this never makes it across 'juju set-state'.
+        # Use a deterministic hash of the templates so the value is stable when
+        # templates haven't changed, avoiding spurious relation-changed events.
         stored_data = {
             "templates": new_templates,
-            "uuid": str(uuid.uuid4()),
+            "uuid": hashlib.sha256(
+                json.dumps(new_templates, sort_keys=True).encode()
+            ).hexdigest()[:16],
         }
 
         relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
@@ -1733,7 +1737,7 @@ class GrafanaDashboardConsumer(Object):
         if not peers or not peers.data:
             logger.info("set_peer_data: no peer relation. Is the charm being installed/removed?")
             return
-        peers.data[self._charm.app][key] = json.dumps(data)  # type: ignore[attr-defined]
+        peers.data[self._charm.app][key] = json.dumps(data, sort_keys=True)  # type: ignore[attr-defined]
 
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
@@ -1864,10 +1868,14 @@ class GrafanaDashboardAggregator(Object):
                 if new_templates == existing_templates:
                     continue  # No change in templates, don't update the databag
 
-                # It's still ridiculous to add a UUID here, but needed
+                # It's still ridiculous to add a UUID here, but needed.
+                # Use a deterministic hash of the templates so the value is stable when
+                # templates haven't changed, avoiding spurious relation-changed events.
                 stored_data = {
                     "templates": new_templates,
-                    "uuid": str(uuid.uuid4()),
+                    "uuid": hashlib.sha256(
+                        json.dumps(new_templates, sort_keys=True).encode()
+                    ).hexdigest()[:16],
                 }
                 grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
@@ -1883,9 +1891,12 @@ class GrafanaDashboardAggregator(Object):
         for id in app_ids:
             del self._stored.dashboard_templates[id]  # type: ignore
 
+        remaining_templates = type_convert_stored(self._stored.dashboard_templates)  # pyright: ignore
         stored_data = {
-            "templates": type_convert_stored(self._stored.dashboard_templates),  # pyright: ignore
-            "uuid": str(uuid.uuid4()),
+            "templates": remaining_templates,
+            "uuid": hashlib.sha256(
+                json.dumps(remaining_templates, sort_keys=True).encode()
+            ).hexdigest()[:16],
         }
 
         if self._charm.unit.is_leader():
@@ -2134,7 +2145,7 @@ class CosTool:
                 transformed = {"name": str(uuid.uuid4()), "rules": [rule]}
                 transformed_rules["groups"].append(transformed)
 
-            rule_path.write_text(yaml.dump(transformed_rules))
+            rule_path.write_text(yaml.dump(transformed_rules))  # databag-order: ignore
 
             args = [str(self.path), "validate", str(rule_path)]
             # noinspection PyBroadException
