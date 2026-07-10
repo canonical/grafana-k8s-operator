@@ -217,7 +217,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 50
+LIBPATCH = 51
 
 PYDEPS = ["cosl >= 0.0.50"]
 
@@ -1224,6 +1224,102 @@ class GrafanaDashboardProvider(Object):
             inject_dropdowns=inject_dropdowns,
             juju_topology=self._juju_topology,
         )
+
+        if self._charm.unit.is_leader():
+            for dashboard_relation in self._charm.model.relations[self._relation_name]:
+                self._upset_dashboards_on_relation(dashboard_relation)
+
+    def add_dashboard_precompressed(
+        self, key: str, encoded_content: str, inject_dropdowns: bool = True
+    ) -> None:
+        """Add an already-compressed dashboard under a caller-controlled key (relation-scoped delta).
+
+        This is the *pass-through* counterpart of :method:`add_dashboard`. It is intended for
+        aggregator charms (e.g. OpenTelemetry Collector) that fan-in a large number of dashboards
+        received, already LZMA+base64-compressed, over the ``grafana_dashboard`` interface. Such
+        charms forward dashboard content **verbatim**: the compressed blob they receive is
+        byte-identical to the blob they must publish.
+
+        Unlike :method:`add_dashboard`, this method:
+
+        * stores ``encoded_content`` **verbatim** (it does not decompress or re-compress it), and
+        * lets the caller supply a stable ``key`` so a specific dashboard can later be removed with
+          :method:`remove_dashboard` in O(1), without rescanning or re-compressing anything else.
+
+        Avoiding the decompress/re-compress round-trip and the whole-directory rescan performed by
+        :method:`reload_dashboards` is what keeps the per-hook cost proportional to the *changed*
+        dashboard rather than to the total number of dashboards. See ADR-0001 for the rationale.
+
+        The dashboard is stored under the ``prog:`` id namespace (as ``prog:{key}``), the same
+        namespace swept by :method:`remove_non_builtin_dashboards`, so a full reconcile still
+        cleans up precompressed dashboards.
+
+        Contract (the caller is trusted; this method performs no payload validation so the fast
+        path stays fast):
+
+        * ``key`` must be non-empty, caller-unique and stable across hooks. The ``prog:`` namespace
+          is shared with :method:`add_dashboard`, so callers should use structured keys (e.g.
+          ``rel_5__my-dashboard``) that cannot collide with auto-derived ids.
+        * ``encoded_content`` must be the output of ``LZMABase64.compress(<dashboard json str>)``
+          (i.e. the ``content`` field of a received dashboard template). It is not validated;
+          malformed content is rejected downstream by Grafana, exactly as today.
+
+        Args:
+            key: a caller-controlled, stable identifier for this dashboard.
+            encoded_content: the LZMA+base64-compressed dashboard content, stored verbatim.
+            inject_dropdowns: whether topology dropdowns should be added to the dashboard.
+
+        Raises:
+            ValueError: if ``key`` or ``encoded_content`` is empty.
+        """
+        if not key:
+            raise ValueError("'key' must be a non-empty string")
+        if not encoded_content:
+            raise ValueError("'encoded_content' must be a non-empty string")
+
+        # Update of storage must be done irrespective of leadership, so
+        # that the stored state is there when this unit becomes leader.
+        stored_dashboard_templates: Any = self._stored.dashboard_templates  # pyright: ignore
+
+        id = "prog:{}".format(key)
+
+        # Store the compressed content verbatim: no decompress, no re-compress.
+        stored_dashboard_templates[id] = CharmedDashboard._content_to_dashboard_object(
+            charm_name=self._charm.meta.name,
+            content=encoded_content,
+            dashboard_alt_uid=CharmedDashboard._generate_alt_uid(self._charm.meta.name, id),
+            inject_dropdowns=inject_dropdowns,
+            juju_topology=self._juju_topology,
+        )
+        self._stored.dashboard_templates = stored_dashboard_templates
+
+        if self._charm.unit.is_leader():
+            for dashboard_relation in self._charm.model.relations[self._relation_name]:
+                self._upset_dashboards_on_relation(dashboard_relation)
+
+    def remove_dashboard(self, key: str) -> None:
+        """Remove a single dashboard previously added with a caller-controlled key.
+
+        This is the keyed, relation-scoped counterpart of
+        :method:`remove_non_builtin_dashboards`. It removes only the dashboard stored under
+        ``prog:{key}`` (typically added via :method:`add_dashboard_precompressed`) and republishes,
+        leaving all other dashboards untouched. It does not rescan the dashboards directory.
+
+        The call is idempotent: removing an unknown ``key`` is a no-op and does not raise.
+
+        Args:
+            key: the caller-controlled identifier used when the dashboard was added.
+        """
+        # Update of storage must be done irrespective of leadership, so
+        # that the stored state is there when this unit becomes leader.
+        stored_dashboard_templates: Any = self._stored.dashboard_templates  # pyright: ignore
+
+        id = "prog:{}".format(key)
+        if id not in stored_dashboard_templates:
+            return
+
+        del stored_dashboard_templates[id]
+        self._stored.dashboard_templates = stored_dashboard_templates
 
         if self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
