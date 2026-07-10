@@ -298,7 +298,7 @@ class TestDashboardProvider(unittest.TestCase):
 SAMPLE_DASHBOARD = {"title": "precompressed", "panels": [], "uid": "abc123"}
 ANOTHER_DASHBOARD = {"title": "another", "panels": [], "uid": "def456"}
 
-# Scenario tests for the relation-scoped, pass-through delta API (ADR-0001, item 4).
+# Scenario tests for the relation-scoped, pass-through delta API.
 #
 # These cover ``add_dashboard_precompressed`` and ``remove_dashboard`` on
 # ``GrafanaDashboardProvider``: verbatim (no re-compress) pass-through,

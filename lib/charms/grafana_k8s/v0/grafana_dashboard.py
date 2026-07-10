@@ -1230,44 +1230,27 @@ class GrafanaDashboardProvider(Object):
                 self._upset_dashboards_on_relation(dashboard_relation)
 
     def add_dashboard_precompressed(
-        self, key: str, encoded_content: str, inject_dropdowns: bool = True
+        self, key: str, encoded_content: str, inject_dropdowns: bool = True, publish: bool = True
     ) -> None:
-        """Add an already-compressed dashboard under a caller-controlled key (relation-scoped delta).
+        """Add an already-compressed dashboard under a caller-controlled key.
 
-        This is the *pass-through* counterpart of :method:`add_dashboard`. It is intended for
-        aggregator charms (e.g. OpenTelemetry Collector) that fan-in a large number of dashboards
-        received, already LZMA+base64-compressed, over the ``grafana_dashboard`` interface. Such
-        charms forward dashboard content **verbatim**: the compressed blob they receive is
-        byte-identical to the blob they must publish.
+        Pass-through counterpart of :method:`add_dashboard` for callers that already hold
+        LZMA+base64-compressed content (e.g. aggregators forwarding received dashboards verbatim).
+        The content is stored as-is (no decompress, no re-compress) under ``prog:{key}``, and can
+        later be removed with :method:`remove_dashboard`.
 
-        Unlike :method:`add_dashboard`, this method:
-
-        * stores ``encoded_content`` **verbatim** (it does not decompress or re-compress it), and
-        * lets the caller supply a stable ``key`` so a specific dashboard can later be removed with
-          :method:`remove_dashboard` in O(1), without rescanning or re-compressing anything else.
-
-        Avoiding the decompress/re-compress round-trip and the whole-directory rescan performed by
-        :method:`reload_dashboards` is what keeps the per-hook cost proportional to the *changed*
-        dashboard rather than to the total number of dashboards. See ADR-0001 for the rationale.
-
-        The dashboard is stored under the ``prog:`` id namespace (as ``prog:{key}``), the same
-        namespace swept by :method:`remove_non_builtin_dashboards`, so a full reconcile still
-        cleans up precompressed dashboards.
-
-        Contract (the caller is trusted; this method performs no payload validation so the fast
-        path stays fast):
-
-        * ``key`` must be non-empty, caller-unique and stable across hooks. The ``prog:`` namespace
-          is shared with :method:`add_dashboard`, so callers should use structured keys (e.g.
-          ``rel_5__my-dashboard``) that cannot collide with auto-derived ids.
-        * ``encoded_content`` must be the output of ``LZMABase64.compress(<dashboard json str>)``
-          (i.e. the ``content`` field of a received dashboard template). It is not validated;
-          malformed content is rejected downstream by Grafana, exactly as today.
+        The caller is trusted: ``key`` must be non-empty, unique and stable (the ``prog:``
+        namespace is shared with :method:`add_dashboard`, so use structured keys such as
+        ``rel_5__my-dashboard``), and ``encoded_content`` must be the output of
+        ``LZMABase64.compress(...)``; it is not validated.
 
         Args:
             key: a caller-controlled, stable identifier for this dashboard.
             encoded_content: the LZMA+base64-compressed dashboard content, stored verbatim.
             inject_dropdowns: whether topology dropdowns should be added to the dashboard.
+            publish: whether to write the databag now. Bulk callers adding many dashboards should
+                pass ``publish=False`` for each add and call :method:`update_dashboards` once at
+                the end, avoiding an O(N^2) re-serialization of the templates dict.
 
         Raises:
             ValueError: if ``key`` or ``encoded_content`` is empty.
@@ -1293,22 +1276,20 @@ class GrafanaDashboardProvider(Object):
         )
         self._stored.dashboard_templates = stored_dashboard_templates
 
-        if self._charm.unit.is_leader():
+        if publish and self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
                 self._upset_dashboards_on_relation(dashboard_relation)
 
-    def remove_dashboard(self, key: str) -> None:
-        """Remove a single dashboard previously added with a caller-controlled key.
+    def remove_dashboard(self, key: str, publish: bool = True) -> None:
+        """Remove a single dashboard added via :method:`add_dashboard_precompressed`.
 
-        This is the keyed, relation-scoped counterpart of
-        :method:`remove_non_builtin_dashboards`. It removes only the dashboard stored under
-        ``prog:{key}`` (typically added via :method:`add_dashboard_precompressed`) and republishes,
-        leaving all other dashboards untouched. It does not rescan the dashboards directory.
-
-        The call is idempotent: removing an unknown ``key`` is a no-op and does not raise.
+        Removes only the dashboard stored under ``prog:{key}`` and republishes, leaving all other
+        dashboards untouched. Idempotent: removing an unknown ``key`` is a no-op.
 
         Args:
             key: the caller-controlled identifier used when the dashboard was added.
+            publish: whether to write the databag now. Bulk callers should pass ``publish=False``
+                and call :method:`update_dashboards` once at the end.
         """
         # Update of storage must be done irrespective of leadership, so
         # that the stored state is there when this unit becomes leader.
@@ -1321,7 +1302,7 @@ class GrafanaDashboardProvider(Object):
         del stored_dashboard_templates[id]
         self._stored.dashboard_templates = stored_dashboard_templates
 
-        if self._charm.unit.is_leader():
+        if publish and self._charm.unit.is_leader():
             for dashboard_relation in self._charm.model.relations[self._relation_name]:
                 self._upset_dashboards_on_relation(dashboard_relation)
 
