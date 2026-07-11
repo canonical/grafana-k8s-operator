@@ -128,7 +128,7 @@ class TestDashboardProvider(unittest.TestCase):
         self.assertDictEqual(
             {
                 "templates": RELATION_TEMPLATES_DATA,
-                "uuid": "10aa88d3d745c3c1",
+                "uuid": "ab8a472458fce843",
             },
             data,
         )
@@ -144,7 +144,7 @@ class TestDashboardProvider(unittest.TestCase):
 
         expected_data_builtin_dashboards = {
             "templates": copy.deepcopy(RELATION_TEMPLATES_DATA),
-            "uuid": "10aa88d3d745c3c1",
+            "uuid": "ab8a472458fce843",
         }
 
         expected_data = copy.deepcopy(expected_data_builtin_dashboards)
@@ -161,7 +161,7 @@ class TestDashboardProvider(unittest.TestCase):
                 "unit": "provider-tester/0",
             },
         }
-        expected_data["uuid"] = "61a7f8340b79b2d7"
+        expected_data["uuid"] = "2eb3bce253da6ffc"
 
         self.assertDictEqual(expected_data, actual_data)
         self.harness.charm.provider.remove_non_builtin_dashboards()
@@ -181,7 +181,7 @@ class TestDashboardProvider(unittest.TestCase):
 
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "10aa88d3d745c3c1",
+            "uuid": "ab8a472458fce843",
         }
 
         self.assertDictEqual(expected_data, actual_data)
@@ -202,7 +202,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "10aa88d3d745c3c1",
+            "uuid": "ab8a472458fce843",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -213,7 +213,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": MANUAL_TEMPLATE_DATA,
-            "uuid": "62d5ee2efbab0247",
+            "uuid": "84a6e9197c918137",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -225,7 +225,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "10aa88d3d745c3c1",
+            "uuid": "ab8a472458fce843",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -236,7 +236,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": MANUAL_TEMPLATE_DATA_NO_DROPDOWNS,
-            "uuid": "f8b869f1372f91d6",
+            "uuid": "32fb32d1aaa96c16",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -248,7 +248,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "10aa88d3d745c3c1",
+            "uuid": "ab8a472458fce843",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -259,7 +259,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         empty_data = {
             "templates": {},
-            "uuid": "44136fa355b3678a",
+            "uuid": "468067f3e2f88531",
         }
         self.assertDictEqual(empty_data, actual_data)
 
@@ -271,7 +271,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "10aa88d3d745c3c1",
+            "uuid": "ab8a472458fce843",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -282,6 +282,6 @@ class TestDashboardProvider(unittest.TestCase):
         )
         empty_data = {
             "templates": {},
-            "uuid": "44136fa355b3678a",
+            "uuid": "468067f3e2f88531",
         }
         self.assertDictEqual(empty_data, actual_data)

@@ -184,7 +184,7 @@ import platform
 import re
 import subprocess
 import tempfile
-import uuid
+
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import yaml
@@ -1373,7 +1373,7 @@ class GrafanaDashboardProvider(Object):
             "templates": new_templates,
             "uuid": hashlib.shake_128(
                 json.dumps(new_templates, sort_keys=True).encode()
-            ).digest(16).hex(),
+            ).digest(8).hex(),
         }
 
         relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
@@ -1875,7 +1875,7 @@ class GrafanaDashboardAggregator(Object):
                     "templates": new_templates,
                     "uuid": hashlib.shake_128(
                         json.dumps(new_templates, sort_keys=True).encode()
-                    ).digest(16).hex(),
+                    ).digest(8).hex(),
                 }
                 grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
@@ -1896,7 +1896,7 @@ class GrafanaDashboardAggregator(Object):
             "templates": remaining_templates,
             "uuid": hashlib.shake_128(
                 json.dumps(remaining_templates, sort_keys=True).encode()
-            ).digest(16).hex(),
+            ).digest(8).hex(),
         }
 
         if self._charm.unit.is_leader():
@@ -2141,8 +2141,8 @@ class CosTool:
             #       - alert: OtherAlert
             #         expr: up
             transformed_rules = {"groups": []}  # type: ignore
-            for rule in rules["groups"]:
-                transformed = {"name": str(uuid.uuid4()), "rules": [rule]}
+            for i, rule in enumerate(rules["groups"]):
+                transformed = {"name": f"group_{i}", "rules": [rule]}
                 transformed_rules["groups"].append(transformed)
 
             rule_path.write_text(yaml.safe_dump(transformed_rules, sort_keys=True)) # databag-order: ignore
