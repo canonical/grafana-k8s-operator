@@ -217,7 +217,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 50
+LIBPATCH = 51
 
 PYDEPS = ["cosl >= 0.0.50"]
 
@@ -1371,9 +1371,9 @@ class GrafanaDashboardProvider(Object):
         # templates haven't changed, avoiding spurious relation-changed events.
         stored_data = {
             "templates": new_templates,
-            "uuid": hashlib.sha256(
+            "uuid": hashlib.shake_128(
                 json.dumps(new_templates, sort_keys=True).encode()
-            ).hexdigest()[:16],
+            ).digest(16).hex(),
         }
 
         relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
@@ -1873,9 +1873,9 @@ class GrafanaDashboardAggregator(Object):
                 # templates haven't changed, avoiding spurious relation-changed events.
                 stored_data = {
                     "templates": new_templates,
-                    "uuid": hashlib.sha256(
+                    "uuid": hashlib.shake_128(
                         json.dumps(new_templates, sort_keys=True).encode()
-                    ).hexdigest()[:16],
+                    ).digest(16).hex(),
                 }
                 grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
@@ -1894,9 +1894,9 @@ class GrafanaDashboardAggregator(Object):
         remaining_templates = type_convert_stored(self._stored.dashboard_templates)  # pyright: ignore
         stored_data = {
             "templates": remaining_templates,
-            "uuid": hashlib.sha256(
+            "uuid": hashlib.shake_128(
                 json.dumps(remaining_templates, sort_keys=True).encode()
-            ).hexdigest()[:16],
+            ).digest(16).hex(),
         }
 
         if self._charm.unit.is_leader():
@@ -2145,7 +2145,7 @@ class CosTool:
                 transformed = {"name": str(uuid.uuid4()), "rules": [rule]}
                 transformed_rules["groups"].append(transformed)
 
-            rule_path.write_text(yaml.dump(transformed_rules))  # databag-order: ignore
+            rule_path.write_text(yaml.safe_dump(transformed_rules, sort_keys=True)) # databag-order: ignore
 
             args = [str(self.path), "validate", str(rule_path)]
             # noinspection PyBroadException
