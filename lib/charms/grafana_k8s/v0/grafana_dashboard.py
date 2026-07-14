@@ -392,6 +392,13 @@ REACTIVE_CONVERTER = {  # type: ignore
 }
 
 
+def _data_hash(data: Any) -> str:
+    """Deterministic hash of a template dict for use as a stable relation data key."""
+    return hashlib.shake_128(
+        json.dumps(data, sort_keys=True).encode()
+    ).digest(8).hex()
+
+
 class RelationNotFoundError(Exception):
     """Raised if there is no relation with the given name."""
 
@@ -1371,9 +1378,7 @@ class GrafanaDashboardProvider(Object):
         # templates haven't changed, avoiding spurious relation-changed events.
         stored_data = {
             "templates": new_templates,
-            "uuid": hashlib.shake_128(
-                json.dumps(new_templates, sort_keys=True).encode()
-            ).digest(8).hex(),
+            "uuid": _data_hash(new_templates),
         }
 
         relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
@@ -1873,9 +1878,7 @@ class GrafanaDashboardAggregator(Object):
                 # templates haven't changed, avoiding spurious relation-changed events.
                 stored_data = {
                     "templates": new_templates,
-                    "uuid": hashlib.shake_128(
-                        json.dumps(new_templates, sort_keys=True).encode()
-                    ).digest(8).hex(),
+                    "uuid": _data_hash(new_templates),
                 }
                 grafana_relation.data[self._charm.app]["dashboards"] = json.dumps(stored_data)
 
@@ -1894,9 +1897,7 @@ class GrafanaDashboardAggregator(Object):
         remaining_templates = type_convert_stored(self._stored.dashboard_templates)  # pyright: ignore
         stored_data = {
             "templates": remaining_templates,
-            "uuid": hashlib.shake_128(
-                json.dumps(remaining_templates, sort_keys=True).encode()
-            ).digest(8).hex(),
+            "uuid": _data_hash(remaining_templates),
         }
 
         if self._charm.unit.is_leader():
