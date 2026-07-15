@@ -4,7 +4,6 @@
 import copy
 import json
 import unittest
-import uuid
 from unittest.mock import patch
 
 from charms.grafana_k8s.v0.grafana_dashboard import (
@@ -105,7 +104,6 @@ class ProviderCharm(CharmBase):
             self._stored.invalid_events += 1
 
 
-@patch.object(uuid, "uuid4", new=lambda: "12345678")
 class TestDashboardProvider(unittest.TestCase):
     def setUp(self):
         patcher = patch("charms.grafana_k8s.v0.grafana_dashboard._resolve_dir_against_charm_path")
@@ -130,7 +128,7 @@ class TestDashboardProvider(unittest.TestCase):
         self.assertDictEqual(
             {
                 "templates": RELATION_TEMPLATES_DATA,
-                "uuid": "12345678",
+                "uuid": "ab8a472458fce843",
             },
             data,
         )
@@ -146,7 +144,7 @@ class TestDashboardProvider(unittest.TestCase):
 
         expected_data_builtin_dashboards = {
             "templates": copy.deepcopy(RELATION_TEMPLATES_DATA),
-            "uuid": "12345678",
+            "uuid": "ab8a472458fce843",
         }
 
         expected_data = copy.deepcopy(expected_data_builtin_dashboards)
@@ -163,6 +161,7 @@ class TestDashboardProvider(unittest.TestCase):
                 "unit": "provider-tester/0",
             },
         }
+        expected_data["uuid"] = "2eb3bce253da6ffc"
 
         self.assertDictEqual(expected_data, actual_data)
         self.harness.charm.provider.remove_non_builtin_dashboards()
@@ -182,7 +181,7 @@ class TestDashboardProvider(unittest.TestCase):
 
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "12345678",
+            "uuid": "ab8a472458fce843",
         }
 
         self.assertDictEqual(expected_data, actual_data)
@@ -203,7 +202,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "12345678",
+            "uuid": "ab8a472458fce843",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -214,7 +213,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": MANUAL_TEMPLATE_DATA,
-            "uuid": "12345678",
+            "uuid": "84a6e9197c918137",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -226,7 +225,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "12345678",
+            "uuid": "ab8a472458fce843",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -237,7 +236,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": MANUAL_TEMPLATE_DATA_NO_DROPDOWNS,
-            "uuid": "12345678",
+            "uuid": "32fb32d1aaa96c16",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -249,7 +248,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "12345678",
+            "uuid": "ab8a472458fce843",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -260,7 +259,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         empty_data = {
             "templates": {},
-            "uuid": "12345678",
+            "uuid": "468067f3e2f88531",
         }
         self.assertDictEqual(empty_data, actual_data)
 
@@ -272,7 +271,7 @@ class TestDashboardProvider(unittest.TestCase):
         )
         expected_data = {
             "templates": RELATION_TEMPLATES_DATA,
-            "uuid": "12345678",
+            "uuid": "ab8a472458fce843",
         }
         self.assertDictEqual(expected_data, actual_data)
 
@@ -283,6 +282,6 @@ class TestDashboardProvider(unittest.TestCase):
         )
         empty_data = {
             "templates": {},
-            "uuid": "12345678",
+            "uuid": "468067f3e2f88531",
         }
         self.assertDictEqual(empty_data, actual_data)
