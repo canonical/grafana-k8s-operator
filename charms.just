@@ -87,7 +87,7 @@ lock:
 [group("maintenance")]
 scan:
     @echo "Scanning for security vulnerabilities..."
-    uvx uv-secure
+    uv audit
 
 # Fetch centralized files from canonical/observability
 [group("maintenance")]
