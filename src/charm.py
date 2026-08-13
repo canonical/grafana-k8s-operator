@@ -516,6 +516,8 @@ class GrafanaCharm(CharmBase):
         e.add_status(ActiveStatus())
         if status := self._check_wrong_relations():
             e.add_status(status)
+        if self.dashboard_consumer.has_invalid_dashboards():
+            e.add_status(BlockedStatus("Invalid dashboards. See debug-log"))
         e.add_status(self.resource_patch.get_status())
         e.add_status(self._grafana_config.get_status())
 

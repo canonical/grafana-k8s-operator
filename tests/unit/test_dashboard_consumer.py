@@ -624,6 +624,112 @@ class TestDashboardConsumer(unittest.TestCase):
             )
             self.assertIn("Invalid JSON in Grafana dashboard 'file:tester'", "\n".join(cm.output))  # type: ignore
 
+    def test_consumer_error_on_missing_query_key(self):
+        """A dashboard with a datasource template var missing 'query' must not crash.
+
+        Regression test for https://github.com/canonical/grafana-k8s-operator/issues/582.
+        The KeyError: 'query' in _convert_dashboard_fields used to propagate uncaught and
+        put the charm into ERROR state.
+        """
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        rels = self.setup_charm_relations()
+
+        # A dashboard whose templating list has a datasource entry without a 'query' key.
+        # This is the exact shape that triggered the crash in the issue.
+        bad_dashboard = json.dumps({
+            "templating": {
+                "list": [{"type": "datasource", "name": "DS_PROMETHEUS"}]
+            },
+            "panels": [],
+            "uid": "deadbeef",
+        })
+        bad_data = {
+            "templates": {
+                "file:bad_dash": {
+                    "charm": "grafana-k8s",
+                    "content": bad_dashboard,
+                    "juju_topology": {
+                        "model": MODEL_INFO["name"],
+                        "model_uuid": MODEL_INFO["uuid"],
+                        "application": "provider-tester",
+                        "unit": "provider-tester/0",
+                    },
+                }
+            },
+            "uuid": "12345678",
+        }
+
+        with self.assertLogs(level="WARNING") as cm:
+            # Must not raise — the hook must survive a malformed dashboard.
+            self.harness.update_relation_data(
+                rels[0],
+                "provider",
+                {"dashboards": json.dumps(bad_data)},
+            )
+            self.assertIn("Invalid Grafana dashboard 'file:bad_dash'", "\n".join(cm.output))
+
+        # has_invalid_dashboards() must return True so the charm can set BlockedStatus.
+        self.assertTrue(self.harness.charm.grafana_consumer.has_invalid_dashboards())
+
+        # The event field on the relation must carry the error.
+        rel = self.harness.model.get_relation("grafana-dashboard", rels[0])
+        assert rel is not None
+        event_data = json.loads(rel.data[self.harness.charm.app].get("event", "{}"))
+        self.assertTrue(len(event_data.get("errors", [])) > 0)
+        self.assertEqual(event_data["errors"][0]["dashboard_id"], "file:bad_dash")
+
+    def test_consumer_errors_cleared_when_dashboard_becomes_valid(self):
+        """After fixing an invalid dashboard, has_invalid_dashboards() must return False."""
+        self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
+        rels = self.setup_charm_relations()
+
+        # First, send an invalid dashboard.
+        bad_dashboard = json.dumps({
+            "templating": {
+                "list": [{"type": "datasource", "name": "DS_PROMETHEUS"}]
+            },
+            "panels": [],
+            "uid": "deadbeef",
+        })
+        bad_data = {
+            "templates": {
+                "file:bad_dash": {
+                    "charm": "grafana-k8s",
+                    "content": bad_dashboard,
+                    "juju_topology": {
+                        "model": MODEL_INFO["name"],
+                        "model_uuid": MODEL_INFO["uuid"],
+                        "application": "provider-tester",
+                        "unit": "provider-tester/0",
+                    },
+                }
+            },
+            "uuid": "11111111",
+        }
+        with self.assertLogs(level="WARNING"):
+            self.harness.update_relation_data(
+                rels[0], "provider", {"dashboards": json.dumps(bad_data)}
+            )
+        self.assertTrue(self.harness.charm.grafana_consumer.has_invalid_dashboards())
+
+        # Now fix the dashboard by sending a valid one.
+        good_data = {
+            "templates": {"file:tester": DASHBOARD_DATA},
+            "uuid": "22222222",
+        }
+        self.harness.update_relation_data(
+            rels[0], "provider", {"dashboards": json.dumps(good_data)}
+        )
+
+        # has_invalid_dashboards() must return False once errors are cleared.
+        self.assertFalse(self.harness.charm.grafana_consumer.has_invalid_dashboards())
+
+        # The event field must no longer carry errors.
+        rel = self.harness.model.get_relation("grafana-dashboard", rels[0])
+        assert rel is not None
+        event_data = json.loads(rel.data[self.harness.charm.app].get("event", "{}"))
+        self.assertEqual(event_data.get("errors", []), [])
+
     def test_consumer_templates_datasource(self):
         self.assertEqual(len(self.harness.charm.grafana_consumer._stored.dashboards), 0)
         self.assertEqual(self.harness.charm._stored.dashboard_events, 0)
