@@ -5,6 +5,7 @@ from dataclasses import replace
 import json
 from unittest.mock import patch
 
+from ops import ActiveStatus, BlockedStatus
 from pytest import mark
 import yaml
 from ops.testing import (Relation,
@@ -282,3 +283,40 @@ def test_primary_sets_correct_peer_data(ctx, base_state, peer_relation):
         charm = mgr.charm
         unit_binding = charm.model.get_binding("grafana")
         assert unit_binding
+
+
+def test_blocked_status_on_invalid_dashboard(ctx: Context, base_state, peer_relation):
+    # GIVEN a grafana-dashboard relation whose local app data contains validation errors
+    # (as written by GrafanaDashboardConsumer._render_dashboards_and_signal_changed)
+    dashboard_rel = Relation(
+        "grafana-dashboard",
+        remote_app_name="some-charm",
+        local_app_data={
+            "event": json.dumps({
+                "errors": [{"dashboard_id": "file:my_dash.json", "error": "KeyError: 'query'"}]
+            })
+        },
+    )
+    state = replace(base_state, relations={peer_relation, dashboard_rel})
+
+    # WHEN any event fires (update-status triggers collect-unit-status)
+    with ctx(ctx.on.update_status(), state) as mgr:
+        mgr.run()
+        # THEN the unit is blocked with a relevant message
+        assert mgr.charm.unit.status == BlockedStatus("Invalid dashboards. See debug-log")
+
+
+def test_active_status_without_invalid_dashboards(ctx: Context, base_state, peer_relation):
+    # GIVEN a grafana-dashboard relation with no validation errors in app data
+    dashboard_rel = Relation(
+        "grafana-dashboard",
+        remote_app_name="some-charm",
+        local_app_data={},
+    )
+    state = replace(base_state, relations={peer_relation, dashboard_rel})
+
+    # WHEN any event fires
+    with ctx(ctx.on.update_status(), state) as mgr:
+        mgr.run()
+        # THEN the unit is active (no invalid dashboards)
+        assert mgr.charm.unit.status == ActiveStatus()
