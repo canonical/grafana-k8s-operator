@@ -1531,6 +1531,9 @@ class GrafanaDashboardConsumer(Object):
             True if any related dashboard provider reported dashboard validation
             errors, False otherwise.
         """
+        if not self._charm.unit.is_leader():
+            return False
+
         for relation in self._charm.model.relations.get(self._relation_name, []):
             app_data = relation.data.get(self._charm.app)
             if not app_data:
