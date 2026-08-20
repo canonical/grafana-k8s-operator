@@ -46,6 +46,17 @@ class SomeCharm(CharmBase):
         )
         self.oauth.update_client_config(client_config)
 ```
+
+## Provider
+
+Besides the `client_created`/`client_changed` events, a provider can read a requirer's
+published configuration at any time with `OAuthProvider.get_client_config(relation)`. It
+returns `None` when the requirer has published nothing yet and raises `DataValidationError`
+when what it published does not match the requirer schema. Use it to reconcile registered
+clients holistically rather than relying on an event having been delivered.
+
+Note that `client_created`/`client_changed` are not emitted when the requirer's data fails
+validation; the failure is logged and the relation is skipped rather than erroring the hook.
 """
 
 import json
@@ -67,7 +78,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 13
 
 PYDEPS = ["jsonschema"]
 
@@ -530,7 +541,9 @@ class OAuthRequirer(OAuthRelation):
         client_secret_id = data.get("client_secret_id")
         if client_secret_id:
             _client_secret = self.get_client_secret(client_secret_id)
-            client_secret = _client_secret.get_content()[CLIENT_SECRET_FIELD]
+            # `refresh=True`: the provider cuts a new revision when it rotates the secret,
+            # and nothing here observes `secret-changed`, so the tracked revision goes stale.
+            client_secret = _client_secret.get_content(refresh=True)[CLIENT_SECRET_FIELD]
             data["client_secret"] = client_secret
 
         oauth_provider = OauthProviderConfig.from_dict(data)
@@ -715,7 +728,11 @@ class OAuthProvider(OAuthRelation):
             logger.info("No requirer relation data available.")
             return
 
-        client_data = _load_data(data, OAUTH_REQUIRER_JSON_SCHEMA)
+        try:
+            client_data = _load_data(data, OAUTH_REQUIRER_JSON_SCHEMA)
+        except DataValidationError:
+            logger.warning("The requirer relation data is not valid yet.")
+            return
         redirect_uri = client_data.get("redirect_uri")
         scope = client_data.get("scope")
         grant_types = client_data.get("grant_types")
@@ -726,7 +743,13 @@ class OAuthProvider(OAuthRelation):
         if not data:
             logger.info("No provider relation data available.")
             return
-        provider_data = _load_data(data, OAUTH_PROVIDER_JSON_SCHEMA)
+        try:
+            provider_data = _load_data(data, OAUTH_PROVIDER_JSON_SCHEMA)
+        except DataValidationError:
+            # A partially written provider databag must not wedge the hook: the charm can
+            # only repair it from a later hook, which would never run.
+            logger.warning("The provider relation data is not complete yet.")
+            return
         client_id = provider_data.get("client_id")
 
         relation_id = event.relation.id
@@ -761,9 +784,15 @@ class OAuthProvider(OAuthRelation):
         self.on.client_deleted.emit(event.relation.id)
 
     def _create_juju_secret(self, client_secret: str, relation: Relation) -> Secret:
-        """Create a juju secret and grant it to a relation."""
-        secret = {CLIENT_SECRET_FIELD: client_secret}
-        juju_secret = self.model.app.add_secret(secret, label=self._get_secret_label(relation))
+        """Create or update a juju secret and grant it to a relation."""
+        content = {CLIENT_SECRET_FIELD: client_secret}
+        label = self._get_secret_label(relation)
+        try:
+            juju_secret = self.model.get_secret(label=label)
+        except SecretNotFoundError:
+            juju_secret = self.model.app.add_secret(content, label=label)
+        else:
+            juju_secret.set_content(content)
         juju_secret.grant(relation)
         return juju_secret
 
@@ -777,6 +806,43 @@ class OAuthProvider(OAuthRelation):
 
     def remove_secret(self, relation: Relation) -> None:
         return self._delete_juju_secret(relation)
+
+    def get_client_secret(self, relation: Relation) -> Optional[str]:
+        """Return the client secret currently shared with the requirer, if there is one.
+
+        Re-registering a client with this value keeps the requirer working: writing a
+        different secret would cut a new revision that the requirer does not track.
+        """
+        try:
+            secret = self.model.get_secret(label=self._get_secret_label(relation))
+        except SecretNotFoundError:
+            return None
+
+        return secret.get_content(refresh=True).get(CLIENT_SECRET_FIELD)
+
+    def get_client_config(self, relation: Relation) -> Optional[ClientConfig]:
+        """Read the requirer's client configuration from the integration databag.
+
+        Returns None when the requirer has not published its configuration yet.
+
+        Raises:
+            DataValidationError: if the published data does not match the requirer schema.
+        """
+        if not relation.app:
+            return None
+
+        data = relation.data[relation.app]
+        if not data:
+            return None
+
+        client_data = _load_data(data, OAUTH_REQUIRER_JSON_SCHEMA)
+        return ClientConfig(
+            redirect_uri=client_data.get("redirect_uri"),
+            scope=client_data["scope"],
+            grant_types=client_data["grant_types"],
+            audience=client_data["audience"],
+            token_endpoint_auth_method=client_data["token_endpoint_auth_method"],
+        )
 
     def set_provider_info_in_relation_data(
         self,
