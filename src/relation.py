@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 """Relation class."""
 import json
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 import ops
 
 class Relation:
@@ -19,7 +19,7 @@ class Relation:
             return self._relation.data
         return None
 
-    def set_app_data(self, key: str, data: Any) -> None:
+    def set_app_data(self, key: str, data: Dict[str, Any]) -> None:
         """Put information into the app data bucket."""
         if self.data:
             self.data[self._app][key] = json.dumps(data)

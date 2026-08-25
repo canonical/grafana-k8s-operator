@@ -38,7 +38,7 @@ from secret_storage import SecretStorage
 from secrets_helper import SecretGetter
 
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
-from charms.certificate_transfer_interface.v1.certificate_transfer import (
+from charmlibs.interfaces.certificate_transfer import (
     CertificateTransferRequires,
 )
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
@@ -306,7 +306,7 @@ class GrafanaCharm(CharmBase):
     @property
     def _trusted_ca_certs(self) -> Optional[str]:
         if certs := self.trusted_cert_transfer.get_all_certificates():
-            return "\n".join(certs)
+            return "\n".join(sorted(certs))
         return None
 
     @property
