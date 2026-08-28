@@ -285,6 +285,19 @@ wheels = [
 ]
 
 [[package]]
+name = "charmlibs-interfaces-certificate-transfer"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ops" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/e815e2c9d8ad8e091b31301af54d1cc626bdaf4f25b6e60f33ed52cf7cd7/charmlibs_interfaces_certificate_transfer-1.0.0.tar.gz", hash = "sha256:53f230abb2b42e7c23929a2d99321b1f0e226f20595609105fbd0528fcc3cf24", size = 42167, upload-time = "2026-02-23T18:34:18.971Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/bb/f5ed4a41c154723bd6ea4b983395d6db67d4a3c7dd87bde8ea6848159e63/charmlibs_interfaces_certificate_transfer-1.0.0-py3-none-any.whl", hash = "sha256:21cef05199a9efa459be43207e042be6792605b70e742d8b0fed6f09c0cb232d", size = 8435, upload-time = "2026-02-23T18:34:17.876Z" },
+]
+
+[[package]]
 name = "charset-normalizer"
 version = "3.4.7"
 source = { registry = "https://pypi.org/simple" }
@@ -557,6 +570,7 @@ version = "0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "charmed-service-mesh-helpers" },
+    { name = "charmlibs-interfaces-certificate-transfer" },
     { name = "cosl" },
     { name = "cryptography" },
     { name = "jinja2" },
@@ -602,6 +616,7 @@ requires-dist = [
     { name = "aiohttp", marker = "extra == 'dev'", specifier = "!=3.11.13" },
     { name = "asyncstdlib", marker = "extra == 'dev'" },
     { name = "charmed-service-mesh-helpers", specifier = ">=0.2.0" },
+    { name = "charmlibs-interfaces-certificate-transfer" },
     { name = "codespell", marker = "extra == 'dev'" },
     { name = "cosl" },
     { name = "cosl", marker = "extra == 'dev'" },
