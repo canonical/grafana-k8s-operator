@@ -300,7 +300,7 @@ class ConsumerCharm(CharmBase):
         super().__init__(*args)
         self._stored.set_default(dashboard_events=0)
 
-        self.transformer = CosTool(self)
+        self.transformer = CosTool("promql")
         self.grafana_consumer = GrafanaDashboardConsumer(self)
         self.framework.observe(self.grafana_consumer.on.dashboards_changed, self.dashboard_events)
 
