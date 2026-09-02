@@ -239,7 +239,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 0
+LIBPATCH = 1
 
 logger = logging.getLogger(__name__)
 
@@ -420,6 +420,7 @@ class GrafanaSourceProvider(Object):
         unit_datasources: bool = False,
         app_datasource_url: Optional[str] = None,
         unit_datasource_url: Optional[str] = None,
+        app_datasources: Optional[List[Dict]] = None,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -499,6 +500,11 @@ class GrafanaSourceProvider(Object):
                 is used. This value is per-unit. Pass the base URL only: for
                 ``source_type == "mimir"`` the library appends the ``/prometheus`` query
                 path itself.
+            app_datasources: an optional list of additional application-level datasource
+                dicts to publish (under ``grafana_source_datasources``) alongside the
+                default datasource. Each entry supports the same keys as the consumer's
+                source dicts: ``source_name``, ``source_type``, ``url`` and, optionally,
+                ``extra_fields`` and ``secure_extra_fields``.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
@@ -518,6 +524,7 @@ class GrafanaSourceProvider(Object):
 
         self._extra_fields = extra_fields
         self._secure_extra_fields = secure_extra_fields
+        self._extra_app_datasources = app_datasources or []
 
         if not refresh_event:
             if len(self._charm.meta.containers) == 1:
@@ -565,6 +572,33 @@ class GrafanaSourceProvider(Object):
         available or changes after this object is constructed.
         """
         self._app_datasource_url = self._sanitize_source_url(app_datasource_url)
+
+        for rel in self._charm.model.relations.get(self._relation_name, []):
+            if not rel:
+                continue
+            self._set_sources(rel)
+
+    def update_app_datasources(
+        self, datasources: Optional[List[Dict]], app_datasource_url: Optional[str] = None
+    ) -> None:
+        """Publish extra application-level datasources and re-publish relation data.
+
+        The provided datasources are written to the app databag under
+        ``grafana_source_datasources``. Each entry must provide ``source_name``,
+        ``source_type``, ``url`` and, optionally, ``extra_fields`` and
+        ``secure_extra_fields`` (matching the shape of the consumer's source dicts).
+
+        Passing an empty list removes the key and reverts to publishing only the
+        default application-level datasource.
+
+        Args:
+            datasources: a list of datasource dicts to publish, or empty/None to clear.
+            app_datasource_url: an optional application-level URL to republish alongside
+                the extra datasources (e.g. to refresh after an ingress change).
+        """
+        self._extra_app_datasources = list(datasources or [])
+        if app_datasource_url is not None:
+            self._app_datasource_url = self._sanitize_source_url(app_datasource_url)
 
         for rel in self._charm.model.relations.get(self._relation_name, []):
             if not rel:
@@ -631,6 +665,13 @@ class GrafanaSourceProvider(Object):
 
         logger.debug("Setting Grafana data sources: %s", self._scrape_data)
         rel.data[self._charm.app]["grafana_source_data"] = json.dumps(self._scrape_data)
+
+        if self._extra_app_datasources:
+            rel.data[self._charm.app]["grafana_source_datasources"] = json.dumps(
+                self._extra_app_datasources
+            )
+        elif "grafana_source_datasources" in rel.data[self._charm.app]:
+            del rel.data[self._charm.app]["grafana_source_datasources"]
 
     @property
     def _scrape_data(self) -> Dict:
@@ -1093,3 +1134,4 @@ class GrafanaSourceConsumer(Object):
             return {}
         data = peers.data[self._charm.app].get(key, "")  # type: ignore[attr-defined]
         return json.loads(data) if data else {}
+
