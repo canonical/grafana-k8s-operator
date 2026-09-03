@@ -939,6 +939,34 @@ class GrafanaSourceConsumer(Object):
 
             data.append(app_source_data)
 
+        # Per-tenant datasources announced by the provider under
+        # `grafana_source_datasources`. Entries carry the full source dict
+        # (source_name/type/url plus optional extra_fields/secure_extra_fields).
+        try:
+            extra_datasources = json.loads(
+                rel.data[rel.app].get("grafana_source_datasources", "[]")  # type: ignore
+            )
+        except (json.JSONDecodeError, TypeError):
+            extra_datasources = []
+
+        for entry in extra_datasources:
+            ds = {
+                "unit": None,
+                "source_name": entry["source_name"],
+                "source_type": entry["source_type"],
+                "url": entry["url"],
+            }
+            if entry.get("extra_fields", None):
+                ds["extra_fields"] = entry["extra_fields"]
+
+            if entry.get("secure_extra_fields", None):
+                ds["secure_extra_fields"] = entry["secure_extra_fields"]
+
+            if ds["source_name"] in sources_to_delete:
+                sources_to_delete.remove(ds["source_name"])
+
+            data.append(ds)
+
         if not data:
             logger.warning(
                 "grafana-source relation %s (app %r) provided source metadata but no "
