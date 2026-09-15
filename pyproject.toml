@@ -52,6 +52,7 @@ dev = [
   "sh",
   "tenacity",
   "jubilant",
+  "pytest-jubilant",
 ]
 
 # Testing tools configuration

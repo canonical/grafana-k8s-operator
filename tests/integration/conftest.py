@@ -17,6 +17,17 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--grafana-channel",
+        action="store",
+        default="dev/edge,12.4/edge",
+        help="Comma-separated Charmhub channels to deploy grafana-k8s from as the "
+        "'known-good' cases (e.g. dev/edge,12.4/edge). "
+        "Used by test_dashboard_delay_issue_464.py.",
+    )
+
+
 class Store(defaultdict):
     def __init__(self):
         super(Store, self).__init__(Store)
