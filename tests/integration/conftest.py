@@ -17,6 +17,64 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 
+def pytest_addoption(parser: pytest.Parser):
+    parser.addoption(
+        "--grafana-channel",
+        action="store",
+        default="dev/edge,12.4/edge",
+        help="Comma-separated list of Charmhub channels to deploy grafana-k8s from as "
+        "the 'known-good' cases (e.g. dev/edge,12.4/edge). "
+        "Used by test_dashboard_not_populating_issue_569.py.",
+    )
+    parser.addoption(
+        "--dashboard-wait",
+        action="store",
+        default="120",
+        help=(
+            "Confidence window (seconds) for a provisioned dashboard to show up in "
+            "the Grafana UI without a restart. Used by "
+            "test_dashboard_not_populating_issue_569.py."
+        ),
+    )
+    parser.addoption(
+        "--num-providers",
+        action="store",
+        default="4",
+        help=(
+            "Number of redis-k8s -> opentelemetry-collector-k8s provider chains "
+            "related to a single grafana-k8s when reproducing issue #569. More "
+            "providers means more `grafana-dashboard` relations and more reconcile "
+            "churn, which is what the report attributes the missing dashboards to. "
+            "Used by test_dashboard_not_populating_issue_569.py."
+        ),
+    )
+    parser.addoption(
+        "--churn-rounds",
+        action="store",
+        default="8",
+        help=(
+            "How many remove/re-add cycles of the `grafana-dashboard` relations to "
+            "run against the known-bad SAAS scenario (set 0 to disable). Each cycle "
+            "forces grafana-k8s to re-write every provisioned dashboard file, "
+            "widening the window in which Grafana can read a file mid-write and park "
+            "it. Used by test_dashboard_not_populating_issue_569.py."
+        ),
+    )
+    parser.addoption(
+        "--tester-charm",
+        action="store",
+        default="",
+        help=(
+            "Optional path to a local grafana-tester charm file (built with "
+            "`charmcraft pack`). When provided, the known-bad SAAS scenario deploys "
+            "it in the providers model and relates it to the first otelcol chain so "
+            "that very large dashboard files flow through the same SAAS path and "
+            "widen the mid-write read race that issue #569 depends on. Used by "
+            "test_dashboard_not_populating_issue_569.py."
+        ),
+    )
+
+
 class Store(defaultdict):
     def __init__(self):
         super(Store, self).__init__(Store)
@@ -92,7 +150,9 @@ async def copy_grafana_libraries_into_grafana_metadata_requirer_tester_charm(ops
 
     # Update libraries in the tester charms
     grafana_metadata_relative_path = Path("lib/charms/grafana_k8s/v0/grafana_metadata.py")
-    grafana_metadata_lib_source = Path(__file__).parent.parent.parent / grafana_metadata_relative_path
+    grafana_metadata_lib_source = (
+        Path(__file__).parent.parent.parent / grafana_metadata_relative_path
+    )
     grafana_metadata_lib_target = tester_path / grafana_metadata_relative_path
 
     grafana_metadata_lib_target.parent.mkdir(parents=True, exist_ok=True)
@@ -124,7 +184,9 @@ async def grafana_tester_charm(ops_test: OpsTest) -> Path:
 
 @pytest.fixture(scope="module")
 @timed_memoizer
-async def grafana_metadata_requirer_tester_charm(ops_test: OpsTest, copy_grafana_libraries_into_grafana_metadata_requirer_tester_charm) -> Path:
+async def grafana_metadata_requirer_tester_charm(
+    ops_test: OpsTest, copy_grafana_libraries_into_grafana_metadata_requirer_tester_charm
+) -> Path:
     """A charm to integration test the grafana-metadata relation."""
     charm_path = "tests/integration/grafana-metadata-requirer-tester"
     charm = await ops_test.build_charm(charm_path)

@@ -252,3 +252,52 @@ def test_dashboard_with_missing_uid_is_omitted(ctx: Context, base_state: State):
     assert dashboard_content["version"] == 1
     # The one with higher relation_id (and different content) should win
     assert "content_a" in dashboard_content["title"]
+
+
+def test_same_title_distinct_uid_only_one_file_on_disk(ctx: Context, base_state: State):
+    """Contract for issue #569: two dashboards sharing a 'title' must produce ONE file.
+
+    Grafana's periodic ~30s duplicate-title check (Issue #569) revokes the provisioning
+    provider's write permission; any dashboard landing on disk *after* that stays out of
+    the UI until a restart. The charm deduplicates by title before writing so we never
+    hand Grafana two files with the same title (even with distinct uid/version).
+    """
+    # GIVEN reldata carrying two dashboards (distinct uid/version)
+    # that declare the SAME 'title' inside their content — the #569 trigger.
+    collision1 = dashboard_factory(uid="dash1", version=1)
+    collision1["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash1", "version": 1, "title": "Shared Title", "panels": []})
+    )
+    collision2 = dashboard_factory(uid="dash2", version=2)
+    collision2["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash2", "version": 2, "title": "Shared Title", "panels": []})
+    )
+    peer_data = {
+        "dashboards": json.dumps({
+            "1": [collision1, collision2]
+        })
+    }
+    peer_relation_with_data = PeerRelation(
+        "grafana",
+        local_app_data=peer_data
+    )
+
+    # WHEN the charm processes the dashboards (update_status)
+    state = State(
+        leader=True,
+        containers=base_state.containers,
+        relations={peer_relation_with_data}
+    )
+    out = ctx.run(ctx.on.update_status(), state)
+
+    # THEN exactly ONE dashboard should be written to the filesystem — never two
+    # files sharing a title (that is what makes Grafana revoke the provider).
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
+
+    assert len(dashboards) == 1
+
+    # AND its UID is the one with the higher version (deterministic winner)
+    dashboard_content = json.loads(list(dashboards.values())[0])
+    assert dashboard_content["uid"] == "dash2"
