@@ -20,6 +20,7 @@ dependencies = [
   "charmed-service-mesh-helpers>=0.2.0",
   "lightkube-extensions",
   "pydantic[email]>=2.10.6",
+  "charmlibs-interfaces-certificate_transfer",
 ]
 
 [project.optional-dependencies]
