@@ -13,15 +13,12 @@
 #  limitations under the License.
 
 """A module used for interacting with a running Grafana instance."""
-import json
-import lzma
 import time
 from pathlib import Path
 import os
 import hashlib
 import logging
 from typing import Callable, Dict, List, Optional, cast
-from cosl import LZMABase64
 from ops import Container
 import re
 from ops.pebble import (
@@ -282,37 +279,18 @@ class Grafana:
             if not self._container.exists(path):
                 self._container.make_dir(path, make_parents=True)
 
-    def _dashboard_title(self, dashboard: Dict) -> Optional[str]:
-        """Return the dashboard's title, or None if it cannot be determined.
+    @staticmethod
+    def _dashboard_rank(dashboard: Dict) -> tuple:
+        """Deterministic ordering for title-deduplication.
 
-        The title may be a top-level 'title' field, or embedded in the dashboard
-        JSON 'content', which may be plain or LZMA-compressed.
+        Highest version first, then highest relation_id, then content: the same
+        ordering the grafana_dashboard lib uses for uid-deduplication.
         """
-        explicit_title = dashboard.get("title")
-        if explicit_title:
-            return explicit_title
-
-        content = dashboard.get("content")
-        if not content:
-            return None
-        try:
-            parsed = json.loads(content)
-            if isinstance(parsed, dict):
-                title = parsed.get("title")
-                if title:
-                    return title
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-        try:
-            decompressed = LZMABase64.decompress(content)
-            parsed = json.loads(decompressed)
-            if isinstance(parsed, dict):
-                return parsed.get("title")
-        except (lzma.LZMAError, ValueError, TypeError):
-            return None
-
-        return None
+        return (
+            dashboard.get("dashboard_version", 0),
+            dashboard.get("relation_id", ""),
+            dashboard.get("content", ""),
+        )
 
     def _reconcile_dashboards(self):
         dashboards_file_to_be_kept = {}
@@ -325,14 +303,17 @@ class Grafana:
             # check, which revokes the provisioning provider's write permission;
             # any dashboard that lands on disk *after* that stays out of the UI
             # until a restart. Deduplicate by title here so Grafana never sees two
-            # files with the same title.
+            # files with the same title. The consumer already surfaces each
+            # dashboard's title and version as top-level 'dashboard_title' and
+            # 'dashboard_version' keys, and the winner is picked deterministically
+            # by _dashboard_rank (version, relation_id, content).
             dashboards_by_title: Dict[str, Dict] = {}
             for dashboard in self._dashboards:
-                title = self._dashboard_title(dashboard)
-                if title is None:
+                title = dashboard.get("dashboard_title")
+                if not title:
                     continue
                 existing = dashboards_by_title.get(title)
-                if existing is None or dashboard.get("version", 0) >= existing.get("version", 0):
+                if existing is None or self._dashboard_rank(dashboard) > self._dashboard_rank(existing):
                     dashboards_by_title[title] = dashboard
 
             for dashboard in dashboards_by_title.values():

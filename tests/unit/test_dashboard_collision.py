@@ -301,3 +301,49 @@ def test_same_title_distinct_uid_only_one_file_on_disk(ctx: Context, base_state:
     # AND its UID is the one with the higher version (deterministic winner)
     dashboard_content = json.loads(list(dashboards.values())[0])
     assert dashboard_content["uid"] == "dash2"
+
+
+def test_same_title_same_version_relation_id_tiebreak(ctx: Context, base_state: State):
+    """Title-deduplication tie-breaker: on equal versions, the highest relation_id wins.
+
+    Unrelated dashboards sharing a title and version cannot switch with
+    relation/list ordering.
+    """
+    # GIVEN two dashboards with the SAME title, SAME version, distinct uid,
+    # coming from different relations
+    collision1 = dashboard_factory(uid="dash1", version=1, relation_id="1")
+    collision1["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash1", "version": 1, "title": "Shared Title", "panels": []})
+    )
+    collision2 = dashboard_factory(uid="dash2", version=1, relation_id="2")
+    collision2["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash2", "version": 1, "title": "Shared Title", "panels": []})
+    )
+    peer_data = {
+        "dashboards": json.dumps({
+            "1": [collision1],
+            "2": [collision2]
+        })
+    }
+    peer_relation_with_data = PeerRelation(
+        "grafana",
+        local_app_data=peer_data
+    )
+
+    # WHEN the charm processes the dashboards (update_status)
+    state = State(
+        leader=True,
+        containers=base_state.containers,
+        relations={peer_relation_with_data}
+    )
+    out = ctx.run(ctx.on.update_status(), state)
+
+    # THEN exactly ONE file is written: the (version, relation_id, content)
+    # tie-break picks the dashboard from relation 2
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
+
+    assert len(dashboards) == 1
+    dashboard_content = json.loads(list(dashboards.values())[0])
+    assert dashboard_content["uid"] == "dash2"
