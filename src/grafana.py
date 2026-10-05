@@ -283,19 +283,10 @@ class Grafana:
                 self._container.make_dir(path, make_parents=True)
 
     def _dashboard_title(self, dashboard: Dict) -> Optional[str]:
-        """Return the provisioning-safe title of a dashboard.
+        """Return the dashboard's title, or None if it cannot be determined.
 
-        The factory in the 569 integration tests (and the SAAS topology's grafana
-        consumer) store the real title *inside* the dashboard JSON 'content'
-        (optionally LZMABase64-compressed as in the unit factories), while the
-        charm's own peer-relation dict carries it at the top level. Tolerate both:
-        explicit top-level 'title', 'content' as plain JSON, or 'content' compressed.
-
-        Args:
-            dashboard: A dashboard stand-in dictionary.
-
-        Returns:
-            The dashboard title, or None if it cannot be determined.
+        The title may be a top-level 'title' field, or embedded in the dashboard
+        JSON 'content', which may be plain or LZMA-compressed.
         """
         explicit_title = dashboard.get("title")
         if explicit_title:
