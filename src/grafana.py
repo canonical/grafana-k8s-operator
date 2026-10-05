@@ -313,8 +313,25 @@ class Grafana:
                 if not title:
                     continue
                 existing = dashboards_by_title.get(title)
-                if existing is None or self._dashboard_rank(dashboard) > self._dashboard_rank(existing):
+                if existing is None:
                     dashboards_by_title[title] = dashboard
+                    continue
+                if self._dashboard_rank(dashboard) > self._dashboard_rank(existing):
+                    dashboards_by_title[title] = dashboard
+                    winner, loser = dashboard, existing
+                else:
+                    winner, loser = existing, dashboard
+                logger.warning(
+                    "Dashboard title %r is not unique; keeping uid=%r (version=%s, "
+                    "relation_id=%s) and dropping uid=%r (version=%s, relation_id=%s)",
+                    title,
+                    winner.get("dashboard_uid"),
+                    winner.get("dashboard_version"),
+                    winner.get("relation_id"),
+                    loser.get("dashboard_uid"),
+                    loser.get("dashboard_version"),
+                    loser.get("relation_id"),
+                )
 
             for dashboard in dashboards_by_title.values():
                 dashboard_content = dashboard["content"]
