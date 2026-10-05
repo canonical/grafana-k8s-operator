@@ -3,6 +3,7 @@
 """Grafana config generator."""
 
 import configparser
+import json
 import logging
 from io import StringIO
 from typing import Any, Callable, Dict, Optional
@@ -18,11 +19,83 @@ from models import DatasourceConfig
 
 logger = logging.getLogger()
 
+ORGID_HEADER_NAME = "X-Scope-OrgID"
+
 
 def _csv_to_list(roles: Optional[str]) -> list[str]:
     if not roles:
         return []
     return [role.strip().strip("'") for role in roles.split(',') if role.strip()]
+
+
+def _tenant_org_mapping_to_dict(mapping: Optional[str]) -> Dict[str, int]:
+    """Parse the ``tenant_org_mapping`` config into a ``tenant -> org_id`` mapping."""
+    if not mapping:
+        return {}
+    try:
+        raw = json.loads(mapping)
+    except json.JSONDecodeError:
+        logger.error(
+            "Invalid tenant_org_mapping: expected a JSON object of the form "
+            '{"<org_id>": ["<tenant>", ...]}. Got: %s',
+            mapping,
+        )
+        return {}
+    if not isinstance(raw, dict):
+        logger.error("Invalid tenant_org_mapping: expected a JSON object, got %s", type(raw).__name__)
+        return {}
+
+    mapping_dict: Dict[str, int] = {}
+    for org_id, tenants in raw.items():
+        if not isinstance(tenants, list) or not all(isinstance(t, str) for t in tenants):
+            logger.error(
+                "Invalid tenant_org_mapping: value for org id %r must be a list of tenant "
+                "strings",
+                org_id,
+            )
+            continue
+        try:
+            int_org_id = int(org_id)
+        except (TypeError, ValueError):
+            logger.error("Invalid tenant_org_mapping: org id %r is not an integer", org_id)
+            continue
+        for tenant in tenants:
+            if tenant in mapping_dict and mapping_dict[tenant] != int_org_id:
+                logger.warning(
+                    "tenant %r mapped to multiple orgs (%d and %d); using the last mapping",
+                    tenant,
+                    mapping_dict[tenant],
+                    int_org_id,
+                )
+            mapping_dict[tenant] = int_org_id
+    return mapping_dict
+
+
+def _tenant_from_source(source_info: dict) -> Optional[str]:
+    """Extract the Mimir tenant from a datasource's custom HTTP headers.
+
+    Multi-tenant Mimir backends are reached through the standard ``X-Scope-OrgID``
+    header. Grafana stores these as ``httpHeaderNameN`` (in ``jsonData``) /
+    ``httpHeaderValueN`` (in ``secureJsonData`` or ``jsonData``).
+    """
+    json_data = source_info.get("extra_fields") or {}
+    secure_json_data = source_info.get("secure_extra_fields") or {}
+
+    headers = {
+        **json_data,
+        **secure_json_data,
+    }
+
+    for key, value in headers.items():
+        if not str(key).startswith("httpHeaderName"):
+            continue
+        index = str(key)[len("httpHeaderName"):]
+        if value != ORGID_HEADER_NAME:
+            continue
+        tenant = headers.get(f"httpHeaderValue{index}")
+        if tenant:
+            return str(tenant)
+    return None
 
 
 class GrafanaConfig:
@@ -42,6 +115,7 @@ class GrafanaConfig:
                 tracing_endpoint: Optional[str] = None,
                 custom_config: Optional[str] = None,
                 secret_getter: Callable[[str], Optional[str]] = lambda _: None,
+                tenant_org_mapping_config: Callable[[], str] = lambda: "",
                  ):
         self._datasources_config = datasources_config
         self._oauth_config = oauth_config
@@ -55,6 +129,7 @@ class GrafanaConfig:
         self._tracing_endpoint = tracing_endpoint
         self._custom_config = custom_config
         self._secret_getter = secret_getter
+        self._tenant_org_mapping_config = tenant_org_mapping_config
 
 
     @property
@@ -133,9 +208,13 @@ class GrafanaConfig:
         # Boilerplate for the config file
         datasources_dict = {"apiVersion": 1, "datasources": [], "deleteDatasources": []}
 
+        tenant_to_org_id = _tenant_org_mapping_to_dict(self._tenant_org_mapping_config())
+
         for source_info in self._datasources_config.datasources():
+            tenant = _tenant_from_source(source_info)
+            org_id = tenant_to_org_id.get(tenant, 1) if tenant else 1
             source = {
-                "orgId": "1",
+                "orgId": str(org_id),
                 "access": "proxy",
                 "isDefault": "false",
                 "name": source_info["source_name"],

@@ -225,6 +225,7 @@ class GrafanaCharm(CharmBase):
                                             tracing_endpoint=self._workload_tracing_endpoint,
                                             custom_config=cast(Optional[str], self.config.get("custom_config")),
                                             secret_getter=SecretGetter(self.model).get_value,
+                                            tenant_org_mapping_config=lambda: cast(str, self.config.get("tenant_org_mapping") or ""),
                                             )
         self._grafana_service = Grafana(
                                         container=self.unit.get_container("grafana"),

@@ -253,6 +253,25 @@ config:
         wait for a datasource to respond to a query.
       type: int
       default: 300
+    tenant_org_mapping:
+      description: |
+        A JSON object mapping Grafana organization IDs to a list of Mimir tenant IDs.
+        This maps the tenant carried by each datasource (announced by the provider
+        over the grafana-source relation through the `X-Scope-OrgID` HTTP header) to the
+        Grafana organization the datasource should be provisioned into. This allows a
+        single Grafana organization to access multiple tenants.
+
+        For example, to give org 2 access to tenants `tenant-a` and `tenant-b` while org 1
+        keeps access to `tenant-c`:
+
+          {"1": ["tenant-c"], "2": ["tenant-a", "tenant-b"]}
+
+        Datasources whose tenant is not present in the mapping, or which do not carry a
+        tenant, fall back to the default organization (id 1). The referenced organizations
+        must already exist in Grafana; datasources provisioned for a non-existent
+        organization are silently skipped by Grafana.
+      type: string
+      default: ""
     cpu:
       description: |
         K8s cpu resource limit, e.g. "1" or "500m". Default is unset (no limit). This value is used
