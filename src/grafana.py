@@ -81,7 +81,6 @@ class Grafana:
         self._dashboards = dashboards
         self._provision_own_dashboard = provision_own_dashboard
         self._current_config_hash = None
-        self._dashboards_by_title: Dict[str, Dict] = {}
         self._current_datasources_hash = None
         self._scheme =  scheme
         self.ingress_ready = ingress_ready
@@ -330,21 +329,22 @@ class Grafana:
             for dashboard_file in self._container.list_files(DASHBOARDS_DIR, pattern="juju_*.json"):
                 dashboards_file_to_be_kept[dashboard_file.path] = False
 
+            # Issue #569: two dashboards that share the same 'title' (even with
+            # distinct 'uid'/'version') trigger Grafana's periodic ~30s duplicate
+            # check, which revokes the provisioning provider's write permission;
+            # any dashboard that lands on disk *after* that stays out of the UI
+            # until a restart. Deduplicate by title here so Grafana never sees two
+            # files with the same title.
+            dashboards_by_title: Dict[str, Dict] = {}
             for dashboard in self._dashboards:
-                # Issue #569: two dashboards that share the same 'title' (even with
-                # distinct 'uid'/'version') trigger Grafana's periodic ~30s duplicate
-                # check, which revokes the provisioning provider's write permission;
-                # any dashboard that lands on disk *after* that stays out of the UI
-                # until a restart. Deduplicate by title here so Grafana never sees two
-                # files with the same title.
                 title = self._dashboard_title(dashboard)
                 if title is None:
                     continue
-                existing = self._dashboards_by_title.get(title)
+                existing = dashboards_by_title.get(title)
                 if existing is None or dashboard.get("version", 0) >= existing.get("version", 0):
-                    self._dashboards_by_title[title] = dashboard
+                    dashboards_by_title[title] = dashboard
 
-            for dashboard in self._dashboards_by_title.values():
+            for dashboard in dashboards_by_title.values():
                 dashboard_content = dashboard["content"]
                 dashboard_content_bytes = dashboard_content.encode("utf-8")
                 dashboard_content_digest = hashlib.sha256(dashboard_content_bytes).hexdigest()
