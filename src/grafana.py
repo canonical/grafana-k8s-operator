@@ -311,6 +311,15 @@ class Grafana:
             for dashboard in self._dashboards:
                 title = dashboard.get("dashboard_title")
                 if not title:
+                    # Grafana's duplicate-title detection is keyed by title, so a
+                    # dashboard without one cannot be provisioned safely. The lib
+                    # flags malformed content separately (BlockedStatus); this is
+                    # only about otherwise-valid dashboards missing a title.
+                    logger.debug(
+                        "Omitting dashboard without a title: uid=%r, relation_id=%s",
+                        dashboard.get("dashboard_uid"),
+                        dashboard.get("relation_id"),
+                    )
                     continue
                 existing = dashboards_by_title.get(title)
                 if existing is None:

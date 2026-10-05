@@ -403,3 +403,47 @@ def test_same_title_winner_is_order_independent(
         "Dashboard title 'Shared Title' is not unique" in record.message
         for record in caplog.records
     )
+
+
+def test_dashboard_without_title_is_omitted_and_logged(ctx: Context, base_state: State, caplog):
+    """A dashboard missing a title is omitted from provisioning, with a log entry.
+
+    Grafana keys its duplicate check on titles, so a titleless dashboard cannot be
+    provisioned; dropping it silently would hide why it never reaches the UI.
+    """
+    # GIVEN a valid dashboard (has uid/version) whose content JSON has NO title
+    titleless = dashboard_factory(uid="dash1", version=1)
+    titleless["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash1", "version": 1, "panels": []})
+    )
+    peer_data = {
+        "dashboards": json.dumps({
+            "1": [titleless]
+        })
+    }
+    peer_relation_with_data = PeerRelation(
+        "grafana",
+        local_app_data=peer_data
+    )
+
+    # WHEN the charm processes the dashboards (update_status)
+    state = State(
+        leader=True,
+        containers=base_state.containers,
+        relations={peer_relation_with_data}
+    )
+    with caplog.at_level(logging.DEBUG):
+        out = ctx.run(ctx.on.update_status(), state)
+
+    # THEN no dashboard file is written
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
+    assert not dashboards
+
+    # AND the omission is logged, not silent
+    assert any(
+        "Omitting dashboard without a title" in record.message
+        and "dash1" in record.message
+        for record in caplog.records
+    )
