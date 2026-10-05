@@ -2,10 +2,12 @@
 # See LICENSE file for licensing details.
 
 import json
+import logging
 from typing import Any, Dict
 from pathlib import Path
 from cosl import LZMABase64
 from ops.testing import Context, PeerRelation, State
+import pytest
 
 
 def read_dashboards_from_fs(fs: Path) -> Dict[str, str]:
@@ -347,3 +349,57 @@ def test_same_title_same_version_relation_id_tiebreak(ctx: Context, base_state: 
     assert len(dashboards) == 1
     dashboard_content = json.loads(list(dashboards.values())[0])
     assert dashboard_content["uid"] == "dash2"
+
+
+@pytest.mark.parametrize("rel_order", [("1", "2"), ("2", "1")])
+def test_same_title_winner_is_order_independent(
+    ctx: Context, base_state: State, rel_order, caplog
+):
+    """The title-dedup winner must not depend on relation/list ordering.
+
+    Two unrelated dashboards sharing a title arrive from two relations; whichever
+    order they arrive in, the deterministic (version, relation_id, content) rank
+    must always pick the same one, and the dropped one must be logged.
+    """
+    # GIVEN two same-title dashboards (distinct uid, equal version) from two relations
+    dashboards_by_rel = {}
+    for rel_id, uid in (("1", "dash1"), ("2", "dash2")):
+        collision = dashboard_factory(uid=uid, version=1, relation_id=rel_id)
+        collision["content"] = LZMABase64.compress(
+            json.dumps({"uid": uid, "version": 1, "title": "Shared Title", "panels": []})
+        )
+        dashboards_by_rel[rel_id] = collision
+    peer_data = {
+        "dashboards": json.dumps(
+            {rel_id: [dashboards_by_rel[rel_id]] for rel_id in rel_order}
+        )
+    }
+    peer_relation_with_data = PeerRelation(
+        "grafana",
+        local_app_data=peer_data
+    )
+
+    # WHEN the charm processes the dashboards in the given relation order
+    state = State(
+        leader=True,
+        containers=base_state.containers,
+        relations={peer_relation_with_data}
+    )
+    with caplog.at_level(logging.WARNING):
+        out = ctx.run(ctx.on.update_status(), state)
+
+    # THEN exactly ONE file is written and the winner is always dash2
+    # (equal version -> highest relation_id wins), regardless of arrival order
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
+
+    assert len(dashboards) == 1
+    dashboard_content = json.loads(list(dashboards.values())[0])
+    assert dashboard_content["uid"] == "dash2"
+
+    # AND the dropped dashboard is logged, not silently deduplicated
+    assert any(
+        "Dashboard title 'Shared Title' is not unique" in record.message
+        for record in caplog.records
+    )
