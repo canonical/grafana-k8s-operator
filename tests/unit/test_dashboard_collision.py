@@ -2,10 +2,12 @@
 # See LICENSE file for licensing details.
 
 import json
+import logging
 from typing import Any, Dict
 from pathlib import Path
 from cosl import LZMABase64
 from ops.testing import Context, PeerRelation, State
+import pytest
 
 
 def read_dashboards_from_fs(fs: Path) -> Dict[str, str]:
@@ -252,3 +254,196 @@ def test_dashboard_with_missing_uid_is_omitted(ctx: Context, base_state: State):
     assert dashboard_content["version"] == 1
     # The one with higher relation_id (and different content) should win
     assert "content_a" in dashboard_content["title"]
+
+
+def test_same_title_distinct_uid_only_one_file_on_disk(ctx: Context, base_state: State):
+    """Contract for issue #569: two dashboards sharing a 'title' must produce ONE file.
+
+    Grafana's periodic ~30s duplicate-title check (Issue #569) revokes the provisioning
+    provider's write permission; any dashboard landing on disk *after* that stays out of
+    the UI until a restart. The charm deduplicates by title before writing so we never
+    hand Grafana two files with the same title (even with distinct uid/version).
+    """
+    # GIVEN reldata carrying two dashboards (distinct uid/version)
+    # that declare the SAME 'title' inside their content — the #569 trigger.
+    collision1 = dashboard_factory(uid="dash1", version=1)
+    collision1["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash1", "version": 1, "title": "Shared Title", "panels": []})
+    )
+    collision2 = dashboard_factory(uid="dash2", version=2)
+    collision2["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash2", "version": 2, "title": "Shared Title", "panels": []})
+    )
+    peer_data = {
+        "dashboards": json.dumps({
+            "1": [collision1, collision2]
+        })
+    }
+    peer_relation_with_data = PeerRelation(
+        "grafana",
+        local_app_data=peer_data
+    )
+
+    # WHEN the charm processes the dashboards (update_status)
+    state = State(
+        leader=True,
+        containers=base_state.containers,
+        relations={peer_relation_with_data}
+    )
+    out = ctx.run(ctx.on.update_status(), state)
+
+    # THEN exactly ONE dashboard should be written to the filesystem — never two
+    # files sharing a title (that is what makes Grafana revoke the provider).
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
+
+    assert len(dashboards) == 1
+
+    # AND its UID is the one with the higher version (deterministic winner)
+    dashboard_content = json.loads(list(dashboards.values())[0])
+    assert dashboard_content["uid"] == "dash2"
+
+
+def test_same_title_same_version_relation_id_tiebreak(ctx: Context, base_state: State):
+    """Title-deduplication tie-breaker: on equal versions, the highest relation_id wins.
+
+    Unrelated dashboards sharing a title and version cannot switch with
+    relation/list ordering.
+    """
+    # GIVEN two dashboards with the SAME title, SAME version, distinct uid,
+    # coming from different relations
+    collision1 = dashboard_factory(uid="dash1", version=1, relation_id="1")
+    collision1["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash1", "version": 1, "title": "Shared Title", "panels": []})
+    )
+    collision2 = dashboard_factory(uid="dash2", version=1, relation_id="2")
+    collision2["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash2", "version": 1, "title": "Shared Title", "panels": []})
+    )
+    peer_data = {
+        "dashboards": json.dumps({
+            "1": [collision1],
+            "2": [collision2]
+        })
+    }
+    peer_relation_with_data = PeerRelation(
+        "grafana",
+        local_app_data=peer_data
+    )
+
+    # WHEN the charm processes the dashboards (update_status)
+    state = State(
+        leader=True,
+        containers=base_state.containers,
+        relations={peer_relation_with_data}
+    )
+    out = ctx.run(ctx.on.update_status(), state)
+
+    # THEN exactly ONE file is written: the (version, relation_id, content)
+    # tie-break picks the dashboard from relation 2
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
+
+    assert len(dashboards) == 1
+    dashboard_content = json.loads(list(dashboards.values())[0])
+    assert dashboard_content["uid"] == "dash2"
+
+
+@pytest.mark.parametrize("rel_order", [("1", "2"), ("2", "1")])
+def test_same_title_winner_is_order_independent(
+    ctx: Context, base_state: State, rel_order, caplog
+):
+    """The title-dedup winner must not depend on relation/list ordering.
+
+    Two unrelated dashboards sharing a title arrive from two relations; whichever
+    order they arrive in, the deterministic (version, relation_id, content) rank
+    must always pick the same one, and the dropped one must be logged.
+    """
+    # GIVEN two same-title dashboards (distinct uid, equal version) from two relations
+    dashboards_by_rel = {}
+    for rel_id, uid in (("1", "dash1"), ("2", "dash2")):
+        collision = dashboard_factory(uid=uid, version=1, relation_id=rel_id)
+        collision["content"] = LZMABase64.compress(
+            json.dumps({"uid": uid, "version": 1, "title": "Shared Title", "panels": []})
+        )
+        dashboards_by_rel[rel_id] = collision
+    peer_data = {
+        "dashboards": json.dumps(
+            {rel_id: [dashboards_by_rel[rel_id]] for rel_id in rel_order}
+        )
+    }
+    peer_relation_with_data = PeerRelation(
+        "grafana",
+        local_app_data=peer_data
+    )
+
+    # WHEN the charm processes the dashboards in the given relation order
+    state = State(
+        leader=True,
+        containers=base_state.containers,
+        relations={peer_relation_with_data}
+    )
+    with caplog.at_level(logging.WARNING):
+        out = ctx.run(ctx.on.update_status(), state)
+
+    # THEN exactly ONE file is written and the winner is always dash2
+    # (equal version -> highest relation_id wins), regardless of arrival order
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
+
+    assert len(dashboards) == 1
+    dashboard_content = json.loads(list(dashboards.values())[0])
+    assert dashboard_content["uid"] == "dash2"
+
+    # AND the dropped dashboard is logged, not silently deduplicated
+    assert any(
+        "Dashboard title 'Shared Title' is not unique" in record.message
+        for record in caplog.records
+    )
+
+
+def test_dashboard_without_title_is_omitted_and_logged(ctx: Context, base_state: State, caplog):
+    """A dashboard missing a title is omitted from provisioning, with a log entry.
+
+    Grafana keys its duplicate check on titles, so a titleless dashboard cannot be
+    provisioned; dropping it silently would hide why it never reaches the UI.
+    """
+    # GIVEN a valid dashboard (has uid/version) whose content JSON has NO title
+    titleless = dashboard_factory(uid="dash1", version=1)
+    titleless["content"] = LZMABase64.compress(
+        json.dumps({"uid": "dash1", "version": 1, "panels": []})
+    )
+    peer_data = {
+        "dashboards": json.dumps({
+            "1": [titleless]
+        })
+    }
+    peer_relation_with_data = PeerRelation(
+        "grafana",
+        local_app_data=peer_data
+    )
+
+    # WHEN the charm processes the dashboards (update_status)
+    state = State(
+        leader=True,
+        containers=base_state.containers,
+        relations={peer_relation_with_data}
+    )
+    with caplog.at_level(logging.DEBUG):
+        out = ctx.run(ctx.on.update_status(), state)
+
+    # THEN no dashboard file is written
+    container = out.get_container("grafana")
+    fs = container.get_filesystem(ctx)
+    dashboards = read_dashboards_from_fs(fs)
+    assert not dashboards
+
+    # AND the omission is logged, not silent
+    assert any(
+        "Omitting dashboard without a title" in record.message
+        and "dash1" in record.message
+        for record in caplog.records
+    )
