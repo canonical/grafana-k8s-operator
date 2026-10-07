@@ -57,7 +57,7 @@ async def test_workload_tracing_is_present(ops_test: OpsTest, grafana_charm: str
         config={"access-key": minio_user, "secret-key": minio_pass},
     )
     juju.deploy(charm="s3-integrator", app="s3-tempo", channel="edge")
-    juju.wait(lambda status: jubilant.all_active(status, "minio-tempo"), delay=5)
+    juju.wait(lambda status: jubilant.all_active(status, "minio-tempo"), delay=5, timeout=600)
     minio_address = juju.status().apps["minio-tempo"].units["minio-tempo/0"].address
     minio_client: Minio = Minio(
         f"{minio_address}:9000",
@@ -75,6 +75,15 @@ async def test_workload_tracing_is_present(ops_test: OpsTest, grafana_charm: str
     )
     juju.integrate("tempo:s3", "s3-tempo")
     juju.integrate("tempo:tempo-cluster", "tempo-worker")
+
+    # Wait for the tempo cluster itself (coordinator + worker) to fully settle
+    # *before* wiring up workload-tracing to avoid 502s.
+    juju.wait(
+        lambda status: jubilant.all_active(status, "tempo", "tempo-worker", "s3-tempo"),
+        delay=5,
+        timeout=600,
+    )
+
     # WHEN we add relations to send traces to tempo
     juju.integrate("grafana:workload-tracing", "tempo:tracing")
     juju.wait(jubilant.all_active, delay=10, timeout=600)
