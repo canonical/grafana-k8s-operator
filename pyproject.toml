@@ -41,7 +41,6 @@ dev = [
   "juju>=3.6,<3.7",
   "websockets>=13.0.1,<14.0",
   "lightkube",
-  "minio",
   "oauth-tools",
   "pytest-operator>=0.39",
   "ops[testing]",
