@@ -149,7 +149,6 @@ import logging
 import warnings
 from typing import Dict, List, Literal, Optional, Set, Type, Union
 
-import httpx
 import pydantic
 from charmed_service_mesh_helpers.models import (
     AuthorizationPolicySpec,
@@ -162,6 +161,7 @@ from charmed_service_mesh_helpers.models import (
     WorkloadSelector,
 )
 from lightkube import Client
+from lightkube.core.exceptions import ApiError
 from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import ConfigMap, Service
@@ -180,7 +180,7 @@ POLICY_RESOURCE_TYPES = {
 
 LIBID = "3f40cb7e3569454a92ac2541c5ca0a0c"  # Never change this
 LIBAPI = 0
-LIBPATCH = 20
+LIBPATCH = 21
 
 PYDEPS = [
     "lightkube",
@@ -663,8 +663,8 @@ def reconcile_charm_labels(client: Client, app_name: str, namespace: str,  label
     patch_labels: Dict[str, Optional[str]] = dict(labels)
     try:
         config_map = client.get(ConfigMap, label_configmap_name)
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
+    except ApiError as e:
+        if e.status.code == 404:
             config_map = _init_label_configmap(client, label_configmap_name, namespace)
         else:
             raise
@@ -1168,8 +1168,8 @@ class PolicyResourceManager():
         try:
             self._krm.delete(ignore_missing=ignore_missing)
         # FIXME: this is a workaround and should be handled by the upstream krm. Issue exists: https://github.com/canonical/lightkube-extensions/issues/4
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404 and ignore_missing:
+        except ApiError as e:
+            if e.status.code == 404 and ignore_missing:
                 # CRD doesn't exist, nothing to delete (only when ignore_missing=True)
                 self.log.info("CRD not found, skipping deletion")
                 return
