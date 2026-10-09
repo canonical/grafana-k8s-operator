@@ -279,13 +279,70 @@ class Grafana:
             if not self._container.exists(path):
                 self._container.make_dir(path, make_parents=True)
 
+    @staticmethod
+    def _dashboard_rank(dashboard: Dict) -> tuple:
+        """Deterministic ordering for title-deduplication.
+
+        Highest version first, then highest relation_id, then content: the same
+        ordering the grafana_dashboard lib uses for uid-deduplication.
+        """
+        return (
+            dashboard.get("dashboard_version", 0),
+            dashboard.get("relation_id", ""),
+            dashboard.get("content", ""),
+        )
+
     def _reconcile_dashboards(self):
         dashboards_file_to_be_kept = {}
         try:
             for dashboard_file in self._container.list_files(DASHBOARDS_DIR, pattern="juju_*.json"):
                 dashboards_file_to_be_kept[dashboard_file.path] = False
 
+            # Issue #569: two dashboards that share the same 'title' (even with
+            # distinct 'uid'/'version') trigger Grafana's periodic ~30s duplicate
+            # check, which revokes the provisioning provider's write permission;
+            # any dashboard that lands on disk *after* that stays out of the UI
+            # until a restart. Deduplicate by title here so Grafana never sees two
+            # files with the same title. The consumer already surfaces each
+            # dashboard's title and version as top-level 'dashboard_title' and
+            # 'dashboard_version' keys, and the winner is picked deterministically
+            # by _dashboard_rank (version, relation_id, content).
+            dashboards_by_title: Dict[str, Dict] = {}
             for dashboard in self._dashboards:
+                title = dashboard.get("dashboard_title")
+                if not title:
+                    # Grafana's duplicate-title detection is keyed by title, so a
+                    # dashboard without one cannot be provisioned safely. The lib
+                    # flags malformed content separately (BlockedStatus); this is
+                    # only about otherwise-valid dashboards missing a title.
+                    logger.debug(
+                        "Omitting dashboard without a title: uid=%r, relation_id=%s",
+                        dashboard.get("dashboard_uid"),
+                        dashboard.get("relation_id"),
+                    )
+                    continue
+                existing = dashboards_by_title.get(title)
+                if existing is None:
+                    dashboards_by_title[title] = dashboard
+                    continue
+                if self._dashboard_rank(dashboard) > self._dashboard_rank(existing):
+                    dashboards_by_title[title] = dashboard
+                    winner, loser = dashboard, existing
+                else:
+                    winner, loser = existing, dashboard
+                logger.warning(
+                    "Dashboard title %r is not unique; keeping uid=%r (version=%s, "
+                    "relation_id=%s) and dropping uid=%r (version=%s, relation_id=%s)",
+                    title,
+                    winner.get("dashboard_uid"),
+                    winner.get("dashboard_version"),
+                    winner.get("relation_id"),
+                    loser.get("dashboard_uid"),
+                    loser.get("dashboard_version"),
+                    loser.get("relation_id"),
+                )
+
+            for dashboard in dashboards_by_title.values():
                 dashboard_content = dashboard["content"]
                 dashboard_content_bytes = dashboard_content.encode("utf-8")
                 dashboard_content_digest = hashlib.sha256(dashboard_content_bytes).hexdigest()
