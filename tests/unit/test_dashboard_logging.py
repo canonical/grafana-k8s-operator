@@ -177,8 +177,10 @@ def test_load_dashboards_from_dir_logs_a_single_summary(tmp_path, caplog, n, kee
     records = _lib_records(caplog)
     assert len(records) == 1
     assert records[0].levelno == logging.DEBUG
-    kept, replaced = records[0].args[-2:]  # type: ignore[index]
-    assert (kept, replaced) == ((n, 0) if keep_uid else (0, n))
+    kept, replaced = (n, 0) if keep_uid else (0, n)
+    message = records[0].getMessage()
+    assert f"kept {kept} " in message
+    assert message.endswith(f"replaced {replaced}")
 
 
 @pytest.mark.parametrize(
@@ -208,39 +210,79 @@ def test_load_dashboards_from_dir_skips_non_dict_dashboards(tmp_path, caplog, no
 # ---------------------------------------------------------------------------- templating
 
 
-@pytest.mark.parametrize("n", SIZES)
-@pytest.mark.parametrize(
-    "panel, existing_templates, level",
-    [
-        ({"datasource": {"type": "unknown-type"}}, False, logging.DEBUG),
-        ({"datasource": {"type": ["a", "list"]}}, False, logging.DEBUG),
-        ({"datasource": {"type": {"a": "dict"}}}, False, logging.DEBUG),
-        ({"datasource": 42}, False, logging.ERROR),
-        ({"datasource": 42}, True, logging.ERROR),
-    ],
-    ids=[
-        "unrecognized-type",
-        "unhashable-type-list",
-        "unhashable-type-dict",
-        "unknown-format",
-        "unknown-format-existing-templates",
-    ],
-)
-def test_template_panels_logs_a_single_summary(caplog, n, panel, existing_templates, level):
-    # GIVEN n panels that cannot be templated
-    panels = [copy.deepcopy(panel) for _ in range(n)]
+# Panels that cannot be templated: (panel, existing_templates, expected unrecognized types,
+# expected unknown formats, expected log level)
+UNTEMPLATABLE_PANELS = [
+    ({"datasource": {"type": "unknown-type"}}, False, {"'unknown-type'"}, 0, logging.DEBUG),
+    ({"datasource": {"uid": "no-type"}}, False, {"''"}, 0, logging.DEBUG),
+    ({"datasource": {"type": ["a", "list"]}}, False, {"['a', 'list']"}, 0, logging.DEBUG),
+    ({"datasource": {"type": {"a": "dict"}}}, False, {"{'a': 'dict'}"}, 0, logging.DEBUG),
+    ({"datasource": 42}, False, set(), 1, logging.ERROR),
+    ({"datasource": 42}, True, set(), 1, logging.ERROR),
+]
+UNTEMPLATABLE_IDS = [
+    "unrecognized-type",
+    "empty-type",
+    "unhashable-type-list",
+    "unhashable-type-dict",
+    "unknown-format",
+    "unknown-format-existing-templates",
+]
 
-    # WHEN they are templated
+
+@pytest.mark.parametrize(
+    "panel, existing_templates, types, formats, _level", UNTEMPLATABLE_PANELS, ids=UNTEMPLATABLE_IDS
+)
+def test_template_panels_returns_the_skipped_panels(
+    caplog, panel, existing_templates, types, formats, _level
+):
+    # GIVEN a panel that cannot be templated
+    panels = [copy.deepcopy(panel)]
+
+    # WHEN it is templated
     with caplog.at_level(logging.DEBUG, logger=LIB_LOGGER):
         result = CharmedDashboard._template_panels(panels, {}, [], existing_templates, {})
 
-    # THEN they are left untouched
-    assert result == [panel] * n
+    # THEN it is left untouched and reported to the caller, which does the logging
+    assert result == ([panel], types, formats)
+    assert not _lib_records(caplog)
 
-    # AND a single record is logged, whatever the number of panels
+
+@pytest.mark.parametrize("n", SIZES)
+@pytest.mark.parametrize(
+    "panel, existing_templates, types, _formats, level", UNTEMPLATABLE_PANELS, ids=UNTEMPLATABLE_IDS
+)
+def test_convert_dashboard_fields_logs_once_per_dashboard(
+    caplog, n, panel, existing_templates, types, _formats, level
+):
+    # GIVEN a dashboard with n untemplatable panels at the top level and n rows holding one
+    templating = (
+        # a datasource variable, so that panels are templated despite existing templates
+        {"templating": {"list": [{"type": "datasource", "name": "ds", "query": "prometheus"}]}}
+        if existing_templates
+        else {}
+    )
+    dashboard = {
+        **templating,
+        "panels": [copy.deepcopy(panel) for _ in range(n)],
+        "rows": [{"panels": [copy.deepcopy(panel)]} for _ in range(n)],
+    }
+
+    # WHEN its fields are converted
+    with caplog.at_level(logging.DEBUG, logger=LIB_LOGGER):
+        result = json.loads(
+            CharmedDashboard._convert_dashboard_fields(json.dumps(dashboard), inject_dropdowns=False)
+        )
+
+    # THEN the panels are left untouched
+    assert result["panels"] == [panel] * n
+    assert result["rows"] == [{"panels": [panel]}] * n
+
+    # AND a single record is logged for the whole dashboard, rows included
     records = _lib_records(caplog)
     assert len(records) == 1
     assert records[0].levelno == level
+    assert all(t in records[0].getMessage() for t in types)
 
 
 @pytest.mark.parametrize("n", SIZES)
@@ -304,10 +346,12 @@ def test_consumer_dashboards_logs_a_single_summary(
     # THEN the dashboards are returned (or omitted) as before
     assert len(dashboards) == expected_dashboards(n)
 
-    # AND a single juju-log call reports the problem, whatever the number of dashboards
+    # AND a single juju-log call reports the problem, whatever the number of dashboards,
+    # listing every affected dashboard (WARNING and ERROR summaries are not truncated)
     lines = _juju_log_lines(consumer_ctx, needle)
     assert len(lines) == 1
     assert lines[0].level == level
+    assert lines[0].message.count("'Dashboard ") == n
 
 
 @pytest.mark.parametrize("n", SIZES)
@@ -319,16 +363,15 @@ def test_get_dashboards_from_relation_logs_a_single_summary(consumer_ctx, n):
     with consumer_ctx(consumer_ctx.on.update_status(), state) as mgr:
         dashboards = mgr.charm.consumer.get_dashboards_from_relation(1)
 
-    # THEN all of them are returned, with a single warning
+    # THEN all of them are returned, with a single warning listing all of them
     assert len(dashboards) == n
     lines = _juju_log_lines(consumer_ctx, "'.version'")
     assert len(lines) == 1
     assert lines[0].level == "WARNING"
+    assert lines[0].message.count("'Dashboard ") == n
 
 
-@pytest.mark.parametrize(
-    "dstype", [["a", "list"], {"a": "dict"}], ids=["list", "dict"]
-)
+@pytest.mark.parametrize("dstype", [["a", "list"], {"a": "dict"}], ids=["list", "dict"])
 def test_unhashable_datasource_type_does_not_drop_the_relation_dashboards(consumer_ctx, dstype):
     # GIVEN a provider sending a dashboard with a malformed (unhashable) datasource type
     dashboard = {
@@ -356,21 +399,6 @@ def test_unhashable_datasource_type_does_not_drop_the_relation_dashboards(consum
     stored = json.loads(peer.local_app_data["dashboards"])[str(relation.id)]
     assert [d["valid"] for d in stored] == [True]
     assert "errors" not in out.get_relation(relation.id).local_app_data.get("event", "{}")
-
-
-def test_to_external_object_without_collector_logs_right_away(consumer_ctx):
-    # GIVEN a stored dashboard without '.version'
-    dashboard = _stored_dashboard("dash0", "1")
-
-    # WHEN it is converted without passing a collector (the behaviour before the summaries)
-    with consumer_ctx(consumer_ctx.on.update_status(), _peer_state({})) as mgr:
-        obj = mgr.charm.consumer._to_external_object("1", dashboard)
-
-    # THEN it falls back to version 0 and warns immediately
-    assert obj["dashboard_version"] == 0
-    lines = _juju_log_lines(consumer_ctx, "'.version'")
-    assert len(lines) == 1
-    assert lines[0].level == "WARNING"
 
 
 # ---------------------------------------------------------------------------- aggregator

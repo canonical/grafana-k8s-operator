@@ -183,7 +183,7 @@ import os
 import re
 
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from cosl import CosTool, DashboardPath40UID, LZMABase64
 from cosl.types import QueryType, type_convert_stored
 from ops.charm import (
@@ -497,7 +497,8 @@ def _examples(items: List[Any]) -> str:
     """Render the first few items of a list for an aggregated log message.
 
     Every log record costs a `juju-log` call, so hot loops log a single summary instead of
-    one record per item.
+    one record per item. Only DEBUG summaries are truncated: WARNING and ERROR ones list
+    every item, since the cost is per record, not per length.
     """
     shown = ", ".join(map(str, items[:_MAX_LOGGED_EXAMPLES]))
     remaining = len(items) - _MAX_LOGGED_EXAMPLES
@@ -629,30 +630,45 @@ class CharmedDashboard:
         """
         replacements = {"loki": "${lokids}", "prometheus": "${prometheusds}"}
         used_replacements = []  # type: List[str]
+        # Panels skipped across the whole dashboard (top level and rows), logged once below
+        unrecognized_types: Set[str] = set()
+        unknown_formats = 0
 
         # If any existing datasources match types we know, or we didn't find
         # any templating variables at all, template them.
         if datasources or not existing_templates:
             panels = dict_content.get("panels", {})
             if panels:
-                dict_content["panels"] = cls._template_panels(
+                dict_content["panels"], types, formats = cls._template_panels(
                     panels, replacements, used_replacements, existing_templates, datasources
                 )
+                unrecognized_types |= types
+                unknown_formats += formats
 
             # Find panels nested under rows
             rows = dict_content.get("rows", {})
             if rows:
                 for row_idx, row in enumerate(rows):
                     if "panels" in row.keys():
-                        rows[row_idx]["panels"] = cls._template_panels(
+                        rows[row_idx]["panels"], types, formats = cls._template_panels(
                             row["panels"],
                             replacements,
                             used_replacements,
                             existing_templates,
                             datasources,
                         )
+                        unrecognized_types |= types
+                        unknown_formats += formats
 
                 dict_content["rows"] = rows
+
+        if unrecognized_types:
+            logger.debug(
+                "skipped panels with unrecognized datasource types: %s",
+                _examples(sorted(unrecognized_types)),
+            )
+        if unknown_formats:
+            logger.error("unknown datasource format: skipped %d panel(s)", unknown_formats)
 
         # Finally, go back and pop off the templates we stubbed out
         deletions = []
@@ -676,15 +692,19 @@ class CharmedDashboard:
         used_replacements: list,
         existing_templates: bool,
         datasources: dict,
-    ) -> List[dict]:
-        """Iterate through a `panels` object and template it appropriately."""
+    ) -> Tuple[List[dict], Set[str], int]:
+        """Iterate through a `panels` object and template it appropriately.
+
+        Returns:
+            The templated panels, the unrecognized datasource types and the number of panels
+            with an unknown datasource format. The caller logs the skipped panels once per
+            dashboard (see `_examples`).
+        """
         # Go through all the panels. If they have a datasource set, AND it's one
         # that we can convert to ${lokids} or ${prometheusds}, by stripping off the
         # ${} templating and comparing the name to the list we built, replace it,
         # otherwise, leave it alone.
-        #
-        # Problems are collected and logged once after the loop: see `_examples`.
-        unrecognized_types = set()  # type: set
+        unrecognized_types: Set[str] = set()
         unknown_formats = 0
         for panel in panels:
             if "datasource" not in panel or not panel.get("datasource"):
@@ -706,8 +726,9 @@ class CharmedDashboard:
                     elif dstype == "prometheus":
                         panel["datasource"]["uid"] = "${prometheusds}"
                     else:
-                        # str(): a malformed type (e.g. a list) is not hashable
-                        unrecognized_types.add(str(dstype))
+                        # repr(): shows empty types, and a malformed one (e.g. a list)
+                        # is not hashable
+                        unrecognized_types.add(repr(dstype))
                         continue
                 else:
                     unknown_formats += 1
@@ -748,14 +769,7 @@ class CharmedDashboard:
                     unknown_formats += 1
                     continue
 
-        if unrecognized_types:
-            logger.debug(
-                "skipped panels with unrecognized datasource types: %s",
-                _examples(sorted(unrecognized_types)),
-            )
-        if unknown_formats:
-            logger.error("unknown datasource format: skipped %d panel(s)", unknown_formats)
-        return panels
+        return panels, unrecognized_types, unknown_formats
 
     @classmethod
     def _inject_labels(cls, content: str, topology: dict, transformer: "CosTool") -> str:
@@ -1777,17 +1791,14 @@ class GrafanaDashboardConsumer(Object):
             self.set_peer_data("dashboards", stored_dashboards)
             self.on.dashboards_changed.emit()  # pyright: ignore
 
-    def _to_external_object(
-        self, relation_id, dashboard, missing_version: Optional[List[str]] = None
-    ):
+    def _to_external_object(self, relation_id, dashboard, missing_version: List[str]):
         """Convert a stored dashboard into the format returned to the charm.
 
         Args:
             relation_id: id of the relation the dashboard came from.
             dashboard: the stored dashboard.
-            missing_version: if given, dashboards without a valid `.version` are appended
-                to it, so that the caller logs a single summary; otherwise a warning is
-                logged right away.
+            missing_version: dashboards without a valid `.version` are appended to it; the
+                caller logs them once (see `_log_missing_versions`).
         """
         decompressed = LZMABase64.decompress(dashboard["content"])
         as_dict = json.loads(decompressed)
@@ -1798,11 +1809,7 @@ class GrafanaDashboardConsumer(Object):
         try:
             dashboard_version = int(as_dict["version"])
         except (KeyError, ValueError):
-            description = f"'{dashboard_title}' (uid '{dashboard_uid}')"
-            if missing_version is None:
-                self._log_missing_versions([description])
-            else:
-                missing_version.append(description)
+            missing_version.append(f"'{dashboard_title}' (uid '{dashboard_uid}')")
             dashboard_version = 0
 
         return {
@@ -1822,7 +1829,7 @@ class GrafanaDashboardConsumer(Object):
                 "%d dashboard(s) are missing a '.version' field or it is invalid (must be "
                 "integer); using '0' as fallback: %s",
                 len(dashboards),
-                _examples(dashboards),
+                ", ".join(dashboards),
             )
 
     @property
@@ -1837,7 +1844,8 @@ class GrafanaDashboardConsumer(Object):
             in the `content` field of the corresponding `dict`.
         """
         d: Dict[str, dict] = {}
-        # Problems are collected and logged once at the end: see `_examples`.
+        # Problems are collected and logged once at the end, listing every dashboard: the
+        # cost is one `juju-log` call per record, whatever its length.
         missing_version: List[str] = []
         missing_uid: List[str] = []
         deduplicated: List[str] = []
@@ -1872,13 +1880,13 @@ class GrafanaDashboardConsumer(Object):
             logger.error(
                 "%d dashboard(s) are missing a '.uid' field; omitted: %s",
                 len(missing_uid),
-                _examples(missing_uid),
+                ", ".join(missing_uid),
             )
         if deduplicated:
             logger.warning(
                 "deduplicated %d dashboard(s) sharing a uid: %s",
                 len(deduplicated),
-                _examples(deduplicated),
+                ", ".join(deduplicated),
             )
 
         return list(d.values())
