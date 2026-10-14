@@ -706,7 +706,8 @@ class CharmedDashboard:
                     elif dstype == "prometheus":
                         panel["datasource"]["uid"] = "${prometheusds}"
                     else:
-                        unrecognized_types.add(dstype)
+                        # str(): a malformed type (e.g. a list) is not hashable
+                        unrecognized_types.add(str(dstype))
                         continue
                 else:
                     unknown_formats += 1
@@ -750,7 +751,7 @@ class CharmedDashboard:
         if unrecognized_types:
             logger.debug(
                 "skipped panels with unrecognized datasource types: %s",
-                _examples(sorted(str(t) for t in unrecognized_types)),
+                _examples(sorted(unrecognized_types)),
             )
         if unknown_formats:
             logger.error("unknown datasource format: skipped %d panel(s)", unknown_formats)

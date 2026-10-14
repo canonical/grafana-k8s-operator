@@ -213,10 +213,18 @@ def test_load_dashboards_from_dir_skips_non_dict_dashboards(tmp_path, caplog, no
     "panel, existing_templates, level",
     [
         ({"datasource": {"type": "unknown-type"}}, False, logging.DEBUG),
+        ({"datasource": {"type": ["a", "list"]}}, False, logging.DEBUG),
+        ({"datasource": {"type": {"a": "dict"}}}, False, logging.DEBUG),
         ({"datasource": 42}, False, logging.ERROR),
         ({"datasource": 42}, True, logging.ERROR),
     ],
-    ids=["unrecognized-type", "unknown-format", "unknown-format-existing-templates"],
+    ids=[
+        "unrecognized-type",
+        "unhashable-type-list",
+        "unhashable-type-dict",
+        "unknown-format",
+        "unknown-format-existing-templates",
+    ],
 )
 def test_template_panels_logs_a_single_summary(caplog, n, panel, existing_templates, level):
     # GIVEN n panels that cannot be templated
@@ -316,6 +324,38 @@ def test_get_dashboards_from_relation_logs_a_single_summary(consumer_ctx, n):
     lines = _juju_log_lines(consumer_ctx, "'.version'")
     assert len(lines) == 1
     assert lines[0].level == "WARNING"
+
+
+@pytest.mark.parametrize(
+    "dstype", [["a", "list"], {"a": "dict"}], ids=["list", "dict"]
+)
+def test_unhashable_datasource_type_does_not_drop_the_relation_dashboards(consumer_ctx, dstype):
+    # GIVEN a provider sending a dashboard with a malformed (unhashable) datasource type
+    dashboard = {
+        "uid": "dash0",
+        "title": "Dashboard 0",
+        "version": 1,
+        "panels": [{"datasource": {"type": dstype}}],
+    }
+    template = {
+        "charm": "provider",
+        "content": LZMABase64.compress(json.dumps(dashboard)),
+        "inject_dropdowns": False,
+    }
+    relation = Relation(
+        "grafana-dashboard",
+        remote_app_data={"dashboards": json.dumps({"templates": {"file:dash0": template}})},
+    )
+    state = State(leader=True, relations={relation, PeerRelation("grafana")})
+
+    # WHEN the consumer renders it
+    out = consumer_ctx.run(consumer_ctx.on.relation_changed(relation), state)
+
+    # THEN the dashboard is stored as valid, instead of the relation being flagged as invalid
+    peer = out.get_relations("grafana")[0]
+    stored = json.loads(peer.local_app_data["dashboards"])[str(relation.id)]
+    assert [d["valid"] for d in stored] == [True]
+    assert "errors" not in out.get_relation(relation.id).local_app_data.get("event", "{}")
 
 
 def test_to_external_object_without_collector_logs_right_away(consumer_ctx):
